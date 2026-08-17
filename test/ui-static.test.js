@@ -12,7 +12,7 @@ describe('static application shell', () => {
   });
 
   it('contains the core accessible views and dialogs', () => {
-    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
+    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('aria-live="polite"');
@@ -22,5 +22,12 @@ describe('static application shell', () => {
   it('defines every statically referenced application element', () => {
     const referencedIds = [...app.matchAll(/\$\(\s*['"]#([A-Za-z][\w-]*)['"]\s*\)/g)].map((match) => match[1]);
     for (const id of new Set(referencedIds)) expect(html, `missing #${id}`).toContain(`id="${id}"`);
+  });
+
+  it('offers direct group assignment from each token card', () => {
+    expect(html).toContain('id="quick-group-form"');
+    expect(html).toContain('id="quick-group"');
+    expect(app).toContain('data-action="quick-group"');
+    expect(app).toContain("openQuickGroupModal(key.id)");
   });
 });
