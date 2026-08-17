@@ -11,6 +11,13 @@ describe('static application shell', () => {
     expect(html).not.toContain("'unsafe-inline'");
   });
 
+  it('loads the external theme boot script before the stylesheet', () => {
+    const themeBoot = html.indexOf('<script src="/theme-boot.js"></script>');
+    const stylesheet = html.indexOf('<link rel="stylesheet" href="/src/styles.css">');
+    expect(themeBoot).toBeGreaterThan(-1);
+    expect(themeBoot).toBeLessThan(stylesheet);
+  });
+
   it('contains the core accessible views and dialogs', () => {
     for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
       expect(html).toContain(`id="${id}"`);
