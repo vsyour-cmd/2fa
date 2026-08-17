@@ -11,7 +11,7 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **End-to-End Encryption**: AES-256-GCM encryption, server only stores ciphertext
 - **Multiple Vaults**: Account name and master password identify a vault, with fast local switching
 - **PWA Support**: Install to desktop/home screen for native app experience
-- **Offline Access**: Encrypted vaults are cached in IndexedDB and synchronized with explicit conflict handling
+- **Offline Access**: After the first online visit, the app can start without a network connection; encrypted vaults are cached in IndexedDB and synchronized with explicit conflict handling
 - **QR Code Scanning**: Support camera scanning, image upload, and clipboard paste to recognize QR codes
 - **Complete Management**: Search, groups, favorites, smart frequently-used ordering, custom ordering, editing, and a 30-day trash bin
 - **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
