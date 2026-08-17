@@ -49,5 +49,9 @@ describe('Express API rate limiting', () => {
     expect(blocked.headers.get('ratelimit-remaining')).toBe('0');
     expect(Number(blocked.headers.get('ratelimit-reset'))).toBeGreaterThan(Math.floor(Date.now() / 1000));
     expect(Number(blocked.headers.get('retry-after'))).toBeGreaterThan(0);
+
+    const persisted = db.prepare('SELECT count, reset_at FROM rate_limits').get();
+    expect(persisted.count).toBe(21);
+    expect(persisted.reset_at).toBeGreaterThan(Date.now());
   });
 });

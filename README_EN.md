@@ -86,6 +86,8 @@ docker compose up -d
 | `PORT` | 3000 | HTTP service port |
 | `DB_PATH` | `/app/data/2fa.db` | SQLite database path |
 | `TRUST_PROXY_HOPS` | `0` | Trusted reverse-proxy hops; set to `1` only behind one known proxy |
+| `RATE_LIMIT` | `20` | API requests allowed per IP in each rate-limit window |
+| `RATE_WINDOW_MS` | `60000` | API rate-limit window in milliseconds |
 
 ### Method 2: Cloudflare Workers Deployment
 
