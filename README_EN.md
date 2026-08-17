@@ -14,7 +14,7 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **Light and Dark Themes**: Supports light, dark, and system-following modes, with a quick toggle in the header
 - **Offline Access**: After the first online visit, the app can start without a network connection; encrypted vaults are cached in IndexedDB and synchronized with explicit conflict handling
 - **QR Code Scanning**: Support camera scanning, image upload, and clipboard paste to recognize QR codes
-- **Complete Management**: Search, groups, favorites, smart frequently-used ordering, custom ordering, editing, and a 30-day trash bin
+- **Complete Management**: Search, groups, notes, favorites, smart frequently-used ordering, custom ordering, editing, and a 30-day trash bin
 - **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
 - **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports
 - **Security Controls**: Auto-lock, background lock, clipboard clearing, password strength, and safe re-encryption
