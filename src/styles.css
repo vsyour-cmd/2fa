@@ -200,6 +200,8 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .token-item:hover { border-color: var(--border-strong); transform: translateY(-2px); }
 .token-item.frequent::before { position: absolute; top: 0; right: 18px; left: 18px; height: 2px; content: ''; background: linear-gradient(90deg, transparent, var(--primary), transparent); opacity: 0.75; }
 .token-item.copied { border-color: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent), var(--shadow-small); }
+.token-item.waiting-next-code { border-color: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 18%, transparent), var(--shadow-small); }
+.token-item.waiting-next-code .token-code-value, .token-item.waiting-next-code .copy-affordance { color: var(--warning); }
 .token-item.dragging { opacity: 0.5; }
 .token-item.drag-over { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
 .token-top { display: flex; align-items: flex-start; gap: 11px; }

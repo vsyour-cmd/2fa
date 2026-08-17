@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { base32Decode, buildOtpauthUri, generateTOTP, parseOtpauthUri } from '../src/js/totp.js';
+import { base32Decode, buildOtpauthUri, generateTOTP, getNextPeriodDelay, getRemainingSeconds, parseOtpauthUri } from '../src/js/totp.js';
 import { bytesToBase32 } from '../src/js/utils.js';
 
 const encoder = new TextEncoder();
@@ -39,6 +39,15 @@ describe('generateTOTP', () => {
   it('supports custom periods and six digit output', async () => {
     const code = await generateTOTP(secrets['SHA-1'], 120_000, { period: 60, digits: 6 });
     expect(code).toMatch(/^\d{6}$/);
+  });
+
+  it('calculates the safe wait into the next period at the final second', async () => {
+    const key = { period: 60 };
+    expect(getRemainingSeconds(key, 59_250)).toBe(1);
+    expect(getNextPeriodDelay(key, 59_250)).toBe(800);
+    const expiringCode = await generateTOTP(secrets['SHA-1'], 59_250, { period: 60, digits: 8 });
+    const nextCode = await generateTOTP(secrets['SHA-1'], 60_050, { period: 60, digits: 8 });
+    expect(nextCode).not.toBe(expiringCode);
   });
 });
 

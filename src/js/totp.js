@@ -118,6 +118,14 @@ export function getRemainingSeconds(key, time = Date.now()) {
   return elapsed === 0 ? period : period - elapsed;
 }
 
+export function getNextPeriodDelay(key, time = Date.now(), safetyMs = 50) {
+  const periodMs = getTotpOptions(key).period * 1000;
+  const currentTime = Number(time);
+  if (!Number.isFinite(currentTime) || currentTime < 0) throw new Error('时间参数无效');
+  const nextPeriodStart = (Math.floor(currentTime / periodMs) + 1) * periodMs;
+  return Math.max(0, nextPeriodStart - currentTime + Math.max(0, Number(safetyMs) || 0));
+}
+
 export function getCounter(key, time = Date.now()) {
   const { period } = getTotpOptions(key);
   return Math.floor(Number(time) / (period * 1000));
