@@ -37,6 +37,14 @@ describe('static application shell', () => {
     expect(app).toContain("grid.dataset.columns = value");
   });
 
+  it('supports encrypted notes when adding, editing, displaying, and searching keys', () => {
+    expect(html).toContain('id="add-note"');
+    expect(html).toContain('id="edit-note"');
+    expect(html).toContain('maxlength="500"');
+    expect(app).toContain('class="token-note"');
+    expect(app).toContain('${key.note}');
+  });
+
   it('uses accessible application dialogs instead of native prompt and confirm calls', () => {
     expect(app).not.toMatch(/\bprompt\s*\(/);
     expect(app).not.toMatch(/\bconfirm\s*\(/);

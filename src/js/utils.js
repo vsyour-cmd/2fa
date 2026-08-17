@@ -32,6 +32,7 @@ export function normalizeKey(raw = {}, index = 0) {
     name: String(raw.name || raw.issuer || '未命名').trim() || '未命名',
     issuer: String(raw.issuer || '').trim(),
     account: String(raw.account || raw.label || '').trim(),
+    note: String(raw.note || '').trim().slice(0, 500),
     secret: normalizeSecret(raw.secret),
     group: String(raw.group || '').trim(),
     period: Number.isFinite(period) && period >= 5 && period <= 300 ? period : 30,

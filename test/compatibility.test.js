@@ -66,8 +66,13 @@ async function createEncryptedAegisFixture(password) {
 describe('backward compatibility', () => {
   it('loads legacy key arrays with safe defaults', () => {
     const vault = normalizeVaultData([{ id: 1, name: 'Legacy', secret: 'JBSWY3DPEHPK3PXP' }]);
-    expect(vault.keys[0]).toMatchObject({ id: '1', group: '', period: 30, digits: 6, algorithm: 'SHA-1', favorite: false, useCount: 0 });
+    expect(vault.keys[0]).toMatchObject({ id: '1', group: '', note: '', period: 30, digits: 6, algorithm: 'SHA-1', favorite: false, useCount: 0 });
     expect(vault.deletedItems).toEqual([]);
+  });
+
+  it('normalizes optional notes and limits their stored length', () => {
+    const vault = normalizeVaultData([{ name: 'With note', secret: 'JBSWY3DPEHPK3PXP', note: `  ${'x'.repeat(510)}  ` }]);
+    expect(vault.keys[0].note).toBe('x'.repeat(500));
   });
 
   it('imports 2FAS and andOTP JSON shapes', async () => {

@@ -408,7 +408,7 @@ function getVisibleKeys() {
   const filtered = state.keys.filter((key) => {
     const groupMatches = state.groupFilter === '__all'
       || (state.groupFilter === '__ungrouped' ? !key.group : key.group === state.groupFilter);
-    const textMatches = !query || `${key.name} ${key.issuer} ${key.account} ${key.group}`.toLocaleLowerCase().includes(query);
+    const textMatches = !query || `${key.name} ${key.issuer} ${key.account} ${key.group} ${key.note}`.toLocaleLowerCase().includes(query);
     return groupMatches && textMatches;
   });
   const now = Date.now();
@@ -480,6 +480,7 @@ async function renderKeys() {
     const ring = ringValues(key);
     const icon = getKeyIcon(key);
     const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account].filter(Boolean).join(' · ') || 'TOTP';
+    const note = key.note ? `<p class="token-note" title="${escapeHtml(key.note)}">${escapeHtml(key.note)}</p>` : '';
     const draggable = state.settings.sortMode === 'custom' ? 'true' : 'false';
     const frequent = frequentIds.has(key.id);
     const customPeers = state.settings.sortMode === 'custom' ? visible.filter((item) => item.favorite === key.favorite) : [];
@@ -494,6 +495,7 @@ async function renderKeys() {
           <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div></div>
           <button class="favorite-btn${key.favorite ? ' active' : ''}" type="button" data-action="favorite" aria-label="${key.favorite ? '取消收藏' : '收藏'}" aria-pressed="${key.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
+        ${note}
         <div class="token-code-row">
           <button class="token-code" type="button" data-action="copy-code" aria-label="复制 ${escapeHtml(key.name)} 的验证码"><span class="token-code-value">${escapeHtml(formatCode(code))}</span><span class="copy-affordance" aria-hidden="true">点击复制</span></button>
           <svg class="progress-ring ${ring.status}" viewBox="0 0 36 36" aria-label="剩余 ${ring.remaining} 秒" role="img">
@@ -618,6 +620,7 @@ function readKeyForm(prefix) {
     issuer: $(`#${prefix}-issuer`).value.trim(),
     account: $(`#${prefix}-account`).value.trim(),
     group: $(`#${prefix}-group`).value.trim(),
+    note: $(`#${prefix}-note`).value.trim(),
     secret,
     icon: $(`#${prefix}-icon`).value.trim(),
     ...options,
@@ -719,6 +722,7 @@ function openEditModal(id) {
   $('#edit-issuer').value = key.issuer;
   $('#edit-account').value = key.account;
   $('#edit-group').value = key.group;
+  $('#edit-note').value = key.note;
   $('#edit-secret').value = key.secret;
   $('#edit-secret').type = 'password';
   $('#edit-icon').value = key.icon;

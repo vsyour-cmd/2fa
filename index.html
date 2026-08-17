@@ -98,7 +98,7 @@
             <div class="search-box">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
               <label class="sr-only" for="search-input">搜索密钥</label>
-              <input id="search-input" type="search" placeholder="搜索名称、发行方或账户…" autocomplete="off">
+              <input id="search-input" type="search" placeholder="搜索名称、发行方、账户或备注…" autocomplete="off">
             </div>
             <div class="quick-sort">
               <label for="sort-quick">排列方式</label>
@@ -164,6 +164,11 @@
             <div class="form-group"><label for="add-group">分组</label><input id="add-group" type="text" list="group-options" placeholder="未分组"></div>
           </div>
           <div class="form-group">
+            <label for="add-note">备注</label>
+            <textarea id="add-note" rows="3" maxlength="500" aria-describedby="add-note-hint" placeholder="例如用途、恢复方式或其他提示（可选）"></textarea>
+            <p id="add-note-hint" class="field-hint">最多 500 个字符，会随保险库加密保存。</p>
+          </div>
+          <div class="form-group">
             <label for="add-secret">密钥 (Base32)</label>
             <div class="input-with-action"><input id="add-secret" class="mono" type="password" autocomplete="off" required><button class="input-action" type="button" data-toggle-password="add-secret">显示</button></div>
           </div>
@@ -205,6 +210,11 @@
             <div class="form-group"><label for="edit-issuer">发行方</label><input id="edit-issuer" type="text"></div>
             <div class="form-group"><label for="edit-account">账户标识</label><input id="edit-account" type="text"></div>
             <div class="form-group"><label for="edit-group">分组</label><input id="edit-group" type="text" list="group-options" placeholder="未分组"></div>
+          </div>
+          <div class="form-group">
+            <label for="edit-note">备注</label>
+            <textarea id="edit-note" rows="3" maxlength="500" aria-describedby="edit-note-hint" placeholder="例如用途、恢复方式或其他提示（可选）"></textarea>
+            <p id="edit-note-hint" class="field-hint">最多 500 个字符，会随保险库加密保存。</p>
           </div>
           <div class="form-group">
             <label for="edit-secret">密钥 (Secret)</label>
