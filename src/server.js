@@ -133,21 +133,26 @@ app.use((error, req, res, next) => {
   return next(error);
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`2FA Authenticator server running on port ${PORT}`);
-  console.log(`Database: ${path.resolve(DB_PATH)}`);
-});
+let server = null;
 
 function shutdown(signal) {
   console.log(`Received ${signal}, shutting down...`);
   clearInterval(cleanupTimer);
-  server.close(() => {
+  const finish = () => {
     db.close();
     process.exit(0);
-  });
+  };
+  if (server?.listening) server.close(finish);
+  else finish();
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+if (require.main === module) {
+  server = app.listen(PORT, () => {
+    console.log(`2FA Authenticator server running on port ${PORT}`);
+    console.log(`Database: ${path.resolve(DB_PATH)}`);
+  });
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
 
 module.exports = { app, db };
