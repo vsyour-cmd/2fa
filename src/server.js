@@ -8,9 +8,14 @@ const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = process.env.DB_PATH || './data/2fa.db';
 const TRUST_PROXY_HOPS = Math.max(0, Number.parseInt(process.env.TRUST_PROXY_HOPS || '0', 10) || 0);
 const STATIC_PATH = path.join(__dirname, '../static');
-const RATE_LIMIT = 20;
-const RATE_WINDOW_MS = 60_000;
-const rateBuckets = new Map();
+
+function positiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const RATE_LIMIT = positiveInteger(process.env.RATE_LIMIT, 20);
+const RATE_WINDOW_MS = positiveInteger(process.env.RATE_WINDOW_MS, 60_000);
 
 if (TRUST_PROXY_HOPS > 0) app.set('trust proxy', TRUST_PROXY_HOPS);
 app.disable('x-powered-by');
@@ -35,34 +40,43 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    bucket TEXT PRIMARY KEY,
+    count INTEGER NOT NULL,
+    reset_at INTEGER NOT NULL
   )
 `);
 
+const incrementRateLimit = db.prepare(`
+  INSERT INTO rate_limits (bucket, count, reset_at)
+  VALUES (?, 1, ?)
+  ON CONFLICT(bucket) DO UPDATE SET
+    count = rate_limits.count + 1,
+    reset_at = excluded.reset_at
+  RETURNING count, reset_at
+`);
+const deleteExpiredRateLimits = db.prepare('DELETE FROM rate_limits WHERE reset_at <= ?');
+
 function rateLimitApi(req, res, next) {
   const now = Date.now();
-  const bucketId = `${req.ip}:${Math.floor(now / RATE_WINDOW_MS)}`;
-  const current = rateBuckets.get(bucketId) || { count: 0, resetAt: (Math.floor(now / RATE_WINDOW_MS) + 1) * RATE_WINDOW_MS };
-  current.count += 1;
-  rateBuckets.set(bucketId, current);
+  const windowIndex = Math.floor(now / RATE_WINDOW_MS);
+  const resetAt = (windowIndex + 1) * RATE_WINDOW_MS;
+  const bucketId = `${req.ip}:${windowIndex}`;
+  deleteExpiredRateLimits.run(now);
+  const current = incrementRateLimit.get(bucketId, resetAt);
   res.set({
     'RateLimit-Limit': String(RATE_LIMIT),
     'RateLimit-Remaining': String(Math.max(0, RATE_LIMIT - current.count)),
-    'RateLimit-Reset': String(Math.ceil(current.resetAt / 1000)),
+    'RateLimit-Reset': String(Math.ceil(current.reset_at / 1000)),
   });
   if (current.count > RATE_LIMIT) {
-    res.set('Retry-After', String(Math.max(1, Math.ceil((current.resetAt - now) / 1000))));
+    res.set('Retry-After', String(Math.max(1, Math.ceil((current.reset_at - now) / 1000))));
     return res.status(429).json({ error: 'Too many requests' });
   }
   return next();
 }
-
-const cleanupTimer = setInterval(() => {
-  const now = Date.now();
-  for (const [bucketId, bucket] of rateBuckets) {
-    if (bucket.resetAt <= now) rateBuckets.delete(bucketId);
-  }
-}, RATE_WINDOW_MS);
-cleanupTimer.unref();
 
 function isValidKey(key) {
   return typeof key === 'string' && /^[a-f0-9]{64}$/i.test(key);
@@ -137,7 +151,6 @@ let server = null;
 
 function shutdown(signal) {
   console.log(`Received ${signal}, shutting down...`);
-  clearInterval(cleanupTimer);
   const finish = () => {
     db.close();
     process.exit(0);

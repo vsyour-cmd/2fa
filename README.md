@@ -86,6 +86,8 @@ docker compose up -d
 | `PORT` | 3000 | HTTP 服务端口 |
 | `DB_PATH` | `/app/data/2fa.db` | SQLite 数据库路径 |
 | `TRUST_PROXY_HOPS` | `0` | 可信反向代理跳数；明确位于单层反代后时设为 `1` |
+| `RATE_LIMIT` | `20` | 每个 IP 在一个时间窗口内允许的 API 请求数 |
+| `RATE_WINDOW_MS` | `60000` | API 限流时间窗口（毫秒） |
 
 ### 方式二：Cloudflare Workers 部署
 
