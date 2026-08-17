@@ -1,11 +1,42 @@
-const CACHE_VERSION = 'v2.0.0';
+const CACHE_VERSION = 'v2.1.0';
 const STATIC_CACHE = `2fa-static-${CACHE_VERSION}`;
-const PRECACHE_URLS = ['/', '/index.html', '/manifest.json', '/icons/icon.svg'];
+const PRECACHE_URLS = ['/manifest.json', '/icons/icon.svg'];
+const APP_SHELL_RESOURCE_PATTERN = /\b(?:src|href)=["']([^"'#]+)["']/gi;
+
+function appShellResources(html) {
+  const resources = [...html.matchAll(APP_SHELL_RESOURCE_PATTERN)]
+    .map((match) => new URL(match[1], self.location.origin))
+    .filter((url) => url.origin === self.location.origin)
+    .map((url) => `${url.pathname}${url.search}`);
+  return [...new Set([...PRECACHE_URLS, ...resources])];
+}
+
+async function cacheApplicationShell(indexResponse) {
+  const cache = await caches.open(STATIC_CACHE);
+  const html = await indexResponse.clone().text();
+  await Promise.all([
+    cache.put('/', indexResponse.clone()),
+    cache.put('/index.html', indexResponse.clone()),
+    cache.addAll(appShellResources(html)),
+  ]);
+}
+
+async function fetchAndCache(request) {
+  const response = await fetch(request);
+  if (response.ok) {
+    const cache = await caches.open(STATIC_CACHE);
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+    fetch('/index.html', { cache: 'reload' })
+      .then((response) => {
+        if (!response.ok) throw new Error('Application shell is unavailable');
+        return cacheApplicationShell(response);
+      })
       .then(() => self.skipWaiting()),
   );
 });
@@ -36,28 +67,25 @@ self.addEventListener('fetch', (event) => {
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            event.waitUntil(caches.open(STATIC_CACHE).then((cache) => Promise.all([
-              cache.put(request, copy),
-              cache.put('/index.html', response.clone()),
-            ])));
+            event.waitUntil(Promise.all([
+              caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy)),
+              cacheApplicationShell(response.clone()),
+            ]));
           }
           return response;
         })
-        .catch(async () => (await caches.match(request)) || (await caches.match('/index.html')) || new Response('Offline', { status: 503 })),
+        .catch(async () => (await caches.match(request, { ignoreVary: true }))
+          || (await caches.match('/index.html', { ignoreVary: true }))
+          || new Response('Offline', { status: 503 })),
     );
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const refreshed = fetch(request).then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy)));
-        }
-        return response;
-      });
-      return cached || refreshed;
+    caches.match(request, { ignoreVary: true }).then((cached) => {
+      if (!cached) return fetchAndCache(request).catch(() => new Response('Offline', { status: 503 }));
+      event.waitUntil(fetchAndCache(request).catch(() => undefined));
+      return cached;
     }),
   );
 });
