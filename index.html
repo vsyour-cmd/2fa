@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="description" content="端到端加密、可离线使用的云端 2FA 认证器">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/icon.svg">
+    <title>2FA Authenticator</title>
+    <link rel="stylesheet" href="/src/styles.css">
+    <script type="module" src="/src/js/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主内容</a>
+    <div id="offline-banner" class="offline-banner hidden" role="status">当前处于离线模式，更改将先保存在本机</div>
+
+    <main id="main-content" class="shell">
+      <section id="unlock-screen" class="auth-shell" aria-labelledby="auth-title">
+        <header class="brand-block">
+          <div class="brand-mark" aria-hidden="true"><img src="/icons/icon.svg" alt="" width="58" height="58"></div>
+          <div>
+            <p class="eyebrow">安全保险库</p>
+            <h1 id="auth-title">2FA Authenticator</h1>
+            <p class="lede">密钥在浏览器中加密，云端只保存密文。</p>
+          </div>
+        </header>
+
+        <div class="card auth-card">
+          <div class="segmented" role="tablist" aria-label="账户操作">
+            <button id="login-tab" class="active" type="button" role="tab" aria-selected="true" data-auth-view="login">登录</button>
+            <button id="setup-tab" type="button" role="tab" aria-selected="false" data-auth-view="setup">创建账户</button>
+          </div>
+
+          <form id="login-form" novalidate>
+            <div class="form-group">
+              <label for="login-account">账户名称</label>
+              <input id="login-account" type="text" list="known-accounts" autocomplete="username" placeholder="默认账户">
+              <p class="field-hint">旧版用户保持“默认账户”即可兼容登录。</p>
+            </div>
+            <div class="form-group">
+              <label for="login-password">主密码</label>
+              <div class="input-with-action">
+                <input id="login-password" type="password" autocomplete="current-password" required>
+                <button class="input-action" type="button" data-toggle-password="login-password" aria-label="显示密码">显示</button>
+              </div>
+            </div>
+            <div id="login-error" class="error hidden" role="alert"></div>
+            <button id="login-submit" class="btn btn-primary btn-block" type="submit">解锁保险库</button>
+          </form>
+
+          <form id="setup-form" class="hidden" novalidate>
+            <div class="form-group">
+              <label for="setup-account">账户名称</label>
+              <input id="setup-account" type="text" autocomplete="username" placeholder="例如：个人" required>
+            </div>
+            <div class="form-group">
+              <label for="new-password">主密码</label>
+              <input id="new-password" type="password" autocomplete="new-password" required>
+              <div id="setup-strength" class="password-strength" data-score="0"><span></span></div>
+              <p id="setup-strength-label" class="field-hint">密码强度</p>
+            </div>
+            <div class="form-group">
+              <label for="confirm-password">确认密码</label>
+              <input id="confirm-password" type="password" autocomplete="new-password" required>
+            </div>
+            <div id="setup-error" class="error hidden" role="alert"></div>
+            <button id="setup-submit" class="btn btn-primary btn-block" type="submit">创建加密保险库</button>
+          </form>
+
+          <div id="session-resume" class="session-resume hidden">
+            <p>已解锁的其他账户</p>
+            <div id="session-buttons" class="session-buttons"></div>
+          </div>
+          <datalist id="known-accounts"></datalist>
+        </div>
+      </section>
+
+      <section id="main-app" class="hidden" aria-labelledby="vault-title">
+        <header class="app-header">
+          <div class="app-title">
+            <p class="eyebrow">当前保险库</p>
+            <h1 id="vault-title">2FA Authenticator</h1>
+          </div>
+          <div class="header-controls">
+            <label class="sr-only" for="account-switch">切换账户</label>
+            <select id="account-switch" class="compact-select"></select>
+            <button class="icon-btn" id="theme-quick" type="button" aria-label="切换明暗主题" title="切换主题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 15.2A8.5 8.5 0 0 1 8.8 3.7 8.5 8.5 0 1 0 20.3 15.2Z"></path></svg></button>
+            <button class="icon-btn" id="settings-open" type="button" aria-label="打开设置" title="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></svg></button>
+            <button class="icon-btn primary-icon" id="add-open" type="button" aria-label="添加密钥" title="添加密钥"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+          </div>
+        </header>
+
+        <div class="toolbar card-subtle">
+          <div class="toolbar-main">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              <label class="sr-only" for="search-input">搜索密钥</label>
+              <input id="search-input" type="search" placeholder="搜索名称、发行方或账户…" autocomplete="off">
+            </div>
+            <div class="quick-sort">
+              <label for="sort-quick">排列方式</label>
+              <select id="sort-quick">
+                <option value="smart">智能 · 常用优先</option>
+                <option value="recent">最近使用</option>
+                <option value="name">按名称</option>
+                <option value="custom">自定义拖拽</option>
+              </select>
+            </div>
+          </div>
+          <div class="toolbar-meta"><span id="list-summary">0 个验证码</span><span id="sort-hint">智能排序会根据使用频次和最近使用自动调整</span></div>
+          <div id="group-filters" class="filter-row" aria-label="按分组筛选"></div>
+        </div>
+
+        <div id="token-list" class="token-grid" aria-live="polite"></div>
+        <div id="empty-state" class="empty-state hidden">
+          <div aria-hidden="true">✦</div>
+          <h2>还没有密钥</h2>
+          <p>添加 Base32 密钥、扫描二维码，或导入现有备份。</p>
+          <button class="btn btn-primary" type="button" data-action="open-add">添加第一个密钥</button>
+        </div>
+        <div id="no-results" class="empty-state compact hidden">
+          <h2>没有匹配的密钥</h2>
+          <p>试试其他关键词或分组。</p>
+          <button id="clear-filters" class="btn btn-secondary" type="button">清除筛选</button>
+        </div>
+
+        <footer class="footer-actions">
+          <button id="import-open" class="btn btn-secondary" type="button">导入</button>
+          <button id="export-open" class="btn btn-secondary" type="button">导出</button>
+          <button id="trash-open" class="btn btn-ghost" type="button">回收站 <span id="trash-count" class="badge">0</span></button>
+        </footer>
+      </section>
+    </main>
+
+    <div id="add-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="add-title">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <div><p class="eyebrow">新条目</p><h2 id="add-title">添加 2FA 密钥</h2></div>
+          <button class="icon-btn" type="button" data-close-modal="add-modal" aria-label="关闭">×</button>
+        </div>
+        <div class="segmented" role="tablist" aria-label="密钥输入方式">
+          <button class="active" type="button" role="tab" aria-selected="true" data-add-tab="manual">手动</button>
+          <button type="button" role="tab" aria-selected="false" data-add-tab="scan">摄像头</button>
+          <button type="button" role="tab" aria-selected="false" data-add-tab="image">图片 / 粘贴</button>
+        </div>
+        <form id="add-form" class="tab-panel" data-add-panel="manual" novalidate>
+          <div class="form-grid">
+            <div class="form-group"><label for="add-name">显示名称</label><input id="add-name" type="text" required></div>
+            <div class="form-group"><label for="add-issuer">发行方</label><input id="add-issuer" type="text" placeholder="例如 GitHub"></div>
+            <div class="form-group"><label for="add-account">账户标识</label><input id="add-account" type="text" placeholder="例如 alice@example.com"></div>
+            <div class="form-group"><label for="add-group">分组</label><input id="add-group" type="text" list="group-options" placeholder="未分组"></div>
+          </div>
+          <div class="form-group">
+            <label for="add-secret">密钥 (Base32)</label>
+            <div class="input-with-action"><input id="add-secret" class="mono" type="password" autocomplete="off" required><button class="input-action" type="button" data-toggle-password="add-secret">显示</button></div>
+          </div>
+          <div class="form-group"><label for="add-icon">图标</label><input id="add-icon" type="text" maxlength="16" placeholder="可选 Emoji；留空则自动匹配"></div>
+          <details class="advanced-panel">
+            <summary>高级 TOTP 参数</summary>
+            <div class="form-grid three">
+              <div class="form-group"><label for="add-period">周期（秒）</label><input id="add-period" type="number" min="5" max="300" value="30"></div>
+              <div class="form-group"><label for="add-digits">位数</label><select id="add-digits"><option value="6">6</option><option value="8">8</option></select></div>
+              <div class="form-group"><label for="add-algorithm">算法</label><select id="add-algorithm"><option>SHA-1</option><option>SHA-256</option><option>SHA-512</option></select></div>
+            </div>
+          </details>
+          <div id="add-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="add-modal">取消</button><button id="add-submit" class="btn btn-primary" type="submit">添加密钥</button></div>
+        </form>
+        <div class="tab-panel hidden" data-add-panel="scan">
+          <div class="camera-frame"><video id="qr-video" playsinline></video><canvas id="qr-canvas" class="hidden"></canvas><div class="scan-guide"></div></div>
+          <p id="qr-status" class="field-hint center">点击按钮启动摄像头</p>
+          <div id="qr-error" class="error hidden" role="alert"></div>
+          <button id="qr-start" class="btn btn-primary btn-block" type="button">启动摄像头</button>
+        </div>
+        <div class="tab-panel hidden" data-add-panel="image">
+          <label id="qr-drop-zone" class="upload-zone" for="qr-image-input" tabindex="0">
+            <strong>选择、拖放或粘贴二维码图片</strong><span>PNG / JPG / WEBP，最大 8 MB</span>
+          </label>
+          <input id="qr-image-input" class="hidden" type="file" accept="image/png,image/jpeg,image/webp">
+          <div id="qr-image-error" class="error hidden" role="alert"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="edit-title">
+      <div class="modal modal-wide">
+        <div class="modal-header"><div><p class="eyebrow">安全编辑</p><h2 id="edit-title">编辑密钥</h2></div><button class="icon-btn" type="button" data-close-modal="edit-modal" aria-label="关闭">×</button></div>
+        <form id="edit-form" novalidate>
+          <input id="edit-id" type="hidden">
+          <div class="form-grid">
+            <div class="form-group"><label for="edit-name">显示名称</label><input id="edit-name" type="text" required></div>
+            <div class="form-group"><label for="edit-issuer">发行方</label><input id="edit-issuer" type="text"></div>
+            <div class="form-group"><label for="edit-account">账户标识</label><input id="edit-account" type="text"></div>
+            <div class="form-group"><label for="edit-group">分组</label><input id="edit-group" type="text" list="group-options" placeholder="未分组"></div>
+          </div>
+          <div class="form-group">
+            <label for="edit-secret">密钥 (Secret)</label>
+            <div class="input-with-action"><input id="edit-secret" class="mono" type="password" autocomplete="off" required><button class="input-action" type="button" data-toggle-password="edit-secret">显示</button></div>
+            <div class="inline-actions"><button id="copy-secret" class="text-btn" type="button">复制原始密钥</button><button id="copy-uri" class="text-btn" type="button">复制 OTPAuth URI</button></div>
+          </div>
+          <div class="form-group"><label for="edit-icon">图标</label><input id="edit-icon" type="text" maxlength="16" placeholder="可选 Emoji"></div>
+          <details class="advanced-panel">
+            <summary>高级 TOTP 参数</summary>
+            <div class="form-grid three">
+              <div class="form-group"><label for="edit-period">周期（秒）</label><input id="edit-period" type="number" min="5" max="300"></div>
+              <div class="form-group"><label for="edit-digits">位数</label><select id="edit-digits"><option value="6">6</option><option value="8">8</option></select></div>
+              <div class="form-group"><label for="edit-algorithm">算法</label><select id="edit-algorithm"><option>SHA-1</option><option>SHA-256</option><option>SHA-512</option></select></div>
+            </div>
+          </details>
+          <div id="edit-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="edit-modal">取消</button><button id="edit-submit" class="btn btn-primary" type="submit">保存</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="settings-title">
+      <div class="modal modal-wide">
+        <div class="modal-header"><div><p class="eyebrow">偏好与安全</p><h2 id="settings-title">设置</h2></div><button class="icon-btn" type="button" data-close-modal="settings-modal" aria-label="关闭">×</button></div>
+        <form id="settings-form">
+          <div class="settings-grid">
+            <div class="form-group"><label for="theme-select">主题</label><select id="theme-select"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
+            <div class="form-group"><label for="sort-select">排序</label><select id="sort-select"><option value="smart">智能 · 常用优先</option><option value="recent">最近使用</option><option value="name">按名称</option><option value="custom">自定义拖拽</option></select><p class="field-hint">智能排序综合复制次数和最近使用时间，收藏始终置顶。</p></div>
+            <div class="form-group"><label for="auto-lock-minutes">无操作自动锁定（分钟，0 为关闭）</label><input id="auto-lock-minutes" type="number" min="0" max="240"></div>
+            <label class="check-row"><input id="lock-on-hidden" type="checkbox"><span>页面进入后台时立即锁定</span></label>
+            <label class="check-row"><input id="clipboard-clear" type="checkbox"><span>复制后 30 秒自动清空剪贴板</span></label>
+          </div>
+          <div class="settings-links">
+            <button id="groups-open" class="btn btn-secondary" type="button">管理分组</button>
+            <button id="change-password-open" class="btn btn-secondary" type="button">修改主密码</button>
+            <button id="login-other" class="btn btn-secondary" type="button">登录其他账户</button>
+          </div>
+          <div class="modal-actions"><button id="lock-current" class="btn btn-ghost" type="button">退出当前账户</button><button id="lock-all" class="btn btn-danger" type="button">锁定全部会话</button><button class="btn btn-primary" type="submit">保存设置</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div id="groups-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="groups-title">
+      <div class="modal">
+        <div class="modal-header"><h2 id="groups-title">管理分组</h2><button class="icon-btn" type="button" data-close-modal="groups-modal" aria-label="关闭">×</button></div>
+        <div id="groups-list" class="manage-list"></div>
+        <p class="field-hint">删除分组只会将其中的密钥移到“未分组”。</p>
+      </div>
+    </div>
+
+    <div id="trash-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="trash-title">
+      <div class="modal modal-wide">
+        <div class="modal-header"><div><p class="eyebrow">保留 30 天</p><h2 id="trash-title">回收站</h2></div><button class="icon-btn" type="button" data-close-modal="trash-modal" aria-label="关闭">×</button></div>
+        <div id="trash-list" class="manage-list"></div>
+      </div>
+    </div>
+
+    <div id="import-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-title">
+      <div class="modal modal-wide">
+        <div class="modal-header"><div><p class="eyebrow">迁移工具</p><h2 id="import-title">导入密钥</h2></div><button class="icon-btn" type="button" data-close-modal="import-modal" aria-label="关闭">×</button></div>
+        <form id="import-form">
+          <div class="form-group"><label for="import-file">备份文件</label><input id="import-file" type="file" accept=".json,.txt,.2fas,application/json,text/plain"></div>
+          <div class="form-group"><label for="import-text">或粘贴 otpauth:// / otpauth-migration:// 链接</label><textarea id="import-text" rows="4"></textarea></div>
+          <div class="form-group"><label for="import-password">导入密码（仅 Aegis/加密备份需要）</label><input id="import-password" type="password" autocomplete="off"></div>
+          <div class="form-group"><label for="import-strategy">同名条目</label><select id="import-strategy"><option value="skip">跳过重名</option><option value="overwrite">覆盖已有</option><option value="all">全部导入（自动重命名）</option></select></div>
+          <div id="import-error" class="error hidden" role="alert"></div>
+          <div id="import-preview" class="import-preview hidden" role="status"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="import-modal">取消</button><button id="import-submit" class="btn btn-primary" type="submit">解析并导入</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div id="export-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="export-title">
+      <div class="modal">
+        <div class="modal-header"><h2 id="export-title">导出备份</h2><button class="icon-btn" type="button" data-close-modal="export-modal" aria-label="关闭">×</button></div>
+        <form id="export-form">
+          <div class="form-group"><label for="export-format">格式</label><select id="export-format"><option value="encrypted">密码加密 JSON（推荐）</option><option value="plain">明文 JSON</option><option value="otpauth">OTPAuth URI 列表</option></select></div>
+          <div id="export-password-group" class="form-group"><label for="export-password">导出密码</label><input id="export-password" type="password" autocomplete="new-password"><p class="field-hint">请使用与主密码不同的强密码。</p></div>
+          <div id="export-warning" class="warning hidden">该格式含有明文密钥，请只保存到安全位置。</div>
+          <div id="export-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="export-modal">取消</button><button id="export-submit" class="btn btn-primary" type="submit">下载备份</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div id="change-password-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="change-password-title">
+      <div class="modal">
+        <div class="modal-header"><h2 id="change-password-title">修改主密码</h2><button class="icon-btn" type="button" data-close-modal="change-password-modal" aria-label="关闭">×</button></div>
+        <form id="change-password-form">
+          <div class="form-group"><label for="current-password">当前密码</label><input id="current-password" type="password" autocomplete="current-password" required></div>
+          <div class="form-group"><label for="changed-password">新密码</label><input id="changed-password" type="password" autocomplete="new-password" required><div id="change-strength" class="password-strength" data-score="0"><span></span></div><p id="change-strength-label" class="field-hint">密码强度</p></div>
+          <div class="form-group"><label for="changed-password-confirm">确认新密码</label><input id="changed-password-confirm" type="password" autocomplete="new-password" required></div>
+          <div id="change-password-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="change-password-modal">取消</button><button id="change-password-submit" class="btn btn-primary" type="submit">重新加密并保存</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div id="conflict-modal" class="modal-overlay hidden" data-dismissible="false" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="conflict-title">
+      <div class="modal">
+        <h2 id="conflict-title">检测到数据冲突</h2>
+        <p class="field-hint center">本地离线修改与云端版本不同，请选择保留哪份。</p>
+        <div class="conflict-grid"><div><strong>本地</strong><span id="local-conflict-info"></span></div><div><strong>云端</strong><span id="cloud-conflict-info"></span></div></div>
+        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-conflict="local">使用本地</button><button class="btn btn-primary" type="button" data-conflict="cloud">使用云端</button></div>
+      </div>
+    </div>
+
+    <datalist id="group-options"></datalist>
+    <div id="network-status" class="network-status online" role="status"><span class="status-dot"></span><span class="status-text">在线</span></div>
+    <div id="app-toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

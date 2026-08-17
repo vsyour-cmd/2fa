@@ -22,7 +22,7 @@ data
 npm-debug.log*
 
 # Cloudflare specific
-wrangler.toml
+wrangler.jsonc
 worker.js
 .wrangler
 

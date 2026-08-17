@@ -6,14 +6,17 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 
 ## Features
 
-- **TOTP Generation**: Compatible with Google Authenticator, Authy, and other standard TOTP protocols
+- **TOTP Generation**: Supports 5–300 second periods, 6/8 digits, and SHA-1/SHA-256/SHA-512
 - **Cloud Sync**: Data stored in Cloudflare KV, accessible across devices
 - **End-to-End Encryption**: AES-256-GCM encryption, server only stores ciphertext
-- **Zero Registration**: No email/phone required, create account with just a master password
+- **Multiple Vaults**: Account name and master password identify a vault, with fast local switching
 - **PWA Support**: Install to desktop/home screen for native app experience
-- **Offline Access**: Full offline support after first login, data cached for 7 days
+- **Offline Access**: Encrypted vaults are cached in IndexedDB and synchronized with explicit conflict handling
 - **QR Code Scanning**: Support camera scanning, image upload, and clipboard paste to recognize QR codes
-- **Import/Export**: JSON format backup support for data migration and local backup
+- **Complete Management**: Search, groups, favorites, smart frequently-used ordering, custom ordering, editing, and a 30-day trash bin
+- **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
+- **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports
+- **Security Controls**: Auto-lock, background lock, clipboard clearing, password strength, and safe re-encryption
 
 ## Architecture
 
@@ -82,83 +85,50 @@ docker compose up -d
 |----------|---------|-------------|
 | `PORT` | 3000 | HTTP service port |
 | `DB_PATH` | `/app/data/2fa.db` | SQLite database path |
+| `TRUST_PROXY_HOPS` | `0` | Trusted reverse-proxy hops; set to `1` only behind one known proxy |
 
 ### Method 2: Cloudflare Workers Deployment
 
 #### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 20.19+
 - [Cloudflare Account](https://dash.cloudflare.com/sign-up)
 
-#### Step 1: Install Wrangler CLI
+#### Step 1: Install and authenticate
 
 ```bash
-npm install -g wrangler
+npm ci
+npx wrangler login
 ```
 
-#### Step 2: Login to Cloudflare
+#### Step 2: Configure KV
+
+The default `wrangler.jsonc` declares only the `DATA_KV` binding. Wrangler will prompt you to create or bind a namespace on the first deployment. Add an `id` to `kv_namespaces[0]` if you need to pin an existing namespace.
+
+#### Step 3: Test and build
 
 ```bash
-wrangler login
-```
-
-#### Step 3: KV Namespace (Optional)
-
-If `wrangler.toml` only sets `binding` (no `id`), wrangler will auto-provision (or reuse) the KV namespace on the first `wrangler deploy`, and subsequent deploys will still bind to the same KV. So you can skip this step by default.
-
-If you want to create it manually (for example, to pin/reuse an existing KV), run:
-
-```bash
-# Navigate to project directory
-cd 2fa
-
-# Create production KV
-wrangler kv namespace create DATA_KV
-# Output like: { binding = "DATA_KV", id = "xxxxxxxxxxxx" }
-
-# Create preview KV (Optional)
-wrangler kv namespace create DATA_KV --preview
-# Output like: { binding = "DATA_KV", preview_id = "yyyyyyyyyyyy" }
-```
-
-#### Step 4: Configure wrangler.toml
-
-- Auto provisioning: keep `[[kv_namespaces]]` with only `binding` and run `wrangler deploy`; Wrangler will auto-provision/reuse KV (and won't modify `wrangler.toml`).
-- Manual: fill the `id` / `preview_id` from the previous step into `wrangler.toml`:
-
-```toml
-name = "2fa-sync"
-main = "worker.js"
-compatibility_date = "2024-01-01"
-assets = { directory = "./public" }
-
-[[kv_namespaces]]
-binding = "DATA_KV"
-id = "xxxxxxxxxxxx"        # Replace with your id
-preview_id = "yyyyyyyyyyyy" # Replace with your preview_id
-```
-
-#### Step 5: Local Testing (Optional)
-
-```bash
-wrangler dev
+npm test
+npm run build
+npx wrangler dev
 # Visit http://localhost:8787
 ```
 
-#### Step 6: Deploy
+#### Step 4: Deploy
 
 ```bash
-wrangler deploy
-# Output like: Published 2fa-sync (https://2fa-sync.xxx.workers.dev)
+npx wrangler deploy
 ```
 
 After deployment, visit the output URL to start using.
 
-## GitHub Actions Auto Deploy (Optional)
+## GitHub Actions Auto Deploy
 
 This repository includes an automatic deployment workflow for the Cloudflare Worker:
 
-- Deploy Cloudflare Worker: `.github/workflows/deploy-worker.yml` — deploys the Worker on push to `main` or via manual dispatch. Requires the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- `.github/workflows/deploy-worker.yml` runs `npm ci`, tests, the production build, and deployment on every push to `main` or manual dispatch.
+- Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` under **Settings → Secrets and variables → Actions**.
+- The token needs at least Workers Scripts edit and Workers KV Storage edit permissions for the target account.
 
 ## Usage Guide
 
@@ -166,8 +136,8 @@ This repository includes an automatic deployment workflow for the Cloudflare Wor
 
 1. Visit the deployed URL
 2. Click "First time? Create account"
-3. Set a master password (at least 4 characters)
-4. Confirm password and click "Set Password"
+3. Set a master password of at least 10 characters containing a letter and a number
+4. Confirm it and create the encrypted vault
 
 ### Login
 
@@ -204,21 +174,19 @@ Click the logout button in the top left to clear current session and return to l
 
 ### Import/Export
 
-**Export Backup**:
-1. After login, click the "Export" button at the bottom of the page
-2. Download the JSON format backup file (stored in plaintext, keep it safe)
+**Export Backup**: choose password-encrypted JSON (recommended), plaintext JSON, or an OTPAuth URI list. Plaintext formats contain raw secrets and must be protected.
 
 **Import Backup**:
-1. Click the "Import" button at the bottom of the page
-2. Select a previously exported JSON file
-3. Duplicate keys (same name) will be skipped, existing data preserved, only new keys imported
+1. Choose a file or paste an OTPAuth/Google migration URI
+2. Enter the export password for Aegis or encrypted backups
+3. Choose whether duplicate names should be skipped, overwritten, or renamed
 
 ## Important Notes
 
 1. **Password Cannot Be Recovered**: Forgetting password means losing all data - remember your master password
-2. **Password = Account**: Same password = same account, use the same password on different devices to sync data
-3. **Session Expiry**: Session expires when browser tab is closed, password required to login again
-4. **Offline Mode**: First login requires internet, then works offline (cache valid for 7 days)
+2. **Vault Identity**: Use the same account name and master password on each device to sync the same vault
+3. **Session Security**: Unlock keys live only in the current tab's session storage; configure auto-lock or lock all sessions immediately
+4. **Offline Mode**: A vault must be unlocked online successfully once before its local cache can be used
 5. **Data Sync**: Offline changes sync automatically when online; conflicts prompt user to choose
 
 ## Project Structure
@@ -231,13 +199,17 @@ Click the logout button in the top left to clear current session and return to l
 │       └── docker-publish.yml  # Build/push Docker image
 ├── public/
 │   ├── icons/           # PWA icons
-│   ├── index.html       # Frontend
 │   ├── manifest.json    # PWA manifest
 │   └── service-worker.js # Service Worker (offline cache)
 ├── src/
+│   ├── js/              # Frontend modules
+│   ├── styles.css       # Responsive theme styles
 │   └── server.js        # Express server for Docker deployment
+├── test/                # TOTP, crypto, compatibility, and Worker tests
+├── index.html           # Vite application entry
 ├── worker.js            # Cloudflare Worker
-├── wrangler.toml        # Wrangler configuration
+├── wrangler.jsonc       # Wrangler configuration
+├── vite.config.mjs      # Frontend build configuration
 ├── Dockerfile           # Docker image definition
 ├── docker-compose.yml   # Docker Compose configuration
 ├── package.json         # npm dependencies

@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -7,13 +7,19 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 # Copy package files
-COPY package.json ./
+COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN npm install --omit=dev
+RUN npm ci
+
+# Build the Vite frontend, then retain only runtime dependencies
+COPY index.html vite.config.mjs ./
+COPY src ./src
+COPY public ./public
+RUN npm run build && npm prune --omit=dev
 
 # Production stage
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
@@ -28,9 +34,9 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy application files
-COPY package.json ./
-COPY src ./src
-COPY public ./public
+COPY package.json package-lock.json ./
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/static ./static
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R nodejs:nodejs /app

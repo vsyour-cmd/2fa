@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="2FA Authenticator">
+  <defs>
+    <linearGradient id="g" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#g)"/>
+  <path d="M256 82 116 136v100c0 92 56 162 140 194 84-32 140-102 140-194V136L256 82Z" fill="none" stroke="#fff" stroke-width="34" stroke-linejoin="round"/>
+  <circle cx="256" cy="232" r="46" fill="#fff"/>
+  <path d="M236 262h40l18 88h-76l18-88Z" fill="#fff"/>
+</svg>
