@@ -16,15 +16,22 @@ describe('settings migration', () => {
   it('uses smart ordering for new installations', () => {
     vi.stubGlobal('localStorage', memoryStorage());
     expect(loadSettings().sortMode).toBe('smart');
-    expect(DEFAULT_SETTINGS.settingsVersion).toBe(2);
+    expect(loadSettings().columnsPerRow).toBe('auto');
+    expect(DEFAULT_SETTINGS.settingsVersion).toBe(3);
   });
 
   it('migrates the old default custom mode once and still allows opting back into it', () => {
     vi.stubGlobal('localStorage', memoryStorage({
       '2fa_settings_v3': JSON.stringify({ sortMode: 'custom', theme: 'dark' }),
     }));
-    expect(loadSettings()).toMatchObject({ sortMode: 'smart', theme: 'dark', settingsVersion: 2 });
+    expect(loadSettings()).toMatchObject({ sortMode: 'smart', theme: 'dark', columnsPerRow: 'auto', settingsVersion: 3 });
     expect(saveSettings({ ...DEFAULT_SETTINGS, sortMode: 'custom' }).sortMode).toBe('custom');
+  });
+
+  it('persists supported column counts and rejects invalid values', () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    expect(saveSettings({ ...DEFAULT_SETTINGS, columnsPerRow: '4' }).columnsPerRow).toBe('4');
+    expect(saveSettings({ ...DEFAULT_SETTINGS, columnsPerRow: '9' }).columnsPerRow).toBe('auto');
   });
 });
 

@@ -8,11 +8,12 @@ const SETTINGS_KEY = '2fa_settings_v3';
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system',
   sortMode: 'smart',
+  columnsPerRow: 'auto',
   autoLockMinutes: 15,
   lockOnHidden: false,
   clipboardAutoClear: true,
   trashRetentionDays: 30,
-  settingsVersion: 2,
+  settingsVersion: 3,
 });
 
 export class ApiError extends Error {
@@ -227,18 +228,20 @@ export function loadSettings() {
   if (!saved || typeof saved !== 'object') return { ...DEFAULT_SETTINGS };
   const migrated = { ...saved };
   if (Number(migrated.settingsVersion || 0) < 2 && migrated.sortMode === 'custom') migrated.sortMode = 'smart';
-  return { ...DEFAULT_SETTINGS, ...migrated, settingsVersion: 2 };
+  if (!['auto', '1', '2', '3', '4'].includes(String(migrated.columnsPerRow || 'auto'))) migrated.columnsPerRow = 'auto';
+  return { ...DEFAULT_SETTINGS, ...migrated, columnsPerRow: String(migrated.columnsPerRow || 'auto'), settingsVersion: 3 };
 }
 
 export function saveSettings(settings) {
   const safe = {
     theme: ['system', 'light', 'dark'].includes(settings.theme) ? settings.theme : DEFAULT_SETTINGS.theme,
     sortMode: ['smart', 'custom', 'name', 'recent'].includes(settings.sortMode) ? settings.sortMode : DEFAULT_SETTINGS.sortMode,
+    columnsPerRow: ['auto', '1', '2', '3', '4'].includes(String(settings.columnsPerRow)) ? String(settings.columnsPerRow) : DEFAULT_SETTINGS.columnsPerRow,
     autoLockMinutes: Math.max(0, Math.min(240, Number(settings.autoLockMinutes) || 0)),
     lockOnHidden: Boolean(settings.lockOnHidden),
     clipboardAutoClear: Boolean(settings.clipboardAutoClear),
     trashRetentionDays: Math.max(1, Math.min(365, Number(settings.trashRetentionDays) || 30)),
-    settingsVersion: 2,
+    settingsVersion: 3,
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(safe));
   return safe;

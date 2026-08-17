@@ -30,4 +30,10 @@ describe('static application shell', () => {
     expect(app).toContain('data-action="quick-group"');
     expect(app).toContain("openQuickGroupModal(key.id)");
   });
+
+  it('offers a persistent per-row column selector', () => {
+    expect(html).toContain('id="columns-quick"');
+    expect(app).toContain("columnsPerRow: event.target.value");
+    expect(app).toContain("grid.dataset.columns = value");
+  });
 });
