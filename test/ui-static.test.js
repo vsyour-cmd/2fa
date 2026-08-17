@@ -12,7 +12,7 @@ describe('static application shell', () => {
   });
 
   it('contains the core accessible views and dialogs', () => {
-    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
+    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('aria-live="polite"');
@@ -35,5 +35,12 @@ describe('static application shell', () => {
     expect(html).toContain('id="columns-quick"');
     expect(app).toContain("columnsPerRow: event.target.value");
     expect(app).toContain("grid.dataset.columns = value");
+  });
+
+  it('uses accessible application dialogs instead of native prompt and confirm calls', () => {
+    expect(app).not.toMatch(/\bprompt\s*\(/);
+    expect(app).not.toMatch(/\bconfirm\s*\(/);
+    expect(html).toContain('id="confirm-modal"');
+    expect(html).toContain('id="rename-group-modal"');
   });
 });

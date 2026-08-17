@@ -28,7 +28,7 @@ export function hideError(target) {
 export function openModal(id, focusSelector = 'input:not([type="hidden"]), button, select, textarea') {
   const modal = typeof id === 'string' ? document.getElementById(id) : id;
   if (!modal) return;
-  if (activeModal && activeModal !== modal) closeModal(activeModal, false);
+  if (activeModal) closeModal(activeModal, false);
   modalTrigger = document.activeElement;
   activeModal = modal;
   modal.classList.remove('hidden');
@@ -46,6 +46,83 @@ export function closeModal(id, restoreFocus = true) {
   if (activeModal === modal) activeModal = null;
   if (!activeModal) document.body.classList.remove('modal-open');
   if (restoreFocus && modalTrigger instanceof HTMLElement) modalTrigger.focus();
+  modal.dispatchEvent(new CustomEvent('modal:close'));
+}
+
+export function askConfirm({ title, message, confirmText = '删除' }) {
+  const modal = $('#confirm-modal');
+  const confirmButton = $('#confirm-ok', modal);
+  $('#confirm-title', modal).textContent = title;
+  $('#confirm-message', modal).textContent = message;
+  confirmButton.textContent = confirmText;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      confirmButton.removeEventListener('click', onConfirm);
+      modal.removeEventListener('modal:close', onClose);
+    };
+    const finish = (value, close = true) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (close) closeModal(modal);
+      resolve(value);
+    };
+    const onConfirm = () => finish(true);
+    const onClose = () => finish(false, false);
+
+    openModal(modal, '#confirm-ok');
+    confirmButton.addEventListener('click', onConfirm);
+    modal.addEventListener('modal:close', onClose);
+  });
+}
+
+export function askText({ title, label, defaultValue = '', validate = () => null }) {
+  const modal = $('#rename-group-modal');
+  const form = $('#rename-group-form', modal);
+  const input = $('#rename-group-input', modal);
+  const error = $('#rename-group-error', modal);
+  $('#rename-group-title', modal).textContent = title;
+  $('#rename-group-label', modal).textContent = label;
+  input.value = defaultValue;
+  hideError(error);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      form.removeEventListener('submit', onSubmit);
+      input.removeEventListener('input', onInput);
+      modal.removeEventListener('modal:close', onClose);
+    };
+    const finish = (value, close = true) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (close) closeModal(modal);
+      resolve(value);
+    };
+    const onSubmit = (event) => {
+      event.preventDefault();
+      const value = input.value.trim();
+      let validationError = null;
+      try { validationError = validate(value); } catch (caught) { validationError = caught.message || '输入无效'; }
+      if (validationError) {
+        showError(error, validationError);
+        input.focus();
+        return;
+      }
+      finish(value);
+    };
+    const onInput = () => hideError(error);
+    const onClose = () => finish(null, false);
+
+    openModal(modal, '#rename-group-input');
+    form.addEventListener('submit', onSubmit);
+    input.addEventListener('input', onInput);
+    modal.addEventListener('modal:close', onClose);
+    requestAnimationFrame(() => input.select());
+  });
 }
 
 export function setupModalAccessibility() {

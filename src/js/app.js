@@ -46,6 +46,8 @@ import {
   $,
   $$,
   applyTheme,
+  askConfirm,
+  askText,
   closeModal,
   getKeyIcon,
   hideError,
@@ -843,11 +845,23 @@ async function restoreTrashItem(id) {
 
 async function purgeTrashItem(id) {
   const item = state.deletedItems.find((entry) => entry.id === id);
-  if (!item || !confirm(`彻底删除“${item.name}”？此操作无法撤销。`)) return;
+  if (!item) return;
+  const confirmed = await askConfirm({
+    title: '彻底删除',
+    message: `彻底删除“${item.name}”？此操作无法撤销。`,
+    confirmText: '彻底删除',
+  });
+  if (!confirmed) {
+    renderTrash();
+    openModal('trash-modal');
+    return;
+  }
   state.deletedItems = state.deletedItems.filter((entry) => entry.id !== id);
   await saveVault();
   renderTrash();
   renderAll();
+  openModal('trash-modal');
+  showToast('已彻底删除');
 }
 
 function renderGroups() {
@@ -861,10 +875,21 @@ function renderGroups() {
 }
 
 async function renameGroup(group) {
-  const next = prompt('输入新分组名称', group)?.trim();
-  if (!next || next === group) return;
-  if (getGroups().some((item) => item.toLocaleLowerCase() === next.toLocaleLowerCase())) {
-    showToast('该分组已存在');
+  const next = await askText({
+    title: '重命名分组',
+    label: '新分组名称',
+    defaultValue: group,
+    validate: (value) => {
+      if (!value) return '分组名不能为空';
+      if (value.length > 50) return '分组名不能超过 50 个字符';
+      if (value.toLocaleLowerCase() !== group.toLocaleLowerCase()
+        && getGroups().some((item) => item.toLocaleLowerCase() === value.toLocaleLowerCase())) return '该分组已存在';
+      return null;
+    },
+  });
+  if (next === null || next === group) {
+    renderGroups();
+    openModal('groups-modal');
     return;
   }
   state.keys.forEach((key) => { if (key.group === group) key.group = next; });
@@ -872,16 +897,27 @@ async function renameGroup(group) {
   await saveVault();
   renderGroups();
   renderAll();
+  openModal('groups-modal');
   showToast('分组已重命名');
 }
 
 async function deleteGroup(group) {
-  if (!confirm(`删除分组“${group}”？密钥将移到“未分组”。`)) return;
+  const confirmed = await askConfirm({
+    title: '删除分组',
+    message: `删除分组“${group}”后，其中的密钥将移到“未分组”。`,
+    confirmText: '删除分组',
+  });
+  if (!confirmed) {
+    renderGroups();
+    openModal('groups-modal');
+    return;
+  }
   state.keys.forEach((key) => { if (key.group === group) key.group = ''; });
   if (state.groupFilter === group) state.groupFilter = '__all';
   await saveVault();
   renderGroups();
   renderAll();
+  openModal('groups-modal');
   showToast('分组已删除，密钥已移到未分组');
 }
 
