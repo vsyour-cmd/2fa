@@ -4,6 +4,9 @@
   "main": "worker.js",
   "compatibility_date": "2026-08-17",
   "compatibility_flags": ["nodejs_compat"],
+  "build": {
+    "command": "npm run build"
+  },
   "assets": {
     "directory": "./static",
     "binding": "ASSETS",

@@ -122,13 +122,13 @@ npx wrangler deploy
 
 部署完成后，访问输出的 URL 即可使用。
 
-### GitHub Actions 自动部署
+### Cloudflare Builds 自动部署
 
-本仓库包含一个用于自动部署 Cloudflare Worker 的工作流：
+在 Cloudflare Worker 的 **Settings → Builds** 中连接本 GitHub 仓库后：
 
-- `.github/workflows/deploy-worker.yml` 会在 push 到 `main` 或手动触发时依次执行 `npm ci`、测试、构建和部署。
-- 在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中设置 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID`。
-- API Token 至少需要目标账户的 Workers Scripts 编辑、Workers KV Storage 编辑权限。
+- `wrangler.jsonc` 会在上传或部署前自动执行 `npm run build`，生成 `static/` 静态资源目录。
+- `main` 分支用于生产部署，其他分支用于预览版本。
+- Cloudflare 中的 Worker 名称必须与 `wrangler.jsonc` 的 `name`（`2fa-sync`）一致。
 
 ## 使用说明
 
@@ -195,7 +195,6 @@ npx wrangler deploy
 2fa/
 ├── .github/
 │   └── workflows/
-│       ├── deploy-worker.yml   # Worker 自动部署
 │       └── docker-publish.yml  # Docker 镜像发布
 ├── public/
 │   ├── icons/           # PWA 图标
