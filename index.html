@@ -272,6 +272,25 @@
       </div>
     </div>
 
+    <div id="rename-group-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="rename-group-title">
+      <div class="modal">
+        <div class="modal-header"><div><p class="eyebrow">分组整理</p><h2 id="rename-group-title">重命名分组</h2></div><button class="icon-btn" type="button" data-close-modal="rename-group-modal" aria-label="关闭">×</button></div>
+        <form id="rename-group-form">
+          <div class="form-group"><label id="rename-group-label" for="rename-group-input">新分组名称</label><input id="rename-group-input" type="text" maxlength="50" autocomplete="off" required></div>
+          <div id="rename-group-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="rename-group-modal">取消</button><button id="rename-group-submit" class="btn btn-primary" type="submit">确认修改</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div id="confirm-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <div class="modal">
+        <div class="modal-header"><div><p class="eyebrow">请确认操作</p><h2 id="confirm-title">确认</h2></div><button class="icon-btn" type="button" data-close-modal="confirm-modal" aria-label="关闭">×</button></div>
+        <p id="confirm-message" class="dialog-message"></p>
+        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="confirm-modal">取消</button><button id="confirm-ok" class="btn btn-danger" type="button">删除</button></div>
+      </div>
+    </div>
+
     <div id="trash-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="trash-title">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">保留 30 天</p><h2 id="trash-title">回收站</h2></div><button class="icon-btn" type="button" data-close-modal="trash-modal" aria-label="关闭">×</button></div>
