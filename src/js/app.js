@@ -38,6 +38,7 @@ import {
   formatCode,
   generateTOTP,
   getCounter,
+  getNextPeriodDelay,
   getRemainingSeconds,
   getTotpOptions,
   parseOtpauthUri,
@@ -92,6 +93,7 @@ const state = {
   autoLockTimer: null,
   saveTimer: null,
   clipboardTimer: null,
+  pendingCodeCopies: new Map(),
   conflict: null,
   draggedId: '',
 };
@@ -121,6 +123,11 @@ function clearSensitiveState() {
   state.conflict = null;
   clearTimeout(state.saveTimer);
   clearTimeout(state.clipboardTimer);
+  for (const [timer, resolve] of state.pendingCodeCopies) {
+    clearTimeout(timer);
+    resolve(false);
+  }
+  state.pendingCodeCopies.clear();
   clearTimeout(state.autoLockTimer);
   if (state.updateTimer) clearInterval(state.updateTimer);
   state.updateTimer = null;
@@ -580,9 +587,48 @@ async function copyText(value, successMessage = '已复制') {
   }
 }
 
+function waitForNextCodePeriod(key, startedAt) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      state.pendingCodeCopies.delete(timer);
+      resolve(true);
+    }, getNextPeriodDelay(key, startedAt));
+    state.pendingCodeCopies.set(timer, resolve);
+  });
+}
+
 async function copyKeyCode(key, card) {
-  const code = await generateTOTP(key.secret, Date.now(), key);
-  await copyText(code, '验证码已复制');
+  const button = card ? $('.token-code', card) : null;
+  if (button?.disabled) return;
+  const affordance = card ? $('.copy-affordance', card) : null;
+  const originalLabel = button?.getAttribute('aria-label') || '';
+  const startedAt = Date.now();
+  const remaining = getRemainingSeconds(key, startedAt);
+
+  if (remaining <= 1) {
+    card?.classList.add('waiting-next-code');
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-label', '等待新验证码');
+    }
+    if (affordance) affordance.textContent = '等待新码…';
+    showToast('验证码即将过期，正在复制新码');
+    try {
+      if (!await waitForNextCodePeriod(key, startedAt)) return;
+      const code = await generateTOTP(key.secret, Date.now(), key);
+      await copyText(code, '新验证码已复制');
+    } finally {
+      card?.classList.remove('waiting-next-code');
+      if (button) {
+        button.disabled = false;
+        button.setAttribute('aria-label', originalLabel);
+      }
+      if (affordance) affordance.textContent = '点击复制';
+    }
+  } else {
+    const code = await generateTOTP(key.secret, startedAt, key);
+    await copyText(code, remaining <= 3 ? '验证码即将过期，注意尽快粘贴' : '验证码已复制');
+  }
   key.lastUsed = Date.now();
   key.useCount = Math.max(0, Number(key.useCount || 0)) + 1;
   card?.classList.add('copied');

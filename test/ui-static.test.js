@@ -52,6 +52,13 @@ describe('static application shell', () => {
     expect(app).toContain('${key.note}');
   });
 
+  it('waits for a fresh verification code during the final second', () => {
+    expect(app).toContain('验证码即将过期，正在复制新码');
+    expect(app).toContain('验证码即将过期，注意尽快粘贴');
+    expect(app).toContain("classList.add('waiting-next-code')");
+    expect(app).toContain('getNextPeriodDelay(key, startedAt)');
+  });
+
   it('uses accessible application dialogs instead of native prompt and confirm calls', () => {
     expect(app).not.toMatch(/\bprompt\s*\(/);
     expect(app).not.toMatch(/\bconfirm\s*\(/);
