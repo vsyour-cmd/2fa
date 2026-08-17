@@ -122,13 +122,13 @@ npx wrangler deploy
 
 After deployment, visit the output URL to start using.
 
-## GitHub Actions Auto Deploy
+## Cloudflare Builds Auto Deploy
 
-This repository includes an automatic deployment workflow for the Cloudflare Worker:
+After connecting this GitHub repository under the Worker's **Settings → Builds**:
 
-- `.github/workflows/deploy-worker.yml` runs `npm ci`, tests, the production build, and deployment on every push to `main` or manual dispatch.
-- Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` under **Settings → Secrets and variables → Actions**.
-- The token needs at least Workers Scripts edit and Workers KV Storage edit permissions for the target account.
+- `wrangler.jsonc` automatically runs `npm run build` before uploads and deployments, creating the `static/` assets directory.
+- The `main` branch is used for production deployments and other branches create previews.
+- The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`2fa-sync`).
 
 ## Usage Guide
 
@@ -195,7 +195,6 @@ Click the logout button in the top left to clear current session and return to l
 2fa/
 ├── .github/
 │   └── workflows/
-│       ├── deploy-worker.yml   # Deploy Cloudflare Worker
 │       └── docker-publish.yml  # Build/push Docker image
 ├── public/
 │   ├── icons/           # PWA icons
