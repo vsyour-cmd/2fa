@@ -489,7 +489,10 @@ async function renderKeys() {
           </svg>
         </div>
         <div class="token-footer">
-          <span class="group-label">${escapeHtml(key.group || '未分组')}</span>
+          <button class="group-label${key.group ? '' : ' empty'}" type="button" data-action="quick-group" aria-label="${key.group ? `更改 ${escapeHtml(key.name)} 的分组` : `为 ${escapeHtml(key.name)} 添加分组`}" title="${key.group ? '点击更改分组' : '点击添加分组'}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11Z"></path><path d="M12 11v5M9.5 13.5h5"></path></svg>
+            <span class="group-label-text">${escapeHtml(key.group || '未分组')}</span>${key.group ? '' : '<span class="group-label-add">设置</span>'}
+          </button>
           <div class="token-actions">${reorderControls}<button class="small-btn" type="button" data-action="edit">编辑</button><button class="small-btn delete" type="button" data-action="delete">删除</button></div>
         </div>
       </article>`;
@@ -710,6 +713,43 @@ function openEditModal(id) {
   $('#edit-algorithm').value = key.algorithm;
   hideError('#edit-error');
   openModal('edit-modal', '#edit-name');
+}
+
+function openQuickGroupModal(id) {
+  const key = state.keys.find((item) => item.id === id);
+  if (!key) return;
+  updateGroupOptions();
+  $('#quick-group-id').value = key.id;
+  $('#quick-group').value = key.group;
+  $('#quick-group-key-name').textContent = `为“${key.name}”设置分组`;
+  hideError('#quick-group-error');
+  openModal('quick-group-modal', '#quick-group');
+}
+
+async function saveQuickGroup(event) {
+  event.preventDefault();
+  hideError('#quick-group-error');
+  const button = $('#quick-group-submit');
+  setBusy(button, true, '正在保存…');
+  try {
+    const key = state.keys.find((item) => item.id === $('#quick-group-id').value);
+    if (!key) throw new Error('密钥不存在');
+    const group = $('#quick-group').value.trim();
+    if (group.length > 50) throw new Error('分组名称不能超过 50 个字符');
+    if (group === key.group) {
+      closeModal('quick-group-modal');
+      return;
+    }
+    key.group = group;
+    await saveVault();
+    closeModal('quick-group-modal');
+    renderAll();
+    showToast(group ? `已归入“${group}”` : '已移到未分组');
+  } catch (error) {
+    showError('#quick-group-error', error.message || '分组保存失败');
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 async function saveEditedKey(event) {
@@ -1177,6 +1217,7 @@ function setupEvents() {
   for (const button of $$('[data-add-tab]')) button.addEventListener('click', () => switchAddTab(button.dataset.addTab));
   $('#add-form').addEventListener('submit', addKeyFromForm);
   $('#edit-form').addEventListener('submit', saveEditedKey);
+  $('#quick-group-form').addEventListener('submit', saveQuickGroup);
   $('#copy-secret').addEventListener('click', () => copyText(normalizeSecret($('#edit-secret').value), '原始密钥已复制'));
   $('#copy-uri').addEventListener('click', async () => {
     try {
@@ -1200,6 +1241,7 @@ function setupEvents() {
       renderKeys();
     } else if (event.target.closest('[data-action="move-up"]')) await moveKeyInCustomOrder(key.id, -1);
     else if (event.target.closest('[data-action="move-down"]')) await moveKeyInCustomOrder(key.id, 1);
+    else if (event.target.closest('[data-action="quick-group"]')) openQuickGroupModal(key.id);
     else if (event.target.closest('[data-action="edit"]')) openEditModal(key.id);
     else if (event.target.closest('[data-action="delete"]')) await deleteKey(key.id);
     else if (event.target.closest('[data-action="copy-code"]')) await copyKeyCode(key, card);

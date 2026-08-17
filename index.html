@@ -216,6 +216,23 @@
       </div>
     </div>
 
+    <div id="quick-group-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="quick-group-title">
+      <div class="modal">
+        <div class="modal-header"><div><p class="eyebrow">快捷整理</p><h2 id="quick-group-title">设置分组</h2></div><button class="icon-btn" type="button" data-close-modal="quick-group-modal" aria-label="关闭">×</button></div>
+        <form id="quick-group-form">
+          <input id="quick-group-id" type="hidden">
+          <p id="quick-group-key-name" class="quick-group-key"></p>
+          <div class="form-group">
+            <label for="quick-group">分组名称</label>
+            <input id="quick-group" type="text" list="group-options" maxlength="50" placeholder="输入新分组或选择已有分组" autocomplete="off">
+            <p class="field-hint">可以直接创建新分组；留空保存为“未分组”。</p>
+          </div>
+          <div id="quick-group-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="quick-group-modal">取消</button><button id="quick-group-submit" class="btn btn-primary" type="submit">保存分组</button></div>
+        </form>
+      </div>
+    </div>
+
     <div id="settings-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="settings-title">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">偏好与安全</p><h2 id="settings-title">设置</h2></div><button class="icon-btn" type="button" data-close-modal="settings-modal" aria-label="关闭">×</button></div>
