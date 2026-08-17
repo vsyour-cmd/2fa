@@ -11,6 +11,7 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **End-to-End Encryption**: AES-256-GCM encryption, server only stores ciphertext
 - **Multiple Vaults**: Account name and master password identify a vault, with fast local switching
 - **PWA Support**: Install to desktop/home screen for native app experience
+- **Light and Dark Themes**: Supports light, dark, and system-following modes, with a quick toggle in the header
 - **Offline Access**: After the first online visit, the app can start without a network connection; encrypted vaults are cached in IndexedDB and synchronized with explicit conflict handling
 - **QR Code Scanning**: Support camera scanning, image upload, and clipboard paste to recognize QR codes
 - **Complete Management**: Search, groups, favorites, smart frequently-used ordering, custom ordering, editing, and a 30-day trash bin
@@ -145,6 +146,12 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 
 1. Enter master password
 2. Click "Unlock"
+
+### Theme and Settings
+
+- Click the moon icon in the top right to switch quickly between light and dark themes; open the gear menu to select "Follow system"
+- Settings also control sorting, inactivity auto-lock, immediate background lock, and automatic clipboard clearing after copying
+- "Manage Groups" and "Change Master Password" are available in Settings; the trash entry is at the bottom of the page and keeps deleted keys for 30 days
 
 ### Add 2FA Key
 
