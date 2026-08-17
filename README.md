@@ -6,14 +6,17 @@
 
 ## 功能特性
 
-- **TOTP 生成**：兼容 Google Authenticator、Authy 等标准 TOTP 协议
+- **TOTP 生成**：支持 5–300 秒周期、6/8 位验证码及 SHA-1/SHA-256/SHA-512
 - **云端同步**：数据存储在 Cloudflare KV，跨设备访问
 - **端到端加密**：AES-256-GCM 加密，服务端只存储密文
-- **零注册**：无需邮箱/手机号，用主密码即可创建账户
+- **多账户**：账户名称与主密码共同定位保险库，可在同一设备快速切换
 - **PWA 支持**：可安装到桌面/主屏幕，享受原生应用体验
-- **离线使用**：首次登录后支持完全离线访问，数据自动缓存 7 天
+- **离线使用**：解锁后的密文保险库保存在 IndexedDB，恢复联网后自动同步并处理冲突
 - **二维码扫描**：支持摄像头扫描、图片上传、剪贴板粘贴识别二维码
-- **导入导出**：支持 JSON 格式备份，方便数据迁移和本地备份
+- **完整管理**：搜索、分组、收藏、智能常用排序、自定义排序、编辑、回收站与 30 天自动清理
+- **迁移工具**：导入 Google Authenticator、Aegis、2FAS、andOTP 和 OTPAuth URI
+- **安全备份**：密码加密 JSON、明文 JSON 和 OTPAuth URI 三种导出格式
+- **安全设置**：自动锁定、后台锁定、剪贴板自动清理、密码强度和安全改密
 
 ## 技术架构
 
@@ -82,83 +85,50 @@ docker compose up -d
 |------|--------|------|
 | `PORT` | 3000 | HTTP 服务端口 |
 | `DB_PATH` | `/app/data/2fa.db` | SQLite 数据库路径 |
+| `TRUST_PROXY_HOPS` | `0` | 可信反向代理跳数；明确位于单层反代后时设为 `1` |
 
 ### 方式二：Cloudflare Workers 部署
 
 #### 前置条件
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 20.19+
 - [Cloudflare 账户](https://dash.cloudflare.com/sign-up)
 
-#### 步骤 1: 安装 Wrangler CLI
+#### 步骤 1：安装依赖并登录
 
 ```bash
-npm install -g wrangler
+npm ci
+npx wrangler login
 ```
 
-#### 步骤 2: 登录 Cloudflare
+#### 步骤 2：配置 KV
+
+默认的 `wrangler.jsonc` 只声明 `DATA_KV` binding，首次部署时 Wrangler 会引导创建或绑定 KV。若需要固定现有命名空间，可在 `kv_namespaces[0]` 中增加 `id`。
+
+#### 步骤 3：测试和构建
 
 ```bash
-wrangler login
-```
-
-#### 步骤 3: KV 命名空间（可选）
-
-当 `wrangler.toml` 里只配置 `binding`（不填 `id`）时，wrangler 会在首次 `wrangler deploy` 时自动创建（或复用）KV 命名空间，重复部署也会绑定到同一个 KV。因此本仓库默认可以跳过本步骤。
-
-如果你想手动创建（例如明确指定/复用已有 KV），执行：
-
-```bash
-# 进入项目目录
-cd 2fa
-
-# 创建生产环境 KV
-wrangler kv namespace create DATA_KV
-# 输出类似: { binding = "DATA_KV", id = "xxxxxxxxxxxx" }
-
-# 创建预览环境 KV（可选）
-wrangler kv namespace create DATA_KV --preview
-# 输出类似: { binding = "DATA_KV", preview_id = "yyyyyyyyyyyy" }
-```
-
-#### 步骤 4: 配置 wrangler.toml
-
-- 自动创建方式：保持 `wrangler.toml` 里 `[[kv_namespaces]]` 仅包含 `binding`，直接执行 `wrangler deploy`；Wrangler 会自动创建/复用 KV（不会修改 `wrangler.toml`）。
-- 手动方式：将上一步输出的 `id` / `preview_id` 填入 `wrangler.toml`：
-
-```toml
-name = "2fa-sync"
-main = "worker.js"
-compatibility_date = "2024-01-01"
-assets = { directory = "./public" }
-
-[[kv_namespaces]]
-binding = "DATA_KV"
-id = "xxxxxxxxxxxx"        # 替换为你的 id
-preview_id = "yyyyyyyyyyyy" # 替换为你的 preview_id
-```
-
-#### 步骤 5: 本地测试
-
-```bash
-wrangler dev
+npm test
+npm run build
+npx wrangler dev
 # 访问 http://localhost:8787
 ```
 
-#### 步骤 6: 部署
+#### 步骤 4：部署
 
 ```bash
-wrangler deploy
-# 输出类似: Published 2fa-sync (https://2fa-sync.xxx.workers.dev)
+npx wrangler deploy
 ```
 
 部署完成后，访问输出的 URL 即可使用。
 
-### GitHub Actions 自动部署（可选）
+### GitHub Actions 自动部署
 
 本仓库包含一个用于自动部署 Cloudflare Worker 的工作流：
 
-- Deploy Cloudflare Worker：`.github/workflows/deploy-worker.yml` — 在 push 到 `main` 或手动触发时部署 Worker。需要在仓库 Secrets 中设置：`CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。
+- `.github/workflows/deploy-worker.yml` 会在 push 到 `main` 或手动触发时依次执行 `npm ci`、测试、构建和部署。
+- 在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中设置 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID`。
+- API Token 至少需要目标账户的 Workers Scripts 编辑、Workers KV Storage 编辑权限。
 
 ## 使用说明
 
@@ -166,8 +136,8 @@ wrangler deploy
 
 1. 访问部署后的 URL
 2. 点击「首次使用? 创建账户」
-3. 设置主密码（至少 4 个字符）
-4. 确认密码后点击「设置密码」
+3. 设置至少 10 个字符、同时含字母和数字的主密码
+4. 确认密码后创建加密保险库
 
 ### 登录
 
@@ -204,21 +174,19 @@ wrangler deploy
 
 ### 导入导出
 
-**导出备份**：
-1. 登录后点击页面底部「导出」按钮
-2. 下载 JSON 格式的备份文件（明文存储，请妥善保管）
+**导出备份**：可选择密码加密 JSON（推荐）、明文 JSON 或 OTPAuth URI 列表。明文格式含原始密钥，必须妥善保管。
 
 **导入备份**：
-1. 点击页面底部「导入」按钮
-2. 选择之前导出的 JSON 文件
-3. 会跳过同名密钥，保留现有数据，仅导入新密钥
+1. 点击页面底部「导入」并选择文件，或粘贴 OTPAuth/Google 迁移链接
+2. Aegis 或加密备份按提示输入导出密码
+3. 对同名条目选择跳过、覆盖或自动重命名
 
 ## 注意事项
 
 1. **密码不可找回**：忘记密码将无法恢复数据，请牢记主密码
-2. **密码即账户**：相同密码 = 相同账户，不同设备用相同密码登录可同步数据
-3. **会话有效期**：关闭浏览器标签页后会话失效，需重新输入密码
-4. **离线模式**：首次需联网登录，之后可离线使用（缓存有效期 7 天）
+2. **账户定位**：同步需要在不同设备输入相同的账户名称和主密码
+3. **会话安全**：解锁密钥仅保存在当前标签页的会话存储，可使用自动锁定或立即锁定全部会话
+4. **离线模式**：账户至少需要成功在线解锁一次，才能使用本机缓存
 5. **数据同步**：离线期间的修改会在联网后自动同步，如有冲突会提示选择
 
 ## 项目结构
@@ -231,13 +199,17 @@ wrangler deploy
 │       └── docker-publish.yml  # Docker 镜像发布
 ├── public/
 │   ├── icons/           # PWA 图标
-│   ├── index.html       # 前端页面
 │   ├── manifest.json    # PWA 清单
 │   └── service-worker.js # Service Worker (离线缓存)
 ├── src/
+│   ├── js/              # 前端功能模块
+│   ├── styles.css       # 响应式主题样式
 │   └── server.js        # Docker 版本的 Express 服务器
+├── test/                # TOTP、加密、兼容性和 Worker 测试
+├── index.html           # Vite 应用入口
 ├── worker.js            # Cloudflare Worker
-├── wrangler.toml        # Wrangler 配置文件
+├── wrangler.jsonc       # Wrangler 配置文件
+├── vite.config.mjs      # 前端构建配置
 ├── Dockerfile           # Docker 镜像定义
 ├── docker-compose.yml   # Docker Compose 配置
 ├── package.json         # npm 依赖配置

@@ -2,9 +2,13 @@
 .venv/
 .wrangler/
 node_modules/
+.npm-cache/
+.xdg/
 .omc
 .claude
 .playwright-mcp
 data
-package-lock.json
-public/icons/
+static/
+coverage/
+.dev.vars
+worker-configuration.d.ts
