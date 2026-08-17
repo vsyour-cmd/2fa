@@ -431,6 +431,18 @@ function renderListMeta(visibleCount) {
   };
   $('#sort-hint').textContent = hints[state.settings.sortMode] || hints.smart;
   $('#sort-quick').value = state.settings.sortMode;
+  applyColumnsPerRow();
+}
+
+function applyColumnsPerRow(announce = false) {
+  const grid = $('#token-list');
+  const value = ['auto', '1', '2', '3', '4'].includes(String(state.settings.columnsPerRow))
+    ? String(state.settings.columnsPerRow)
+    : 'auto';
+  if (value === 'auto') grid.removeAttribute('data-columns');
+  else grid.dataset.columns = value;
+  $('#columns-quick').value = value;
+  if (announce) showToast(value === 'auto' ? '已启用自动列数' : `每行显示 ${value} 个`);
 }
 
 function ringValues(key, now = Date.now()) {
@@ -1208,6 +1220,10 @@ function setupEvents() {
   $('#settings-open').addEventListener('click', () => { fillSettingsForm(); openModal('settings-modal', '#theme-select'); });
   $('#settings-form').addEventListener('submit', saveSettingsFromForm);
   $('#sort-quick').addEventListener('change', (event) => applySortMode(event.target.value, true));
+  $('#columns-quick').addEventListener('change', (event) => {
+    state.settings = saveSettings({ ...state.settings, columnsPerRow: event.target.value });
+    applyColumnsPerRow(true);
+  });
   $('#lock-current').addEventListener('click', () => { closeModal('settings-modal'); lockCurrent(); });
   $('#lock-all').addEventListener('click', () => { closeModal('settings-modal'); lockAll('全部会话已锁定'); });
   $('#login-other').addEventListener('click', () => { closeModal('settings-modal'); clearSensitiveState(); showAuthScreen(); });
