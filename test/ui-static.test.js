@@ -233,6 +233,7 @@ describe('static application shell', () => {
     expect(app).toContain('applyImportPlan(pending.plan, state.keys');
     expect(app).toContain('const icon = getKeyIcon(candidate)');
     expect(app).toContain('token-icon import-preview-icon');
+    expect(app).toContain('共 <strong>${plan.items.length}</strong> 条');
     expect(app).toContain('确认导入 ${count} 条');
     expect(app).toContain("input.addEventListener(input.matches('select, input[type=\"file\"]') ? 'change' : 'input'");
     expect(app).toContain("$('#import-modal').addEventListener('modal:close'");

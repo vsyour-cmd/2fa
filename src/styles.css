@@ -558,7 +558,7 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
 .import-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 14px 15px 12px; background: var(--surface-solid); border-bottom: 1px solid var(--border); }
 .import-preview-header p { margin-bottom: 2px; color: var(--primary); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .import-preview-header > span { color: var(--text-muted); font-size: 0.72rem; text-align: right; }
-.import-preview-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
+.import-preview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
 .import-preview-stats > span { padding: 9px 10px; color: var(--text-muted); text-align: center; }
 .import-preview-stats > span + span { border-left: 1px solid var(--border); }
 .import-preview-stats strong { margin-right: 3px; color: var(--text); font-size: 1rem; }

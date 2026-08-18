@@ -1816,6 +1816,7 @@ function renderImportPreview(source, plan, workflowNoteCount = 0) {
       <span>确认前保险库不会改变${workflowNoteCount ? ` · 含 ${workflowNoteCount} 个使用场景` : ''}</span>
     </div>
     <div class="import-preview-stats" aria-label="导入统计">
+      <span class="total">共 <strong>${plan.items.length}</strong> 条</span>
       <span class="add"><strong>${plan.stats.add}</strong> 新增</span>
       <span class="overwrite"><strong>${plan.stats.overwrite}</strong> 覆盖</span>
       <span class="skip"><strong>${skipped}</strong> 跳过</span>
