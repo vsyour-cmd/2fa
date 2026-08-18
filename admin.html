@@ -94,7 +94,7 @@
           <div><h2>操作日志</h2><p id="logs-result-summary">日志保留 90 天，不记录密码和验证码内容。</p></div>
           <form id="log-filters" class="filter-bar" role="search">
             <label class="search-field"><span class="sr-only">搜索日志</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.2-3.2"></path></svg><input id="log-query" type="search" maxlength="100" placeholder="搜索用户、操作或来源标识"></label>
-            <label><span class="sr-only">操作类型</span><select id="log-action"><option value="">全部操作</option><option value="admin.login">管理员登录</option><option value="admin.logout">管理员退出</option><option value="admin.user.update">更新用户</option><option value="admin.vault.reset">重置保险库</option><option value="admin.vault.restore">恢复保险库</option><option value="vault.read">读取保险库</option><option value="vault.save">保存保险库</option><option value="vault.delete">删除旧保险库</option><option value="vault.access_blocked">阻止访问</option><option value="vault.save_blocked">阻止同步</option></select></label>
+            <label><span class="sr-only">操作类型</span><select id="log-action"><option value="">全部操作</option><option value="admin.login">管理员登录</option><option value="admin.logout">管理员退出</option><option value="admin.user.update">更新用户</option><option value="admin.user.delete">删除用户</option><option value="admin.vault.reset">重置保险库</option><option value="admin.vault.restore">恢复保险库</option><option value="vault.read">读取保险库</option><option value="vault.save">保存保险库</option><option value="vault.delete">删除旧保险库</option><option value="vault.access_blocked">阻止访问</option><option value="vault.save_blocked">阻止同步</option></select></label>
             <label><span class="sr-only">操作结果</span><select id="log-result"><option value="">全部结果</option><option value="success">成功</option><option value="failure">失败</option><option value="blocked">已阻止</option></select></label>
           </form>
         </div>
@@ -132,15 +132,24 @@
       <footer class="dialog-actions"><button class="button button-ghost" type="button" data-close-user>取消</button><button id="user-save" class="button button-primary" type="submit">保存调整</button></footer>
     </form>
     <section class="danger-zone" aria-labelledby="danger-zone-title">
-      <div><h3 id="danger-zone-title">保险库重置</h3><p>后台不能读取或修改主密码。重置会让用户使用新主密码创建新保险库；旧密文保留 30 天。</p></div>
-      <div id="reset-controls" class="confirmation-row">
-        <label>输入“重置保险库”确认<input id="reset-confirmation" type="text" autocomplete="off"></label>
-        <button id="reset-vault" class="button button-danger" type="button" disabled>重置保险库</button>
+      <div class="danger-section">
+        <div><h3 id="danger-zone-title">保险库重置</h3><p>后台不能读取或修改主密码。重置会让用户使用新主密码创建新保险库；旧密文保留 30 天。</p></div>
+        <div id="reset-controls" class="confirmation-row">
+          <label>输入“重置保险库”确认<input id="reset-confirmation" type="text" autocomplete="off"></label>
+          <button id="reset-vault" class="button button-danger" type="button" disabled>重置保险库</button>
+        </div>
+        <div id="restore-controls" class="confirmation-row hidden">
+          <p id="archive-expiry" class="archive-note"></p>
+          <label>输入“恢复保险库”确认<input id="restore-confirmation" type="text" autocomplete="off"></label>
+          <button id="restore-vault" class="button button-warning" type="button" disabled>恢复旧保险库</button>
+        </div>
       </div>
-      <div id="restore-controls" class="confirmation-row hidden">
-        <p id="archive-expiry" class="archive-note"></p>
-        <label>输入“恢复保险库”确认<input id="restore-confirmation" type="text" autocomplete="off"></label>
-        <button id="restore-vault" class="button button-warning" type="button" disabled>恢复旧保险库</button>
+      <div class="danger-section delete-user-section">
+        <div><h3>永久删除用户</h3><p>删除云端保险库、用户资料及可恢复备份，无法撤销；审计日志仍会保留。用户设备中的离线副本不会被远程清除，再次同步时可能重新创建用户。</p></div>
+        <div class="confirmation-row">
+          <label>输入“删除用户”确认<input id="delete-user-confirmation" type="text" autocomplete="off"></label>
+          <button id="delete-user" class="button button-danger" type="button" disabled>永久删除用户</button>
+        </div>
       </div>
     </section>
   </dialog>

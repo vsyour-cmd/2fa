@@ -13,7 +13,15 @@ describe('admin console static shell', () => {
     expect(html).toContain('id="user-dialog"');
     expect(html).toContain('输入“重置保险库”确认');
     expect(html).toContain('输入“恢复保险库”确认');
+    expect(html).toContain('输入“删除用户”确认');
+    expect(html).toContain('id="delete-user"');
+    expect(html).toContain('option value="admin.user.delete"');
     expect(html).toContain('管理员无法查看主密码、验证码密钥或解密保险库');
+    expect(script).toContain("method: 'DELETE', body: { confirmation: '删除用户' }");
+    expect(script).toContain("'admin.user.delete': '删除用户'");
+    expect(script).toContain("addEventListener('pointerdown'");
+    expect(script).toContain("addEventListener('pointerup'");
+    expect(script).not.toContain("$('#user-dialog').addEventListener('click'");
   });
 
   it('keeps the bearer token in memory and builds user content without innerHTML', () => {

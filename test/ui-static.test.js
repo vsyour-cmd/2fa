@@ -28,6 +28,14 @@ describe('static application shell', () => {
     expect(html).toContain('role="dialog"');
   });
 
+  it('dismisses modal backdrops only after a stationary pointer gesture', () => {
+    expect(ui).toContain("document.addEventListener('pointerdown'");
+    expect(ui).toContain("document.addEventListener('pointerup'");
+    expect(ui).toContain('BACKDROP_DRAG_TOLERANCE');
+    expect(ui).toContain('event.target !== started.overlay');
+    expect(ui).not.toContain("document.addEventListener('click', (event) => {\n    const overlay");
+  });
+
   it('provides an accessible responsive back-to-top control', () => {
     expect(html).toContain('id="back-to-top"');
     expect(html).toContain('aria-label="返回页面顶部"');

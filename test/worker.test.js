@@ -136,8 +136,27 @@ describe('Cloudflare Worker API', () => {
     expect((await restored.json()).user).toMatchObject({ status: 'active', hasVault: true });
     expect(await (await worker.fetch(request(`/api/data?key=${key}`), env)).json()).toMatchObject({ exists: true });
 
-    const logs = await worker.fetch(request('/api/admin/logs?action=admin.vault.restore', { headers: adminHeaders }), env);
+    const resetForDelete = await worker.fetch(request(`/api/admin/users/${key}/reset`, {
+      method: 'POST', headers: adminHeaders, body: JSON.stringify({ confirmation: '重置保险库' }),
+    }), env);
+    const { user: resetUser } = await resetForDelete.json();
+    expect(resetForDelete.status).toBe(200);
+    expect((await worker.fetch(request(`/api/admin/users/${key}`, {
+      method: 'DELETE', headers: adminHeaders, body: JSON.stringify({ confirmation: '错误文字' }),
+    }), env)).status).toBe(400);
+
+    const deleted = await worker.fetch(request(`/api/admin/users/${key}`, {
+      method: 'DELETE', headers: adminHeaders, body: JSON.stringify({ confirmation: '删除用户' }),
+    }), env);
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({ success: true });
+    expect(await env.DATA_KV.get(key)).toBeNull();
+    expect(await env.DATA_KV.get(`$user$:${key}`)).toBeNull();
+    expect(await env.DATA_KV.get(resetUser.archiveKey)).toBeNull();
+    expect((await (await worker.fetch(request('/api/admin/users', { headers: adminHeaders }), env)).json()).summary.total).toBe(0);
+
+    const logs = await worker.fetch(request('/api/admin/logs?action=admin.user.delete', { headers: adminHeaders }), env);
     expect(logs.status).toBe(200);
-    expect((await logs.json()).logs[0]).toMatchObject({ action: 'admin.vault.restore', result: 'success', targetKey: key });
+    expect((await logs.json()).logs[0]).toMatchObject({ action: 'admin.user.delete', result: 'success', targetKey: key });
   });
 });

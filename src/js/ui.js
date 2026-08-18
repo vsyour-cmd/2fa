@@ -5,6 +5,8 @@ let activeModal = null;
 let modalTrigger = null;
 let toastTimer = null;
 let offlineBannerObserver = null;
+let backdropPointer = null;
+const BACKDROP_DRAG_TOLERANCE = 6;
 
 export function setHidden(target, hidden) {
   const element = typeof target === 'string' ? $(target) : target;
@@ -149,10 +151,23 @@ export function setupModalAccessibility() {
     }
   });
 
-  document.addEventListener('click', (event) => {
-    const overlay = event.target.closest('.modal-overlay');
-    if (overlay && event.target === overlay && overlay.dataset.dismissible !== 'false') closeModal(overlay);
+  document.addEventListener('pointerdown', (event) => {
+    const overlay = event.target.closest?.('.modal-overlay');
+    const startedOnBackdrop = overlay && event.target === overlay && event.button === 0 && event.isPrimary !== false;
+    backdropPointer = startedOnBackdrop
+      ? { overlay, pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+      : null;
   });
+
+  document.addEventListener('pointerup', (event) => {
+    const started = backdropPointer;
+    backdropPointer = null;
+    if (!started || event.pointerId !== started.pointerId || event.target !== started.overlay) return;
+    const distance = Math.hypot(event.clientX - started.x, event.clientY - started.y);
+    if (distance <= BACKDROP_DRAG_TOLERANCE && started.overlay.dataset.dismissible !== 'false') closeModal(started.overlay);
+  });
+
+  document.addEventListener('pointercancel', () => { backdropPointer = null; });
 }
 
 export function showToast(message, options = {}) {

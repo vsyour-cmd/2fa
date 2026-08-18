@@ -19,7 +19,7 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
 - **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports with gentle periodic backup reminders
 - **Security Controls**: Auto-lock, background lock, clipboard clearing, copy vibration, password strength, safe re-encryption, and optional five-minute PIN quick unlock
-- **Admin Console**: Separate admin login, user status and notes, recoverable vault reset, and 90-day audit-log search
+- **Admin Console**: Separate admin login, user status and notes, recoverable vault reset, permanent user deletion, and 90-day audit-log search
 
 ## Architecture
 
@@ -161,7 +161,8 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 1. Open `/admin.html` and sign in with the separate admin credentials.
 2. Search users, update management labels and notes, suspend or restore online access, and filter logs by action and result.
 3. The server cannot view or directly change a user's master password. “Reset vault” archives the current ciphertext for 30 days and lets the user create a new vault; an admin can restore the archive during that period.
-4. Existing users report their account label on their next online login or save after the upgrade; until then they appear as unidentified users.
+4. “Permanently delete user” removes the cloud vault, user profile, and recoverable archive while retaining audit logs; an offline device can recreate the user on its next sync.
+5. Existing users report their account label on their next online login or save after the upgrade; until then they appear as unidentified users.
 
 ### Login
 

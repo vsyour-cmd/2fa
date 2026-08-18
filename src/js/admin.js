@@ -25,6 +25,7 @@ const actionLabels = {
   'admin.login': '管理员登录',
   'admin.logout': '管理员退出',
   'admin.user.update': '更新用户',
+  'admin.user.delete': '删除用户',
   'admin.vault.reset': '重置保险库',
   'admin.vault.restore': '恢复保险库',
   'vault.read': '读取保险库',
@@ -35,6 +36,8 @@ const actionLabels = {
 };
 
 const resultLabels = { success: '成功', failure: '失败', blocked: '已阻止' };
+const BACKDROP_DRAG_TOLERANCE = 6;
+let userDialogBackdropPointer = null;
 
 function setHidden(target, hidden) {
   const element = typeof target === 'string' ? $(target) : target;
@@ -248,6 +251,7 @@ function openUserDialog(user) {
   $('#dialog-note').value = user.adminNote || '';
   $('#reset-confirmation').value = '';
   $('#restore-confirmation').value = '';
+  $('#delete-user-confirmation').value = '';
   showError('#user-form-error');
   renderDangerControls();
   const dialog = $('#user-dialog');
@@ -260,8 +264,9 @@ function renderDangerControls() {
   const canRestore = Boolean(user?.archiveKey && !user?.hasVault);
   setHidden('#reset-controls', !canReset);
   setHidden('#restore-controls', !canRestore);
-  $('#reset-vault').disabled = $('#reset-confirmation').value !== '重置保险库';
-  $('#restore-vault').disabled = $('#restore-confirmation').value !== '恢复保险库';
+  $('#reset-vault').disabled = !canReset || $('#reset-confirmation').value !== '重置保险库';
+  $('#restore-vault').disabled = !canRestore || $('#restore-confirmation').value !== '恢复保险库';
+  $('#delete-user').disabled = !user || $('#delete-user-confirmation').value !== '删除用户';
   $('#archive-expiry').textContent = canRestore
     ? `重置前的旧密文保留至 ${formatDateTime(user.archivedUntil)}，恢复不会绕过原主密码。`
     : '';
@@ -340,6 +345,37 @@ async function restoreSelectedVault() {
     setBusy(button, false);
     renderDangerControls();
   }
+}
+
+async function deleteSelectedUser() {
+  if (!state.selectedUser || $('#delete-user-confirmation').value !== '删除用户') return;
+  const button = $('#delete-user');
+  const keyHash = state.selectedUser.keyHash;
+  setBusy(button, true, '正在删除…');
+  showError('#user-form-error');
+  try {
+    await api(`/api/admin/users/${keyHash}`, {
+      method: 'DELETE', body: { confirmation: '删除用户' },
+    });
+    if (state.userOffset > 0 && state.users.length === 1) {
+      state.userOffset = Math.max(0, state.userOffset - state.userLimit);
+    }
+    state.selectedUser = null;
+    $('#user-dialog').close();
+    showToast('用户及云端数据已永久删除');
+    await loadUsers();
+    if (state.logsLoaded) await loadLogs();
+  } catch (error) {
+    if (error.status !== 401) showError('#user-form-error', error.message);
+  } finally {
+    setBusy(button, false);
+    renderDangerControls();
+  }
+}
+
+function isUserDialogBackdropPointer(event) {
+  const rect = $('#user-dialog').getBoundingClientRect();
+  return event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
 }
 
 function renderLogs(payload) {
@@ -491,11 +527,24 @@ $('#log-result').addEventListener('change', loadLogs);
 $('#user-form').addEventListener('submit', saveSelectedUser);
 $('#user-dialog-close').addEventListener('click', () => $('#user-dialog').close());
 for (const button of $$('[data-close-user]')) button.addEventListener('click', () => $('#user-dialog').close());
-$('#user-dialog').addEventListener('click', (event) => {
-  if (event.target === $('#user-dialog')) $('#user-dialog').close();
+$('#user-dialog').addEventListener('pointerdown', (event) => {
+  const startedOnBackdrop = event.button === 0 && event.isPrimary !== false && isUserDialogBackdropPointer(event);
+  userDialogBackdropPointer = startedOnBackdrop
+    ? { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+    : null;
 });
+$('#user-dialog').addEventListener('pointerup', (event) => {
+  const started = userDialogBackdropPointer;
+  userDialogBackdropPointer = null;
+  if (!started || event.pointerId !== started.pointerId || !isUserDialogBackdropPointer(event)) return;
+  const distance = Math.hypot(event.clientX - started.x, event.clientY - started.y);
+  if (distance <= BACKDROP_DRAG_TOLERANCE) $('#user-dialog').close();
+});
+$('#user-dialog').addEventListener('pointercancel', () => { userDialogBackdropPointer = null; });
 
 $('#reset-confirmation').addEventListener('input', renderDangerControls);
 $('#restore-confirmation').addEventListener('input', renderDangerControls);
+$('#delete-user-confirmation').addEventListener('input', renderDangerControls);
 $('#reset-vault').addEventListener('click', resetSelectedVault);
 $('#restore-vault').addEventListener('click', restoreSelectedVault);
+$('#delete-user').addEventListener('click', deleteSelectedUser);
