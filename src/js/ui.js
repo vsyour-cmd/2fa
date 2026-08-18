@@ -208,6 +208,11 @@ export function setNetworkStatus(isOnline, detail = '') {
   indicator.classList.toggle('offline', !isOnline);
   $('.status-text', indicator).textContent = detail || (isOnline ? '在线' : '离线');
   indicator.setAttribute('aria-label', detail || (isOnline ? '当前在线' : '当前离线'));
+  const banner = $('#offline-banner');
+  if (!banner) return;
+  setHidden(banner, isOnline);
+  const offset = isOnline ? 0 : banner.offsetHeight;
+  document.documentElement.style.setProperty('--offline-banner-offset', `${offset}px`);
 }
 
 export function setBusy(button, busy, busyText = '处理中…') {

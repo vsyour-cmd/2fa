@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const app = await readFile(new URL('../src/js/app.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
+const ui = await readFile(new URL('../src/js/ui.js', import.meta.url), 'utf8');
 
 describe('static application shell', () => {
   it('uses a strict CSP and contains no inline event handlers', () => {
@@ -238,6 +239,9 @@ describe('static application shell', () => {
     expect(styles).toContain('.toolbar-meta-status { display: flex; min-width: 0;');
     expect(styles).toContain('.network-status { display: inline-flex; min-height: 28px;');
     expect(styles).toContain('.offline-banner { position: sticky; top: 0;');
+    expect(styles).toContain('.toolbar { position: sticky; top: calc(12px + var(--offline-banner-offset, 0px));');
+    expect(ui).toContain("setHidden(banner, isOnline);");
+    expect(ui).toContain("document.documentElement.style.setProperty('--offline-banner-offset', `${offset}px`);");
     expect(styles).not.toContain('.network-status { position: fixed;');
   });
 

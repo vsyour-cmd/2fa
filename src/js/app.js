@@ -2265,17 +2265,14 @@ async function init() {
   offline.setupNetworkListeners(
     () => {
       setNetworkStatus(true);
-      setHidden('#offline-banner', true);
       showToast('网络已恢复');
       triggerSyncCheck();
     },
     () => {
       setNetworkStatus(false);
-      setHidden('#offline-banner', false);
     },
   );
   setNetworkStatus(offline.isOnline);
-  setHidden('#offline-banner', offline.isOnline);
   renderKnownAccounts();
   renderSessionResume();
 
