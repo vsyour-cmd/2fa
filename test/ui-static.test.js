@@ -28,6 +28,16 @@ describe('static application shell', () => {
     expect(html).toContain('role="dialog"');
   });
 
+  it('provides an accessible responsive back-to-top control', () => {
+    expect(html).toContain('id="back-to-top"');
+    expect(html).toContain('aria-label="返回页面顶部"');
+    expect(app).toContain("window.addEventListener('scroll', queueBackToTopUpdate, { passive: true })");
+    expect(app).toContain("matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'");
+    expect(styles).toContain('.back-to-top { position: fixed;');
+    expect(styles).toContain('width: 48px; height: 48px;');
+    expect(styles).toContain('env(safe-area-inset-bottom)');
+  });
+
   it('defines every statically referenced application element', () => {
     const referencedIds = [...app.matchAll(/\$\(\s*['"]#([A-Za-z][\w-]*)['"]\s*\)/g)].map((match) => match[1]);
     for (const id of new Set(referencedIds)) expect(html, `missing #${id}`).toContain(`id="${id}"`);

@@ -658,6 +658,7 @@ function renderMultiSelectUi(visible = getVisibleKeys()) {
     + getGroups().map((group) => `<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join('');
   groupSelect.value = [...groupSelect.options].some((option) => option.value === previousGroup) ? previousGroup : '__choose';
   $('#bulk-move').disabled = disabled || groupSelect.value === '__choose';
+  updateBackToTopVisibility();
 }
 
 function setMultiSelectMode(enabled) {
@@ -2078,13 +2079,38 @@ function concealSensitiveFields(root = document) {
   for (const toggle of $$('[data-toggle-password]', root)) setSensitiveVisibility(toggle, false);
 }
 
+let backToTopFrame = 0;
+
+function updateBackToTopVisibility() {
+  const button = $('#back-to-top');
+  const visible = window.scrollY > Math.max(360, window.innerHeight * 0.6) && !document.body.classList.contains('bulk-mode');
+  button.classList.toggle('visible', visible);
+  button.setAttribute('aria-hidden', String(!visible));
+  button.tabIndex = visible ? 0 : -1;
+}
+
+function queueBackToTopUpdate() {
+  if (backToTopFrame) return;
+  backToTopFrame = requestAnimationFrame(() => {
+    backToTopFrame = 0;
+    updateBackToTopVisibility();
+  });
+}
+
 function setupEvents() {
   setupModalAccessibility();
 
   window.addEventListener('resize', () => {
     cancelAnimationFrame(noteResizeFrame);
     noteResizeFrame = requestAnimationFrame(updateTokenNoteControls);
+    queueBackToTopUpdate();
   });
+  window.addEventListener('scroll', queueBackToTopUpdate, { passive: true });
+  $('#back-to-top').addEventListener('click', () => {
+    $('#main-content').focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+  updateBackToTopVisibility();
 
   for (const modal of $$('.modal-overlay')) {
     modal.addEventListener('modal:close', () => concealSensitiveFields(modal));

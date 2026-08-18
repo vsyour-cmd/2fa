@@ -18,7 +18,7 @@
     <a class="skip-link" href="#main-content">跳到主内容</a>
     <div id="offline-banner" class="offline-banner hidden" role="status">当前处于离线模式，更改将先保存在本机</div>
 
-    <main id="main-content" class="shell">
+    <main id="main-content" class="shell" tabindex="-1">
       <section id="unlock-screen" class="auth-shell" aria-labelledby="auth-title">
         <header class="brand-block">
           <div class="brand-mark" aria-hidden="true"><img src="/icons/icon.svg" alt="" width="58" height="58"></div>
@@ -495,6 +495,9 @@
       </div>
     </div>
 
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="返回页面顶部" title="返回顶部" aria-hidden="true" tabindex="-1">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+    </button>
     <datalist id="group-options"></datalist>
     <div id="app-toast" class="toast" role="status" aria-live="polite"></div>
   </body>
