@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const app = await readFile(new URL('../src/js/app.js', import.meta.url), 'utf8');
+const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 describe('static application shell', () => {
   it('uses a strict CSP and contains no inline event handlers', () => {
@@ -57,7 +58,7 @@ describe('static application shell', () => {
     expect(app).toContain('compareStaleKeys(left, right)');
     expect(app).toContain('class="token-last-used"');
     expect(app).toContain("'从未使用'");
-    expect(app).toContain("['smart', 'recent', 'stale']");
+    expect(app).toContain('setTimeout(() => renderKeys(), 650)');
   });
 
   it('shows the previous, current, and next verification codes together', () => {
@@ -149,6 +150,13 @@ describe('static application shell', () => {
     expect(app).toContain("const LAST_EXPORT_KEY = '2fa_last_export_v1'");
     expect(app).toContain('state.keys.length >= 10');
     expect(app).toContain('avatar-tone-');
+  });
+
+  it('labels keys used during the last seven days', () => {
+    expect(app).toContain('const RECENT_USAGE_WINDOW_MS = 7 * 86_400_000');
+    expect(app).toContain('class="usage-badge recent"');
+    expect(app).toContain('>最近使用</span>');
+    expect(styles).toContain('.usage-badge.recent');
   });
 
   it('shows offline migration QR codes and limits quick PIN unlock to a short in-tab cache', () => {

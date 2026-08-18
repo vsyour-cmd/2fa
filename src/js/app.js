@@ -94,6 +94,7 @@ const offline = new OfflineManager();
 const LAST_EXPORT_KEY = '2fa_last_export_v1';
 const BACKUP_DISMISSED_KEY = '2fa_backup_reminder_dismissed_v1';
 const BACKUP_REMINDER_DAYS = 30;
+const RECENT_USAGE_WINDOW_MS = 7 * 86_400_000;
 const state = {
   masterKey: null,
   keyHash: '',
@@ -771,7 +772,9 @@ async function renderKeys() {
     const ring = ringValues(key, cardNow);
     const icon = getKeyIcon(key);
     const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account].filter(Boolean).join(' · ') || 'TOTP';
-    const lastUsed = Number(key.lastUsed || 0) > 0 ? formatDateTime(key.lastUsed) : '从未使用';
+    const lastUsedAt = Number(key.lastUsed || 0);
+    const lastUsed = lastUsedAt > 0 ? formatDateTime(lastUsedAt) : '从未使用';
+    const recentlyUsed = lastUsedAt > 0 && cardNow - lastUsedAt <= RECENT_USAGE_WINDOW_MS;
     const note = key.note ? `<p class="token-note" title="${escapeHtml(key.note)}">${escapeHtml(key.note)}</p>` : '';
     const draggable = state.settings.sortMode === 'custom' && !state.multiSelectMode ? 'true' : 'false';
     const frequent = frequentIds.has(key.id);
@@ -787,7 +790,7 @@ async function renderKeys() {
         <div class="token-top">
           ${selectControl}
           <div class="token-icon${icon.matched ? '' : ` initial avatar-tone-${icon.tone}`}" aria-hidden="true">${escapeHtml(icon.value)}</div>
-          <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div><div class="token-last-used" title="最近使用时间：${escapeHtml(lastUsed)}">最近使用：${escapeHtml(lastUsed)}</div></div>
+          <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}${recentlyUsed ? `<span class="usage-badge recent" title="最近使用：${escapeHtml(lastUsed)}">最近使用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div><div class="token-last-used" title="最近使用时间：${escapeHtml(lastUsed)}">最近使用：${escapeHtml(lastUsed)}</div></div>
           <button class="favorite-btn${key.favorite ? ' active' : ''}" type="button" data-action="favorite" aria-label="${key.favorite ? '取消收藏' : '收藏'}" aria-pressed="${key.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
         ${note}
@@ -933,7 +936,7 @@ async function copyKeyCode(key, card) {
   setTimeout(() => card?.classList.remove('copied'), 520);
   card?.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(.98)' }, { transform: 'scale(1)' }], { duration: 180 });
   scheduleSave();
-  if (['smart', 'recent', 'stale'].includes(state.settings.sortMode)) setTimeout(() => renderKeys(), 650);
+  setTimeout(() => renderKeys(), 650);
 }
 
 async function moveKeyInCustomOrder(id, direction) {
