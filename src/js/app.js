@@ -13,7 +13,13 @@ import {
   importAesKey,
   validatePassword,
 } from './crypto.js';
-import { parseGoogleMigrationUri, parseImportContent, validateImportedItems } from './importers.js';
+import {
+  applyImportPlan,
+  createImportPlan,
+  parseGoogleMigrationUri,
+  parseImportContent,
+  validateImportedItems,
+} from './importers.js';
 import { QrScanner, scanQrImage } from './qr.js';
 import {
   ApiError,
@@ -96,6 +102,8 @@ const state = {
   pendingCodeCopies: new Map(),
   conflict: null,
   draggedId: '',
+  importPreview: null,
+  importRevision: 0,
 };
 
 let qrScanner;
@@ -121,6 +129,8 @@ function clearSensitiveState() {
   state.search = '';
   state.groupFilter = '__all';
   state.conflict = null;
+  state.importPreview = null;
+  state.importRevision += 1;
   clearTimeout(state.saveTimer);
   clearTimeout(state.clipboardTimer);
   for (const [timer, resolve] of state.pendingCodeCopies) {
@@ -971,62 +981,132 @@ async function deleteGroup(group) {
   showToast('分组已删除，密钥已移到未分组');
 }
 
+function updateImportSubmitState() {
+  const button = $('#import-submit');
+  if (button.getAttribute('aria-busy') === 'true') return;
+  if (!state.importPreview) {
+    button.textContent = '预览导入';
+    button.disabled = false;
+    return;
+  }
+  const count = state.importPreview.plan.stats.actionable;
+  button.textContent = count > 0 ? `确认导入 ${count} 条` : '没有可导入条目';
+  button.disabled = count === 0;
+}
+
+function resetImportPreview({ resetForm = false, clearError = true } = {}) {
+  state.importPreview = null;
+  state.importRevision += 1;
+  if (resetForm) $('#import-form').reset();
+  if (clearError) hideError('#import-error');
+  const preview = $('#import-preview');
+  preview.replaceChildren();
+  setHidden(preview, true);
+  updateImportSubmitState();
+}
+
+function importSecretHint(secret) {
+  const normalized = normalizeSecret(secret);
+  if (!normalized) return '密钥不可识别';
+  return normalized.length > 4 ? `密钥尾号 ${normalized.slice(-4)}` : '密钥已隐藏';
+}
+
+function renderImportPreview(source, plan) {
+  const actionMeta = {
+    add: { label: '新增', detail: '将新增到保险库' },
+    overwrite: { label: '覆盖', detail: '将覆盖同名条目' },
+    skip: { label: '跳过', detail: '同名条目不会导入' },
+    invalid: { label: '无效', detail: '密钥无法生成验证码' },
+  };
+  const rows = plan.items.map((item) => {
+    const meta = actionMeta[item.action];
+    const candidate = item.candidate;
+    const identity = [candidate.issuer && candidate.issuer !== candidate.name ? candidate.issuer : '', candidate.account].filter(Boolean).join(' · ');
+    const otp = `${candidate.algorithm} · ${candidate.digits} 位 · ${candidate.period} 秒`;
+    let detail = meta.detail;
+    if (item.action === 'overwrite') detail = item.target.kind === 'planned' ? '覆盖本批同名条目' : `将覆盖“${item.target.name}”`;
+    if (item.action === 'skip') detail = `与“${item.target.name}”同名`;
+    if (item.action === 'add' && item.originalName) detail = `原名“${item.originalName}”，已自动重命名`;
+    if (item.action === 'invalid') detail = item.reason;
+    return `
+      <li class="import-preview-row" data-import-action="${item.action}">
+        <div class="import-preview-main">
+          <strong>${escapeHtml(candidate.name)}</strong>
+          ${identity ? `<span>${escapeHtml(identity)}</span>` : ''}
+          <span>${escapeHtml(otp)} · ${escapeHtml(importSecretHint(candidate.secret))}</span>
+          <small>${escapeHtml(detail)}</small>
+        </div>
+        <span class="import-action-badge ${item.action}">${meta.label}</span>
+      </li>`;
+  }).join('');
+  const skipped = plan.stats.skip + plan.stats.invalid;
+  const preview = $('#import-preview');
+  preview.innerHTML = `
+    <div class="import-preview-header">
+      <div><p>${escapeHtml(source)} · 解析完成</p><strong>确认导入内容</strong></div>
+      <span>确认前保险库不会改变</span>
+    </div>
+    <div class="import-preview-stats" aria-label="导入统计">
+      <span class="add"><strong>${plan.stats.add}</strong> 新增</span>
+      <span class="overwrite"><strong>${plan.stats.overwrite}</strong> 覆盖</span>
+      <span class="skip"><strong>${skipped}</strong> 跳过</span>
+    </div>
+    <ul class="import-preview-list" aria-label="导入条目预览">${rows}</ul>`;
+  setHidden(preview, false);
+  updateImportSubmitState();
+}
+
 async function importKeysFromForm(event) {
   event.preventDefault();
   hideError('#import-error');
-  setHidden('#import-preview', true);
   const button = $('#import-submit');
-  setBusy(button, true, '正在解析…');
+
+  if (!state.importPreview) {
+    const revision = state.importRevision;
+    setBusy(button, true, '正在解析…');
+    try {
+      const file = $('#import-file').files[0];
+      let content = $('#import-text').value.trim();
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) throw new Error('导入文件不能超过 5 MB');
+        content = await file.text();
+      }
+      if (!content) throw new Error('请选择文件或粘贴导入链接');
+      const parsed = await parseImportContent(content, $('#import-password').value);
+      const { valid, invalid } = await validateImportedItems(parsed.items, generateTOTP);
+      if (revision !== state.importRevision) return;
+      if (valid.length === 0) throw new Error(`没有有效的可导入条目，已跳过 ${invalid.length} 个`);
+      const plan = createImportPlan(valid, state.keys, $('#import-strategy').value, invalid);
+      state.importPreview = { source: parsed.source, plan };
+      renderImportPreview(parsed.source, plan);
+    } catch (error) {
+      showError('#import-error', error.code === 'PASSWORD_REQUIRED' ? `${error.message}，然后重试` : error.message);
+    } finally {
+      setBusy(button, false);
+      updateImportSubmitState();
+    }
+    return;
+  }
+
+  const pending = state.importPreview;
+  let completed = false;
+  setBusy(button, true, '正在导入…');
   try {
-    const file = $('#import-file').files[0];
-    let content = $('#import-text').value.trim();
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) throw new Error('导入文件不能超过 5 MB');
-      content = await file.text();
-    }
-    if (!content) throw new Error('请选择文件或粘贴导入链接');
-    const parsed = await parseImportContent(content, $('#import-password').value);
-    const { valid, skipped: invalidCount } = await validateImportedItems(parsed.items, generateTOTP);
-    const strategy = $('#import-strategy').value;
-    const existingNames = new Set(state.keys.map((key) => key.name.toLocaleLowerCase()));
-    let imported = 0;
-    let skipped = invalidCount;
-    let overwritten = 0;
-    for (const candidate of valid) {
-      const existingIndex = state.keys.findIndex((key) => key.name.toLocaleLowerCase() === candidate.name.toLocaleLowerCase());
-      if (existingIndex >= 0 && strategy === 'skip') {
-        skipped += 1;
-        continue;
-      }
-      if (existingIndex >= 0 && strategy === 'overwrite') {
-        const previous = state.keys[existingIndex];
-        state.keys[existingIndex] = { ...candidate, id: previous.id, order: previous.order, favorite: candidate.favorite || previous.favorite, lastUsed: previous.lastUsed, useCount: previous.useCount };
-        overwritten += 1;
-        continue;
-      }
-      if (strategy === 'all') candidate.name = uniqueName(candidate.name, existingNames);
-      candidate.id = generateId();
-      candidate.order = Math.max(-1, ...state.keys.map((key) => Number(key.order || 0))) + 1;
-      state.keys.push(candidate);
-      existingNames.add(candidate.name.toLocaleLowerCase());
-      imported += 1;
-    }
-    if (imported + overwritten === 0) throw new Error(`没有可导入的条目，已跳过 ${skipped} 个`);
+    const result = applyImportPlan(pending.plan, state.keys, generateId);
+    if (result.stats.actionable === 0) throw new Error('没有可导入的条目，请更改同名处理方式');
+    state.keys = result.keys;
     await saveVault();
     renderAll();
-    const summary = `${parsed.source}：新增 ${imported} 个，覆盖 ${overwritten} 个，跳过 ${skipped} 个`;
-    $('#import-preview').textContent = summary;
-    setHidden('#import-preview', false);
-    showToast('导入完成');
-    setTimeout(() => {
-      closeModal('import-modal');
-      $('#import-form').reset();
-      setHidden('#import-preview', true);
-    }, 1_200);
+    const skipped = result.stats.skip + result.stats.invalid;
+    showToast(`导入完成：新增 ${result.stats.add}，覆盖 ${result.stats.overwrite}，跳过 ${skipped}`);
+    completed = true;
   } catch (error) {
-    showError('#import-error', error.code === 'PASSWORD_REQUIRED' ? `${error.message}，然后重试` : error.message);
+    if (error.code === 'STALE_IMPORT') resetImportPreview({ clearError: false });
+    showError('#import-error', error.message);
   } finally {
     setBusy(button, false);
+    if (completed) closeModal('import-modal');
+    else updateImportSubmitState();
   }
 }
 
@@ -1416,8 +1496,12 @@ function setupEvents() {
     else purgeTrashItem(row.dataset.trashId);
   });
 
-  $('#import-open').addEventListener('click', () => { $('#import-form').reset(); hideError('#import-error'); setHidden('#import-preview', true); openModal('import-modal', '#import-file'); });
+  $('#import-open').addEventListener('click', () => { resetImportPreview({ resetForm: true }); openModal('import-modal', '#import-file'); });
   $('#import-form').addEventListener('submit', importKeysFromForm);
+  for (const input of $$('#import-file, #import-text, #import-password, #import-strategy')) {
+    input.addEventListener(input.matches('select, input[type="file"]') ? 'change' : 'input', () => resetImportPreview());
+  }
+  $('#import-modal').addEventListener('modal:close', () => resetImportPreview({ resetForm: true }));
   $('#export-open').addEventListener('click', () => { $('#export-form').reset(); hideError('#export-error'); setHidden('#export-warning', true); setHidden('#export-password-group', false); openModal('export-modal', '#export-format'); });
   $('#export-format').addEventListener('change', (event) => {
     const encrypted = event.target.value === 'encrypted';

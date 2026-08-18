@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { scrypt } from 'scrypt-js';
-import { parseGoogleMigrationUri, parseImportContent, validateImportedItems } from '../src/js/importers.js';
+import {
+  applyImportPlan,
+  createImportPlan,
+  parseGoogleMigrationUri,
+  parseImportContent,
+  validateImportedItems,
+} from '../src/js/importers.js';
 import { bytesToBase64, bytesToHex, concatBytes } from '../src/js/crypto.js';
 import { generateTOTP } from '../src/js/totp.js';
 import { normalizeVaultData } from '../src/js/utils.js';
@@ -89,6 +95,53 @@ describe('backward compatibility', () => {
     ], generateTOTP);
     expect(result.valid).toHaveLength(1);
     expect(result.skipped).toBe(1);
+    expect(result.invalid).toHaveLength(1);
+    expect(result.invalid[0]).toMatchObject({ reason: '密钥格式无效', item: { name: 'Invalid' } });
+  });
+
+  it('plans skip, overwrite, and automatic rename actions before changing keys', () => {
+    const existing = [{
+      id: 'existing-github', name: 'GitHub', secret: 'OLDSECRET', order: 4, favorite: true, lastUsed: 123, useCount: 7,
+    }];
+    const candidates = [
+      { name: 'GitHub', secret: 'JBSWY3DPEHPK3PXP' },
+      { name: 'GitLab', secret: 'JBSWY3DPEHPK3PXP' },
+    ];
+
+    const skipped = createImportPlan(candidates, existing, 'skip');
+    expect(skipped.stats).toMatchObject({ add: 1, overwrite: 0, skip: 1, actionable: 1 });
+    expect(skipped.items.map((item) => item.action)).toEqual(['skip', 'add']);
+
+    const overwritten = createImportPlan(candidates, existing, 'overwrite');
+    const applied = applyImportPlan(overwritten, existing, () => 'new-gitlab');
+    expect(overwritten.stats).toMatchObject({ add: 1, overwrite: 1, skip: 0, actionable: 2 });
+    expect(existing).toHaveLength(1);
+    expect(applied.keys).toHaveLength(2);
+    expect(applied.keys[0]).toMatchObject({
+      id: 'existing-github', secret: 'JBSWY3DPEHPK3PXP', order: 4, favorite: true, lastUsed: 123, useCount: 7,
+    });
+
+    const renamed = createImportPlan([candidates[0]], existing, 'all');
+    expect(renamed.items[0]).toMatchObject({ action: 'add', originalName: 'GitHub', candidate: { name: 'GitHub (2)' } });
+  });
+
+  it('uses the frozen plan for duplicate entries in the same import batch', () => {
+    const plan = createImportPlan([
+      { name: 'Duplicate', secret: 'JBSWY3DPEHPK3PXP', account: 'first' },
+      { name: 'Duplicate', secret: 'KRSXG5DSNFXGOIDB', account: 'second' },
+    ], [], 'overwrite');
+    expect(plan.items.map((item) => item.action)).toEqual(['add', 'overwrite']);
+    expect(plan.items[1].target.kind).toBe('planned');
+    const result = applyImportPlan(plan, [], () => 'created-on-confirm');
+    expect(result.keys).toHaveLength(1);
+    expect(result.keys[0]).toMatchObject({ id: 'created-on-confirm', name: 'Duplicate', account: 'second' });
+  });
+
+  it('fails a stale overwrite atomically', () => {
+    const original = [{ id: 'keep', name: 'Keep', secret: 'JBSWY3DPEHPK3PXP', order: 0 }];
+    const plan = createImportPlan([{ name: 'Keep', secret: 'KRSXG5DSNFXGOIDB' }], original, 'overwrite');
+    expect(() => applyImportPlan(plan, [], () => 'unused')).toThrow('导入目标已变化');
+    expect(original[0].secret).toBe('JBSWY3DPEHPK3PXP');
   });
 
   it('decodes Google Authenticator migration protobuf data', () => {
