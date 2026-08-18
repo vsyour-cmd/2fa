@@ -790,21 +790,23 @@ async function renderKeys() {
         <div class="token-top">
           ${selectControl}
           <div class="token-icon${icon.matched ? '' : ` initial avatar-tone-${icon.tone}`}" aria-hidden="true">${escapeHtml(icon.value)}</div>
-          <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}${recentlyUsed ? `<span class="usage-badge recent" title="最近使用：${escapeHtml(lastUsed)}">最近使用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div><div class="token-last-used" title="最近使用时间：${escapeHtml(lastUsed)}">最近使用：${escapeHtml(lastUsed)}</div></div>
+          <div class="token-meta"><div class="token-title-line"><div class="token-name" title="${escapeHtml(key.name)}">${escapeHtml(key.name)}</div><div class="token-badges">${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}${recentlyUsed ? `<span class="usage-badge recent" title="最近使用：${escapeHtml(lastUsed)}">最近使用</span>` : ''}</div></div><div class="token-subtitle">${escapeHtml(subtitle)}</div><div class="token-last-used" title="最近使用时间：${escapeHtml(lastUsed)}">最近使用：${escapeHtml(lastUsed)}</div></div>
           <button class="favorite-btn${key.favorite ? ' active' : ''}" type="button" data-action="favorite" aria-label="${key.favorite ? '取消收藏' : '收藏'}" aria-pressed="${key.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
         ${note}
-        <div class="token-code-row">
-          <button class="token-code" type="button" data-action="copy-code" aria-label="${state.multiSelectMode ? `选择 ${escapeHtml(key.name)}` : `复制 ${escapeHtml(key.name)} 的当前验证码`}"${state.multiSelectMode ? ' aria-disabled="true" tabindex="-1"' : ''}><span class="token-code-label">当前</span><span class="token-code-value">${escapeHtml(formatCode(codes.current))}</span>${state.multiSelectMode ? '' : '<span class="copy-affordance" aria-hidden="true">点击复制</span>'}</button>
-          <svg class="progress-ring ${ring.status}" viewBox="0 0 36 36" aria-label="剩余 ${ring.remaining} 秒" role="img">
-            <circle class="ring-bg" cx="18" cy="18" r="15"></circle>
-            <circle class="ring-value" cx="18" cy="18" r="15" stroke-dasharray="${ring.circumference}" stroke-dashoffset="${ring.offset}"></circle>
-            <text x="18" y="18">${ring.remaining}</text>
-          </svg>
-        </div>
-        <div class="token-code-neighbors" role="group" aria-label="${escapeHtml(key.name)} 的相邻周期验证码">
-          <div class="token-neighbor-code"><span>上一期</span><code class="token-code-previous">${escapeHtml(formatCode(codes.previous))}</code></div>
-          <div class="token-neighbor-code"><span>下一期</span><code class="token-code-next">${escapeHtml(formatCode(codes.next))}</code></div>
+        <div class="token-code-panel">
+          <div class="token-code-row">
+            <button class="token-code" type="button" data-action="copy-code" aria-label="${state.multiSelectMode ? `选择 ${escapeHtml(key.name)}` : `复制 ${escapeHtml(key.name)} 的当前验证码`}"${state.multiSelectMode ? ' aria-disabled="true" tabindex="-1"' : ''}><span class="token-code-label">当前验证码</span><span class="token-code-value">${escapeHtml(formatCode(codes.current))}</span>${state.multiSelectMode ? '' : '<span class="copy-affordance" aria-hidden="true">点击即可复制</span>'}</button>
+            <svg class="progress-ring ${ring.status}" viewBox="0 0 36 36" aria-label="剩余 ${ring.remaining} 秒" role="img">
+              <circle class="ring-bg" cx="18" cy="18" r="15"></circle>
+              <circle class="ring-value" cx="18" cy="18" r="15" stroke-dasharray="${ring.circumference}" stroke-dashoffset="${ring.offset}"></circle>
+              <text x="18" y="18">${ring.remaining}</text>
+            </svg>
+          </div>
+          <div class="token-code-neighbors" role="group" aria-label="${escapeHtml(key.name)} 的相邻周期验证码">
+            <div class="token-neighbor-code"><span>上一期</span><code class="token-code-previous">${escapeHtml(formatCode(codes.previous))}</code></div>
+            <div class="token-neighbor-code"><span>下一期</span><code class="token-code-next">${escapeHtml(formatCode(codes.next))}</code></div>
+          </div>
         </div>
         <div class="token-footer">
           <button class="group-label${key.group ? '' : ' empty'}" type="button" data-action="quick-group" aria-label="${key.group ? `更改 ${escapeHtml(key.name)} 的分组` : `为 ${escapeHtml(key.name)} 添加分组`}" title="${key.group ? '点击更改分组' : '点击添加分组'}">

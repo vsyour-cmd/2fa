@@ -96,39 +96,45 @@
           <div class="header-controls">
             <label class="sr-only" for="account-switch">切换账户</label>
             <select id="account-switch" class="compact-select"></select>
-            <button class="icon-btn" id="theme-quick" type="button" aria-label="切换明暗主题" title="切换主题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 15.2A8.5 8.5 0 0 1 8.8 3.7 8.5 8.5 0 1 0 20.3 15.2Z"></path></svg></button>
-            <button class="icon-btn" id="settings-open" type="button" aria-label="打开设置" title="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></svg></button>
-            <button class="icon-btn primary-icon" id="add-open" type="button" aria-label="添加密钥" title="添加密钥"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+            <div class="header-actions" aria-label="保险库快捷操作">
+              <button class="icon-btn" id="theme-quick" type="button" aria-label="切换明暗主题" title="切换主题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 15.2A8.5 8.5 0 0 1 8.8 3.7 8.5 8.5 0 1 0 20.3 15.2Z"></path></svg></button>
+              <button class="icon-btn" id="settings-open" type="button" aria-label="打开设置" title="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></svg></button>
+              <button class="icon-btn primary-icon" id="add-open" type="button" aria-label="添加密钥" title="添加密钥"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+            </div>
           </div>
         </header>
 
         <div class="toolbar card-subtle">
           <div class="toolbar-main">
-            <div class="search-box">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-              <label class="sr-only" for="search-input">搜索密钥</label>
-              <input id="search-input" type="search" placeholder="搜索名称、发行方、账户或备注…" autocomplete="off">
+            <div class="toolbar-primary">
+              <div class="search-box">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+                <label class="sr-only" for="search-input">搜索密钥</label>
+                <input id="search-input" type="search" placeholder="搜索名称、发行方、账户或备注…" autocomplete="off">
+              </div>
+              <button id="multi-select-toggle" class="btn btn-secondary multi-select-toggle" type="button" aria-pressed="false">多选</button>
             </div>
-            <button id="multi-select-toggle" class="btn btn-secondary multi-select-toggle" type="button" aria-pressed="false">多选</button>
-            <div class="quick-sort">
-              <label for="sort-quick">排列方式</label>
-              <select id="sort-quick">
-                <option value="smart">智能 · 常用优先</option>
-                <option value="recent">最近使用</option>
-                <option value="stale">最久未使用</option>
-                <option value="name">按名称</option>
-                <option value="custom">自定义拖拽</option>
-              </select>
-            </div>
-            <div class="quick-layout">
-              <label for="columns-quick">每行显示</label>
-              <select id="columns-quick" title="小屏幕会自动减少列数">
-                <option value="auto">自动</option>
-                <option value="1">1 个</option>
-                <option value="2">2 个</option>
-                <option value="3">3 个</option>
-                <option value="4">4 个</option>
-              </select>
+            <div class="toolbar-controls">
+              <div class="quick-sort">
+                <label for="sort-quick">排列方式</label>
+                <select id="sort-quick">
+                  <option value="smart">智能 · 常用优先</option>
+                  <option value="recent">最近使用</option>
+                  <option value="stale">最久未使用</option>
+                  <option value="name">按名称</option>
+                  <option value="custom">自定义拖拽</option>
+                </select>
+              </div>
+              <div class="quick-layout">
+                <label for="columns-quick">每行显示</label>
+                <select id="columns-quick" title="小屏幕会自动减少列数">
+                  <option value="auto">自动</option>
+                  <option value="1">1 个</option>
+                  <option value="2">2 个</option>
+                  <option value="3">3 个</option>
+                  <option value="4">4 个</option>
+                </select>
+              </div>
             </div>
           </div>
           <div class="toolbar-meta"><span id="list-summary">0 个验证码</span><span id="sort-hint">智能排序会根据使用频次和最近使用自动调整</span></div>

@@ -63,7 +63,8 @@ describe('static application shell', () => {
 
   it('shows the previous, current, and next verification codes together', () => {
     expect(app).toContain('generateTOTPWindow(key.secret, cardNow, key)');
-    expect(app).toContain('class="token-code-label">当前</span>');
+    expect(app).toContain('class="token-code-panel"');
+    expect(app).toContain('class="token-code-label">当前验证码</span>');
     expect(app).toContain('class="token-code-previous"');
     expect(app).toContain('class="token-code-next"');
     expect(app).toContain('上一期');
@@ -157,6 +158,14 @@ describe('static application shell', () => {
     expect(app).toContain('class="usage-badge recent"');
     expect(app).toContain('>最近使用</span>');
     expect(styles).toContain('.usage-badge.recent');
+  });
+
+  it('groups responsive toolbar controls and card status badges', () => {
+    expect(html).toContain('class="header-actions"');
+    expect(html).toContain('class="toolbar-primary"');
+    expect(html).toContain('class="toolbar-controls"');
+    expect(app).toContain('class="token-badges"');
+    expect(styles).toContain('@container token-card');
   });
 
   it('shows offline migration QR codes and limits quick PIN unlock to a short in-tab cache', () => {
