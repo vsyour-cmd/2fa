@@ -350,7 +350,17 @@
         <form id="workflow-form" novalidate>
           <input id="workflow-id" type="hidden">
           <div class="form-group"><label for="workflow-title">笔记标题</label><input id="workflow-title" type="text" maxlength="100" aria-describedby="workflow-title-hint" placeholder="例如：发布网站" required><p id="workflow-title-hint" class="field-hint">用一句话说明这套流程要完成什么。</p></div>
-          <div class="form-group"><label for="workflow-content">操作流程</label><textarea id="workflow-content" rows="7" maxlength="5000" aria-describedby="workflow-content-hint" placeholder="每行写一个步骤，例如：&#10;登录后台&#10;检查待发布内容&#10;确认并发布" required></textarea><p id="workflow-content-hint" class="field-hint">每个非空行会显示为一个编号步骤，最多 5000 个字符。</p></div>
+          <div class="form-group">
+            <div class="workflow-editor-label-row"><label for="workflow-content">操作流程（Markdown）</label><span id="workflow-character-count">0 / 5000</span></div>
+            <div class="workflow-markdown-editor">
+              <textarea id="workflow-content" rows="12" maxlength="5000" aria-describedby="workflow-content-hint workflow-character-count" placeholder="# 发布网站&#10;&#10;## 登录信息&#10;- 账号：owner@example.com&#10;- 密码：`填写密码`&#10;&#10;## 操作步骤&#10;1. 登录后台&#10;2. 检查内容&#10;3. 确认并发布" required></textarea>
+              <section class="workflow-preview-panel" aria-labelledby="workflow-preview-title">
+                <div class="workflow-preview-heading"><h3 id="workflow-preview-title">实时预览</h3><span>安全渲染</span></div>
+                <div id="workflow-content-preview" class="markdown-body workflow-content-preview"><p class="markdown-empty">开始输入后，这里会显示 Markdown 预览。</p></div>
+              </section>
+            </div>
+            <p id="workflow-content-hint" class="field-hint">支持标题、列表、勾选项、粗体、链接和代码块；换行不再自动变成步骤。内容会随保险库加密保存，最多 5000 个字符。</p>
+          </div>
           <div class="form-group">
             <label for="workflow-key-filter">关联 2FA 条目（可选）</label>
             <div class="search-box workflow-key-filter-box">
@@ -371,8 +381,8 @@
 
     <div id="workflow-run-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-run-title">
       <div class="modal modal-wide workflow-run-modal">
-        <div class="modal-header"><div><p class="eyebrow">按步骤操作</p><h2 id="workflow-run-title">操作笔记</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-run-modal" aria-label="关闭">×</button></div>
-        <section class="workflow-run-section" aria-labelledby="workflow-run-steps-title"><h3 id="workflow-run-steps-title">操作流程</h3><ol id="workflow-run-steps" class="workflow-run-steps"></ol></section>
+        <div class="modal-header"><div><p class="eyebrow">查看加密笔记</p><h2 id="workflow-run-title">操作笔记</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-run-modal" aria-label="关闭">×</button></div>
+        <section class="workflow-run-section" aria-labelledby="workflow-run-content-title"><h3 id="workflow-run-content-title">操作内容</h3><div id="workflow-run-content" class="markdown-body workflow-run-content"></div></section>
         <section class="workflow-run-section" aria-labelledby="workflow-run-keys-title"><div class="workflow-run-section-heading"><h3 id="workflow-run-keys-title">所需验证码</h3><span id="workflow-run-key-count"></span></div><ol id="workflow-run-keys" class="workflow-run-keys"></ol></section>
         <div class="modal-actions"><button class="btn btn-primary" type="button" data-close-modal="workflow-run-modal">完成并关闭</button></div>
       </div>

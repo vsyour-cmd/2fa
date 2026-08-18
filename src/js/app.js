@@ -24,6 +24,7 @@ import {
 } from './importers.js';
 import { QrScanner, scanQrImage } from './qr.js';
 import { drawQrToCanvas } from './qrcode.js';
+import { renderMarkdown } from './markdown.js';
 import {
   ApiError,
   OfflineManager,
@@ -868,10 +869,6 @@ function updateTokenNoteControls() {
   }
 }
 
-function workflowSteps(content) {
-  return String(content || '').split(/\r?\n/).map((step) => step.trim()).filter(Boolean);
-}
-
 function workflowLinkSnapshot(key) {
   return { keyId: key.id, name: key.name, issuer: key.issuer, account: key.account };
 }
@@ -909,22 +906,27 @@ function renderWorkflowNotes() {
   setHidden('#workflow-empty', state.workflowNotes.length !== 0);
   const notes = [...state.workflowNotes].sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
   $('#workflow-note-list').innerHTML = notes.map((note) => {
-    const steps = workflowSteps(note.content);
-    const previewSteps = steps.slice(0, 3).map((step) => `<li>${escapeHtml(step)}</li>`).join('');
-    const remaining = steps.length - 3;
+    const preview = renderMarkdown(note.content);
     const linkStates = note.linkedKeys.map(resolveWorkflowLink);
     const previewLinks = linkStates.slice(0, 4).map((item) => `<span class="workflow-link-chip${item.status === 'active' ? '' : ' unavailable'}"><span>${escapeHtml(item.label)}</span>${item.status === 'recycled' ? ' · 回收站' : item.status === 'unavailable' ? ' · 不可用' : ''}</span>`).join('');
     const hiddenLinks = linkStates.length - 4;
     return `
       <article class="workflow-note-card" data-workflow-id="${escapeHtml(note.id)}">
         <div class="workflow-note-header">
-          <div><h3 title="${escapeHtml(note.title)}">${escapeHtml(note.title)}</h3><span class="workflow-note-meta">${steps.length} 个步骤 · ${note.linkedKeys.length} 个验证码 · 更新于 ${escapeHtml(formatDateTime(note.updatedAt))}</span></div>
+          <div><h3 title="${escapeHtml(note.title)}">${escapeHtml(note.title)}</h3><span class="workflow-note-meta">Markdown · ${note.content.length} 个字符 · ${note.linkedKeys.length} 个验证码 · 更新于 ${escapeHtml(formatDateTime(note.updatedAt))}</span></div>
         </div>
-        <ol class="workflow-note-steps">${previewSteps || '<li>尚未记录具体步骤</li>'}${remaining > 0 ? `<li class="workflow-note-more">还有 ${remaining} 个步骤…</li>` : ''}</ol>
+        <div class="workflow-note-preview markdown-body">${preview || '<p class="markdown-empty">尚未记录操作内容</p>'}</div>
         <div class="workflow-note-links">${previewLinks || '<span class="workflow-link-chip"><span>未关联验证码</span></span>'}${hiddenLinks > 0 ? `<span class="workflow-link-chip"><span>另有 ${hiddenLinks} 个</span></span>` : ''}</div>
         <div class="workflow-note-actions"><button class="btn btn-primary" type="button" data-workflow-action="run">开始操作</button><div class="workflow-note-secondary-actions"><button class="small-btn" type="button" data-workflow-action="edit">编辑</button><button class="small-btn delete" type="button" data-workflow-action="delete">移入回收站</button></div></div>
       </article>`;
   }).join('');
+}
+
+function renderWorkflowMarkdownPreview() {
+  const content = $('#workflow-content').value;
+  $('#workflow-character-count').textContent = `${content.length} / 5000`;
+  $('#workflow-content-preview').innerHTML = renderMarkdown(content)
+    || '<p class="markdown-empty">开始输入后，这里会显示 Markdown 预览。</p>';
 }
 
 function renderWorkflowKeyPicker() {
@@ -967,6 +969,7 @@ function openWorkflowEditor(id = '') {
   $('#workflow-content').value = note?.content || '';
   $('#workflow-edit-title').textContent = note ? '编辑操作笔记' : '新建操作笔记';
   state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
+  renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
   openModal('workflow-edit-modal', '#workflow-title');
 }
@@ -981,7 +984,7 @@ async function saveWorkflowNote(event) {
     const title = $('#workflow-title').value.trim();
     const content = $('#workflow-content').value.trim();
     if (!title) throw new Error('请输入笔记标题');
-    if (!content) throw new Error('请至少填写一个操作步骤');
+    if (!content) throw new Error('请填写操作内容');
     const index = state.workflowNotes.findIndex((note) => note.id === id);
     const previous = index >= 0 ? state.workflowNotes[index] : null;
     const note = normalizeWorkflowNote({
@@ -1069,8 +1072,8 @@ async function openWorkflowRun(id) {
   if (!note) return;
   $('#workflow-run-modal').dataset.workflowId = note.id;
   $('#workflow-run-title').textContent = note.title;
-  const steps = workflowSteps(note.content);
-  $('#workflow-run-steps').innerHTML = (steps.length ? steps : ['未记录具体步骤']).map((step) => `<li>${escapeHtml(step)}</li>`).join('');
+  $('#workflow-run-content').innerHTML = renderMarkdown(note.content)
+    || '<p class="markdown-empty">尚未记录操作内容</p>';
   $('#workflow-run-key-count').textContent = note.linkedKeys.length ? `共 ${note.linkedKeys.length} 个` : '未关联验证码';
   $('#workflow-run-keys').innerHTML = note.linkedKeys.length
     ? note.linkedKeys.map(renderWorkflowRunKey).join('')
@@ -2291,6 +2294,7 @@ function setupEvents() {
   $('[data-action="open-workflow-add"]').addEventListener('click', () => openWorkflowEditor());
   $('#workflow-form').addEventListener('submit', saveWorkflowNote);
   $('#workflow-edit-modal').addEventListener('modal:close', () => { state.editingWorkflowLinks = []; });
+  $('#workflow-content').addEventListener('input', renderWorkflowMarkdownPreview);
   $('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker);
   $('#workflow-key-add').addEventListener('click', () => {
     const key = state.keys.find((item) => item.id === $('#workflow-key-select').value);

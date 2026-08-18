@@ -65,14 +65,17 @@ describe('static application shell', () => {
   });
 
   it('stores encrypted workflow notes with ordered 2FA links and a guided run view', () => {
-    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-selected-keys', 'workflow-run-steps', 'workflow-run-keys']) {
+    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-character-count', 'workflow-content-preview', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-selected-keys', 'workflow-run-content', 'workflow-run-keys']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('data-vault-view="workflow"');
-    expect(html).toContain('每个非空行会显示为一个编号步骤');
+    expect(html).toContain('操作流程（Markdown）');
+    expect(html).toContain('换行不再自动变成步骤');
     expect(app).toContain('workflowNotes: state.workflowNotes');
     expect(app).toContain('deletedWorkflowNotes: state.deletedWorkflowNotes');
     expect(app).toContain('state.editingWorkflowLinks.push(workflowLinkSnapshot(key))');
+    expect(app).toContain('renderWorkflowMarkdownPreview()');
+    expect(app).toContain("renderMarkdown(note.content)");
     expect(app).toContain("matchesKeyFilter(key, query)");
     expect(app).toContain("$('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker)");
     expect(app).toContain('没有匹配的可关联条目，请尝试其他关键词。');
@@ -81,6 +84,8 @@ describe('static application shell', () => {
     expect(app).toContain('await copyKeyCode(key, null)');
     expect(app).toContain("'操作笔记已创建'");
     expect(styles).toContain('.workflow-note-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(styles).toContain('.workflow-markdown-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(styles).toContain('.markdown-body code {');
     expect(styles).toContain('.workflow-order-button { display: inline-grid; width: 44px; height: 44px;');
   });
 
