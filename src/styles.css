@@ -366,7 +366,7 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
 .manage-row-main strong, .manage-row-main span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .manage-row-main span { color: var(--text-muted); font-size: 0.74rem; }
 .manage-actions { display: flex; gap: 6px; }
-.import-intro { margin-bottom: 17px; font-size: 0.82rem; }
+.import-intro, .form-intro { margin-bottom: 17px; font-size: 0.82rem; }
 .import-preview { overflow: hidden; color: var(--text); background: var(--surface-muted); border: 1px solid var(--border); border-radius: 14px; font-size: 0.82rem; }
 .import-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 14px 15px 12px; background: var(--surface-solid); border-bottom: 1px solid var(--border); }
 .import-preview-header p { margin-bottom: 2px; color: var(--primary); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }

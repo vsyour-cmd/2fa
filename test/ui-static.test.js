@@ -65,6 +65,19 @@ describe('static application shell', () => {
     expect(html.match(/用于区分同一服务的不同账号/g)).toHaveLength(2);
   });
 
+  it('explains account, security, import, export, and password-change fields', () => {
+    for (const field of ['login-account', 'login-password', 'setup-account', 'auto-lock-minutes', 'import-file', 'import-text', 'import-password', 'import-strategy', 'export-format', 'export-password']) {
+      expect(html).toContain(`aria-describedby="${field}-hint"`);
+      expect(html).toContain(`id="${field}-hint"`);
+    }
+    expect(html).toContain('aria-describedby="setup-password-hint setup-strength-label"');
+    expect(html).toContain('id="setup-password-hint"');
+    expect(html).toContain('aria-describedby="change-password-description"');
+    expect(html).toContain('id="change-password-description"');
+    expect(html).toContain('aria-describedby="change-strength-label"');
+    expect(html).toContain('预览确认前不会写入保险库');
+  });
+
   it('shows recent use and offers an oldest-used view', () => {
     expect(html.match(/<option value="stale">最久未使用<\/option>/g)).toHaveLength(2);
     expect(app).toContain('compareStaleKeys(left, right)');
