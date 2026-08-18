@@ -140,7 +140,13 @@
               </div>
             </div>
           </div>
-          <div class="toolbar-meta"><span id="list-summary">0 个验证码</span><span id="sort-hint">智能排序会根据使用频次和最近使用自动调整</span></div>
+          <div class="toolbar-meta">
+            <span id="list-summary">0 个验证码</span>
+            <div class="toolbar-meta-status">
+              <span id="sort-hint">智能排序会根据使用频次和最近使用自动调整</span>
+              <div id="network-status" class="network-status online" role="status" aria-label="当前在线"><span class="status-dot"></span><span class="status-text">在线</span></div>
+            </div>
+          </div>
           <div id="multi-select-tools" class="multi-select-tools hidden">
             <label class="select-visible-row" for="select-visible">
               <input id="select-visible" type="checkbox">
@@ -437,7 +443,6 @@
     </div>
 
     <datalist id="group-options"></datalist>
-    <div id="network-status" class="network-status online" role="status"><span class="status-dot"></span><span class="status-text">在线</span></div>
     <div id="app-toast" class="toast" role="status" aria-live="polite"></div>
   </body>
 </html>

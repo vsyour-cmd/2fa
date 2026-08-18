@@ -227,6 +227,20 @@ describe('static application shell', () => {
     expect(styles).toContain('@container token-card');
   });
 
+  it('keeps network feedback in normal flow so it cannot cover mobile actions', () => {
+    const toolbarMeta = html.indexOf('class="toolbar-meta"');
+    const networkStatus = html.indexOf('id="network-status"');
+    const toolbarEnd = html.indexOf('id="multi-select-tools"');
+    expect(toolbarMeta).toBeGreaterThan(-1);
+    expect(networkStatus).toBeGreaterThan(toolbarMeta);
+    expect(networkStatus).toBeLessThan(toolbarEnd);
+    expect(html.match(/id="network-status"/g)).toHaveLength(1);
+    expect(styles).toContain('.toolbar-meta-status { display: flex; min-width: 0;');
+    expect(styles).toContain('.network-status { display: inline-flex; min-height: 28px;');
+    expect(styles).toContain('.offline-banner { position: sticky; top: 0;');
+    expect(styles).not.toContain('.network-status { position: fixed;');
+  });
+
   it('shows offline migration QR codes and limits quick PIN unlock to a short in-tab cache', () => {
     expect(html).toContain('id="show-qr"');
     expect(html).toContain('id="edit-qr-canvas"');
