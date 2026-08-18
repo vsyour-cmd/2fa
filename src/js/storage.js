@@ -235,7 +235,7 @@ export function loadSettings() {
 export function saveSettings(settings) {
   const safe = {
     theme: ['system', 'light', 'dark'].includes(settings.theme) ? settings.theme : DEFAULT_SETTINGS.theme,
-    sortMode: ['smart', 'custom', 'name', 'recent'].includes(settings.sortMode) ? settings.sortMode : DEFAULT_SETTINGS.sortMode,
+    sortMode: ['smart', 'custom', 'name', 'recent', 'stale'].includes(settings.sortMode) ? settings.sortMode : DEFAULT_SETTINGS.sortMode,
     columnsPerRow: ['auto', '1', '2', '3', '4'].includes(String(settings.columnsPerRow)) ? String(settings.columnsPerRow) : DEFAULT_SETTINGS.columnsPerRow,
     autoLockMinutes: Math.max(0, Math.min(240, Number(settings.autoLockMinutes) || 0)),
     lockOnHidden: Boolean(settings.lockOnHidden),

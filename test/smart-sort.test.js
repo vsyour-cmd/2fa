@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareSmartKeys, getSmartSortScore, normalizeKey } from '../src/js/utils.js';
+import { compareSmartKeys, compareStaleKeys, getSmartSortScore, normalizeKey } from '../src/js/utils.js';
 
 const NOW = Date.UTC(2026, 7, 17);
 
@@ -24,5 +24,14 @@ describe('smart token ordering', () => {
     expect(keys.sort((left, right) => compareSmartKeys(left, right, NOW)).map((key) => key.name)).toEqual([
       'Favorite', 'Frequent', 'Recent', 'Unused',
     ]);
+  });
+
+  it('orders never-used and oldest-used tokens first regardless of favorites', () => {
+    const keys = [
+      { name: 'Recent favorite', favorite: true, lastUsed: NOW - 1_000 },
+      { name: 'Old', favorite: false, lastUsed: NOW - 30 * 86_400_000 },
+      { name: 'Never', favorite: false, lastUsed: 0 },
+    ];
+    expect(keys.sort(compareStaleKeys).map((key) => key.name)).toEqual(['Never', 'Old', 'Recent favorite']);
   });
 });
