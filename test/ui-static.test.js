@@ -240,7 +240,10 @@ describe('static application shell', () => {
     expect(styles).toContain('.network-status { display: inline-flex; min-height: 28px;');
     expect(styles).toContain('.offline-banner { position: sticky; top: 0;');
     expect(styles).toContain('.toolbar { position: sticky; top: calc(12px + var(--offline-banner-offset, 0px));');
+    expect(styles).toContain('.toast { position: fixed; top: calc(18px + var(--offline-banner-offset, 0px));');
     expect(ui).toContain("setHidden(banner, isOnline);");
+    expect(ui).toContain("offlineBannerObserver = new ResizeObserver(() => updateOfflineBannerOffset(banner));");
+    expect(ui).toContain("const offset = banner.classList.contains('hidden') ? 0 : banner.offsetHeight;");
     expect(ui).toContain("document.documentElement.style.setProperty('--offline-banner-offset', `${offset}px`);");
     expect(styles).not.toContain('.network-status { position: fixed;');
   });

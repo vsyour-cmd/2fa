@@ -4,6 +4,7 @@ export const $$ = (selector, root = document) => [...root.querySelectorAll(selec
 let activeModal = null;
 let modalTrigger = null;
 let toastTimer = null;
+let offlineBannerObserver = null;
 
 export function setHidden(target, hidden) {
   const element = typeof target === 'string' ? $(target) : target;
@@ -194,6 +195,17 @@ export function watchSystemTheme(getPreference) {
   });
 }
 
+function updateOfflineBannerOffset(banner) {
+  const offset = banner.classList.contains('hidden') ? 0 : banner.offsetHeight;
+  document.documentElement.style.setProperty('--offline-banner-offset', `${offset}px`);
+}
+
+function watchOfflineBannerSize(banner) {
+  if (offlineBannerObserver || typeof ResizeObserver !== 'function') return;
+  offlineBannerObserver = new ResizeObserver(() => updateOfflineBannerOffset(banner));
+  offlineBannerObserver.observe(banner);
+}
+
 export function updatePasswordStrength(input, meter, label, getStrength) {
   const strength = getStrength(input.value);
   meter.style.setProperty('--strength', `${strength.percent}%`);
@@ -211,8 +223,8 @@ export function setNetworkStatus(isOnline, detail = '') {
   const banner = $('#offline-banner');
   if (!banner) return;
   setHidden(banner, isOnline);
-  const offset = isOnline ? 0 : banner.offsetHeight;
-  document.documentElement.style.setProperty('--offline-banner-offset', `${offset}px`);
+  watchOfflineBannerSize(banner);
+  updateOfflineBannerOffset(banner);
 }
 
 export function setBusy(button, busy, busyText = '处理中…') {
