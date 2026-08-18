@@ -53,6 +53,18 @@ describe('static application shell', () => {
     expect(app).toContain('${key.note}');
   });
 
+  it('explains key identity fields in both add and edit forms', () => {
+    for (const prefix of ['add', 'edit']) {
+      for (const field of ['name', 'issuer', 'account', 'group', 'secret', 'icon']) {
+        expect(html).toContain(`aria-describedby="${prefix}-${field}-hint"`);
+        expect(html).toContain(`id="${prefix}-${field}-hint"`);
+      }
+    }
+    expect(html.match(/账号 \/ 用户标识/g)).toHaveLength(2);
+    expect(html.match(/提供验证码的服务或网站/g)).toHaveLength(2);
+    expect(html.match(/用于区分同一服务的不同账号/g)).toHaveLength(2);
+  });
+
   it('shows recent use and offers an oldest-used view', () => {
     expect(html.match(/<option value="stale">最久未使用<\/option>/g)).toHaveLength(2);
     expect(app).toContain('compareStaleKeys(left, right)');

@@ -206,10 +206,10 @@
         </div>
         <form id="add-form" class="tab-panel" data-add-panel="manual" novalidate>
           <div class="form-grid">
-            <div class="form-group"><label for="add-name">显示名称</label><input id="add-name" type="text" required></div>
-            <div class="form-group"><label for="add-issuer">发行方</label><input id="add-issuer" type="text" placeholder="例如 GitHub"></div>
-            <div class="form-group"><label for="add-account">账户标识</label><input id="add-account" type="text" placeholder="例如 alice@example.com"></div>
-            <div class="form-group"><label for="add-group">分组</label><input id="add-group" type="text" list="group-options" placeholder="未分组"></div>
+            <div class="form-group"><label for="add-name">显示名称</label><input id="add-name" type="text" aria-describedby="add-name-hint" required><p id="add-name-hint" class="field-hint">显示在验证码卡片上，例如“GitHub 工作账号”。</p></div>
+            <div class="form-group"><label for="add-issuer">发行方</label><input id="add-issuer" type="text" aria-describedby="add-issuer-hint" placeholder="例如 GitHub"><p id="add-issuer-hint" class="field-hint">提供验证码的服务或网站，例如 GitHub、Google。</p></div>
+            <div class="form-group"><label for="add-account">账号 / 用户标识</label><input id="add-account" type="text" aria-describedby="add-account-hint" placeholder="例如 alice@example.com"><p id="add-account-hint" class="field-hint">用于区分同一服务的不同账号，通常填写邮箱或用户名。</p></div>
+            <div class="form-group"><label for="add-group">分组</label><input id="add-group" type="text" list="group-options" aria-describedby="add-group-hint" placeholder="未分组"><p id="add-group-hint" class="field-hint">用于筛选和整理，例如“工作”“个人”；可以留空。</p></div>
           </div>
           <div class="form-group">
             <label for="add-note">备注</label>
@@ -218,11 +218,13 @@
           </div>
           <div class="form-group">
             <label for="add-secret">密钥 (Base32)</label>
-            <div class="input-with-action"><input id="add-secret" class="mono" type="password" autocomplete="off" required><button class="input-action" type="button" data-toggle-password="add-secret">显示</button></div>
+            <div class="input-with-action"><input id="add-secret" class="mono" type="password" autocomplete="off" aria-describedby="add-secret-hint" required><button class="input-action" type="button" data-toggle-password="add-secret">显示</button></div>
+            <p id="add-secret-hint" class="field-hint">从服务的两步验证设置中获取，通常由字母 A–Z 和数字 2–7 组成。</p>
           </div>
-          <div class="form-group"><label for="add-icon">图标</label><input id="add-icon" type="text" maxlength="16" placeholder="可选 Emoji；留空则自动匹配"></div>
+          <div class="form-group"><label for="add-icon">图标</label><input id="add-icon" type="text" maxlength="16" aria-describedby="add-icon-hint" placeholder="例如 🔐"><p id="add-icon-hint" class="field-hint">可选；填写一个 Emoji，留空会根据发行方自动匹配。</p></div>
           <details class="advanced-panel">
             <summary>高级 TOTP 参数</summary>
+            <p class="field-hint">一般保持默认；只有服务明确指定不同参数时才修改。</p>
             <div class="form-grid three">
               <div class="form-group"><label for="add-period">周期（秒）</label><input id="add-period" type="number" min="5" max="300" value="30"></div>
               <div class="form-group"><label for="add-digits">位数</label><select id="add-digits"><option value="6">6</option><option value="8">8</option></select></div>
@@ -254,10 +256,10 @@
         <form id="edit-form" novalidate>
           <input id="edit-id" type="hidden">
           <div class="form-grid">
-            <div class="form-group"><label for="edit-name">显示名称</label><input id="edit-name" type="text" required></div>
-            <div class="form-group"><label for="edit-issuer">发行方</label><input id="edit-issuer" type="text"></div>
-            <div class="form-group"><label for="edit-account">账户标识</label><input id="edit-account" type="text"></div>
-            <div class="form-group"><label for="edit-group">分组</label><input id="edit-group" type="text" list="group-options" placeholder="未分组"></div>
+            <div class="form-group"><label for="edit-name">显示名称</label><input id="edit-name" type="text" aria-describedby="edit-name-hint" required><p id="edit-name-hint" class="field-hint">显示在验证码卡片上，例如“GitHub 工作账号”。</p></div>
+            <div class="form-group"><label for="edit-issuer">发行方</label><input id="edit-issuer" type="text" aria-describedby="edit-issuer-hint"><p id="edit-issuer-hint" class="field-hint">提供验证码的服务或网站，例如 GitHub、Google。</p></div>
+            <div class="form-group"><label for="edit-account">账号 / 用户标识</label><input id="edit-account" type="text" aria-describedby="edit-account-hint"><p id="edit-account-hint" class="field-hint">用于区分同一服务的不同账号，通常填写邮箱或用户名。</p></div>
+            <div class="form-group"><label for="edit-group">分组</label><input id="edit-group" type="text" list="group-options" aria-describedby="edit-group-hint" placeholder="未分组"><p id="edit-group-hint" class="field-hint">用于筛选和整理，例如“工作”“个人”；可以留空。</p></div>
           </div>
           <div class="form-group">
             <label for="edit-note">备注</label>
@@ -266,7 +268,8 @@
           </div>
           <div class="form-group">
             <label for="edit-secret">密钥 (Secret)</label>
-            <div class="input-with-action"><input id="edit-secret" class="mono" type="password" autocomplete="off" required><button class="input-action" type="button" data-toggle-password="edit-secret">显示</button></div>
+            <div class="input-with-action"><input id="edit-secret" class="mono" type="password" autocomplete="off" aria-describedby="edit-secret-hint" required><button class="input-action" type="button" data-toggle-password="edit-secret">显示</button></div>
+            <p id="edit-secret-hint" class="field-hint">从服务的两步验证设置中获取，通常由字母 A–Z 和数字 2–7 组成。</p>
             <div class="inline-actions"><button id="copy-secret" class="text-btn" type="button">复制原始密钥</button><button id="copy-uri" class="text-btn" type="button">复制 OTPAuth URI</button><button id="show-qr" class="text-btn" type="button">显示二维码</button><button id="duplicate-key" class="text-btn" type="button">复制为副本</button></div>
             <div id="edit-qr-panel" class="edit-qr-panel hidden" role="region" aria-label="OTPAuth 迁移二维码">
               <canvas id="edit-qr-canvas" aria-label="可由另一台设备扫描的 OTPAuth 二维码"></canvas>
@@ -274,9 +277,10 @@
               <button id="hide-qr" class="btn btn-secondary" type="button">隐藏二维码</button>
             </div>
           </div>
-          <div class="form-group"><label for="edit-icon">图标</label><input id="edit-icon" type="text" maxlength="16" placeholder="可选 Emoji"></div>
+          <div class="form-group"><label for="edit-icon">图标</label><input id="edit-icon" type="text" maxlength="16" aria-describedby="edit-icon-hint" placeholder="例如 🔐"><p id="edit-icon-hint" class="field-hint">可选；填写一个 Emoji，留空会根据发行方自动匹配。</p></div>
           <details class="advanced-panel">
             <summary>高级 TOTP 参数</summary>
+            <p class="field-hint">一般保持默认；只有服务明确指定不同参数时才修改。</p>
             <div class="form-grid three">
               <div class="form-group"><label for="edit-period">周期（秒）</label><input id="edit-period" type="number" min="5" max="300"></div>
               <div class="form-group"><label for="edit-digits">位数</label><select id="edit-digits"><option value="6">6</option><option value="8">8</option></select></div>
