@@ -102,6 +102,16 @@ export function compareStaleKeys(left, right) {
   return String(left?.name || '').localeCompare(String(right?.name || ''), 'zh-CN');
 }
 
+export function matchesKeyFilter(key = {}, query = '') {
+  const terms = String(query).trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const searchableText = [key.name, key.account, key.issuer, key.group, key.note]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase();
+  return terms.every((term) => searchableText.includes(term));
+}
+
 export function normalizeVaultData(raw) {
   if (Array.isArray(raw)) {
     return { version: 3, keys: raw.map(normalizeKey), deletedItems: [], workflowNotes: [], deletedWorkflowNotes: [] };

@@ -65,7 +65,7 @@ describe('static application shell', () => {
   });
 
   it('stores encrypted workflow notes with ordered 2FA links and a guided run view', () => {
-    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-key-select', 'workflow-selected-keys', 'workflow-run-steps', 'workflow-run-keys']) {
+    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-selected-keys', 'workflow-run-steps', 'workflow-run-keys']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('data-vault-view="workflow"');
@@ -73,6 +73,9 @@ describe('static application shell', () => {
     expect(app).toContain('workflowNotes: state.workflowNotes');
     expect(app).toContain('deletedWorkflowNotes: state.deletedWorkflowNotes');
     expect(app).toContain('state.editingWorkflowLinks.push(workflowLinkSnapshot(key))');
+    expect(app).toContain("matchesKeyFilter(key, query)");
+    expect(app).toContain("$('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker)");
+    expect(app).toContain('没有匹配的可关联条目，请尝试其他关键词。');
     expect(app).toContain('data-workflow-link-action="up"');
     expect(app).toContain('data-workflow-run-key-id=');
     expect(app).toContain('await copyKeyCode(key, null)');

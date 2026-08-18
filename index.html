@@ -352,7 +352,13 @@
           <div class="form-group"><label for="workflow-title">笔记标题</label><input id="workflow-title" type="text" maxlength="100" aria-describedby="workflow-title-hint" placeholder="例如：发布网站" required><p id="workflow-title-hint" class="field-hint">用一句话说明这套流程要完成什么。</p></div>
           <div class="form-group"><label for="workflow-content">操作流程</label><textarea id="workflow-content" rows="7" maxlength="5000" aria-describedby="workflow-content-hint" placeholder="每行写一个步骤，例如：&#10;登录后台&#10;检查待发布内容&#10;确认并发布" required></textarea><p id="workflow-content-hint" class="field-hint">每个非空行会显示为一个编号步骤，最多 5000 个字符。</p></div>
           <div class="form-group">
-            <label for="workflow-key-select">关联 2FA 条目（可选）</label>
+            <label for="workflow-key-filter">关联 2FA 条目（可选）</label>
+            <div class="search-box workflow-key-filter-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              <input id="workflow-key-filter" type="search" maxlength="100" autocomplete="off" aria-controls="workflow-key-select" aria-describedby="workflow-key-filter-status" placeholder="筛选名称、账号、发行方、分组或备注…">
+            </div>
+            <p id="workflow-key-filter-status" class="field-hint workflow-key-filter-status" aria-live="polite"></p>
+            <label class="sr-only" for="workflow-key-select">选择要关联的 2FA 条目</label>
             <div class="workflow-key-add-row"><select id="workflow-key-select" aria-describedby="workflow-key-hint"></select><button id="workflow-key-add" class="btn btn-secondary" type="button">添加</button></div>
             <p id="workflow-key-hint" class="field-hint">执行笔记时会按下方顺序显示当前验证码；可用箭头调整顺序。</p>
             <ol id="workflow-selected-keys" class="workflow-selected-keys" aria-label="已关联的 2FA 条目"></ol>

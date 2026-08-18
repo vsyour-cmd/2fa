@@ -351,6 +351,8 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .workflow-note-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
 .workflow-note-secondary-actions { display: flex; gap: 6px; }
 .workflow-note-actions .btn { flex: 1; }
+.workflow-key-filter-box { margin-bottom: 0; }
+.workflow-key-filter-status { min-height: 1.2em; margin-bottom: 8px; }
 .workflow-key-add-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .workflow-key-add-row .btn { min-width: 82px; }
 .workflow-selected-keys { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }

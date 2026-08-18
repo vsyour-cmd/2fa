@@ -83,6 +83,7 @@ import {
   escapeHtml,
   formatDateTime,
   generateId,
+  matchesKeyFilter,
   normalizeAccountName,
   normalizeKey,
   normalizeSecret,
@@ -928,13 +929,18 @@ function renderWorkflowNotes() {
 
 function renderWorkflowKeyPicker() {
   const selectedIds = new Set(state.editingWorkflowLinks.map((link) => link.keyId));
-  const available = state.keys.filter((key) => !selectedIds.has(key.id));
+  const unselected = state.keys.filter((key) => !selectedIds.has(key.id));
+  const query = $('#workflow-key-filter').value.trim();
+  const available = unselected.filter((key) => matchesKeyFilter(key, query));
   const select = $('#workflow-key-select');
   select.innerHTML = available.length === 0
-    ? '<option value="">没有其他可关联条目</option>'
+    ? `<option value="">${unselected.length === 0 ? '没有其他可关联条目' : '未找到匹配的 2FA 条目'}</option>`
     : '<option value="">选择一个 2FA 条目…</option>' + available.map((key) => `<option value="${escapeHtml(key.id)}">${escapeHtml(key.name)}${key.account ? ` · ${escapeHtml(key.account)}` : ''}</option>`).join('');
   select.disabled = available.length === 0;
   $('#workflow-key-add').disabled = available.length === 0;
+  $('#workflow-key-filter-status').textContent = query
+    ? (available.length > 0 ? `找到 ${available.length} 个可关联条目` : '没有匹配的可关联条目，请尝试其他关键词。')
+    : (unselected.length > 0 ? `可关联 ${unselected.length} 个条目` : '所有 2FA 条目均已关联');
   $('#workflow-selected-keys').innerHTML = state.editingWorkflowLinks.map((link, index) => {
     const resolved = resolveWorkflowLink(link);
     const key = resolved.key || link;
@@ -2285,6 +2291,7 @@ function setupEvents() {
   $('[data-action="open-workflow-add"]').addEventListener('click', () => openWorkflowEditor());
   $('#workflow-form').addEventListener('submit', saveWorkflowNote);
   $('#workflow-edit-modal').addEventListener('modal:close', () => { state.editingWorkflowLinks = []; });
+  $('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker);
   $('#workflow-key-add').addEventListener('click', () => {
     const key = state.keys.find((item) => item.id === $('#workflow-key-select').value);
     if (!key || state.editingWorkflowLinks.some((link) => link.keyId === key.id)) return;
