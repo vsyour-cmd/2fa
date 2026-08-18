@@ -104,6 +104,9 @@ const state = {
   draggedId: '',
   importPreview: null,
   importRevision: 0,
+  multiSelectMode: false,
+  selectedKeyIds: new Set(),
+  exportKeyIds: null,
 };
 
 let qrScanner;
@@ -131,6 +134,10 @@ function clearSensitiveState() {
   state.conflict = null;
   state.importPreview = null;
   state.importRevision += 1;
+  state.multiSelectMode = false;
+  state.selectedKeyIds.clear();
+  state.exportKeyIds = null;
+  document.body.classList.remove('bulk-mode');
   clearTimeout(state.saveTimer);
   clearTimeout(state.clipboardTimer);
   for (const [timer, resolve] of state.pendingCodeCopies) {
@@ -464,6 +471,148 @@ function applyColumnsPerRow(announce = false) {
   if (announce) showToast(value === 'auto' ? '已启用自动列数' : `每行显示 ${value} 个`);
 }
 
+function selectedKeys() {
+  const availableIds = new Set(state.keys.map((key) => key.id));
+  for (const id of state.selectedKeyIds) {
+    if (!availableIds.has(id)) state.selectedKeyIds.delete(id);
+  }
+  return state.keys.filter((key) => state.selectedKeyIds.has(key.id));
+}
+
+function renderMultiSelectUi(visible = getVisibleKeys()) {
+  const enabled = state.multiSelectMode;
+  const selected = selectedKeys();
+  const visibleIds = visible.map((key) => key.id);
+  const selectedVisibleCount = visibleIds.filter((id) => state.selectedKeyIds.has(id)).length;
+  const selectVisible = $('#select-visible');
+  const hasVisible = visibleIds.length > 0;
+
+  document.body.classList.toggle('bulk-mode', enabled);
+  $('#main-app').classList.toggle('multi-select-mode', enabled);
+  $('#multi-select-toggle').classList.toggle('active', enabled);
+  $('#multi-select-toggle').setAttribute('aria-pressed', String(enabled));
+  $('#multi-select-toggle').textContent = enabled ? '退出多选' : '多选';
+  $('#multi-select-toggle').disabled = state.keys.length === 0;
+  setHidden('#multi-select-tools', !enabled);
+  setHidden('#standard-actions', enabled);
+  setHidden('#bulk-actions', !enabled);
+
+  selectVisible.disabled = !hasVisible;
+  selectVisible.checked = hasVisible && selectedVisibleCount === visibleIds.length;
+  selectVisible.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+  $('#select-visible-label').textContent = `全选当前筛选结果（${visibleIds.length}）`;
+  $('#bulk-selected-count').textContent = `已选 ${selected.length} 项`;
+
+  const disabled = selected.length === 0;
+  for (const id of ['bulk-favorite', 'bulk-unfavorite', 'bulk-export', 'bulk-delete']) $(`#${id}`).disabled = disabled;
+  $('#bulk-move').disabled = disabled || $('#bulk-group-select').value === '__choose';
+
+  const groupSelect = $('#bulk-group-select');
+  const previousGroup = groupSelect.value;
+  groupSelect.innerHTML = '<option value="__choose" disabled>移动到分组…</option><option value="__ungrouped">未分组</option>'
+    + getGroups().map((group) => `<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join('');
+  groupSelect.value = [...groupSelect.options].some((option) => option.value === previousGroup) ? previousGroup : '__choose';
+  $('#bulk-move').disabled = disabled || groupSelect.value === '__choose';
+}
+
+function setMultiSelectMode(enabled) {
+  state.multiSelectMode = Boolean(enabled);
+  state.selectedKeyIds.clear();
+  state.draggedId = '';
+  renderKeys();
+}
+
+function updateSelectionCards() {
+  for (const card of $$('.token-item')) {
+    const selected = state.selectedKeyIds.has(card.dataset.keyId);
+    card.classList.toggle('selected', selected);
+    const checkbox = $('.token-select-input', card);
+    if (checkbox) checkbox.checked = selected;
+  }
+}
+
+function toggleKeySelection(id) {
+  if (state.selectedKeyIds.has(id)) state.selectedKeyIds.delete(id);
+  else state.selectedKeyIds.add(id);
+  updateSelectionCards();
+  renderMultiSelectUi();
+}
+
+async function finishBulkMutation(message) {
+  await saveVault();
+  state.multiSelectMode = false;
+  state.selectedKeyIds.clear();
+  renderAll();
+  showToast(message);
+}
+
+async function bulkSetFavorite(favorite) {
+  const keys = selectedKeys();
+  if (keys.length === 0) return;
+  const button = $(favorite ? '#bulk-favorite' : '#bulk-unfavorite');
+  setBusy(button, true, '正在处理…');
+  try {
+    for (const key of keys) key.favorite = favorite;
+    await finishBulkMutation(favorite ? `已收藏 ${keys.length} 个密钥` : `已取消收藏 ${keys.length} 个密钥`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function bulkMoveToGroup() {
+  const keys = selectedKeys();
+  if (keys.length === 0) return;
+  const selectedGroup = $('#bulk-group-select').value;
+  if (selectedGroup === '__choose') return;
+  const group = selectedGroup === '__ungrouped' ? '' : selectedGroup;
+  if (group && !getGroups().includes(group)) return;
+  const button = $('#bulk-move');
+  setBusy(button, true, '正在移动…');
+  try {
+    for (const key of keys) key.group = group;
+    await finishBulkMutation(group ? `已将 ${keys.length} 个密钥移到“${group}”` : `已将 ${keys.length} 个密钥移到未分组`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function bulkDeleteSelected() {
+  const keys = selectedKeys();
+  if (keys.length === 0) return;
+  const ok = await askConfirm({
+    title: '批量移入回收站',
+    message: `确定将已选择的 ${keys.length} 个密钥移入回收站？之后仍可恢复。`,
+    confirmText: '移入回收站',
+  });
+  if (!ok) return;
+  const button = $('#bulk-delete');
+  setBusy(button, true, '正在移动…');
+  try {
+    const ids = new Set(keys.map((key) => key.id));
+    const deletedAt = Date.now();
+    state.keys = state.keys.filter((key) => !ids.has(key.id));
+    state.deletedItems.unshift(...keys.map((key) => ({ ...key, deletedAt })));
+    await saveVault();
+    state.multiSelectMode = false;
+    state.selectedKeyIds.clear();
+    renderAll();
+    showToast(`已将 ${keys.length} 个密钥移入回收站`, {
+      actionLabel: '撤销',
+      duration: 6_000,
+      onAction: async () => {
+        const trashIds = new Set(keys.map((key) => key.id));
+        state.deletedItems = state.deletedItems.filter((item) => !trashIds.has(item.id));
+        state.keys.push(...keys);
+        await saveVault();
+        renderAll();
+        showToast(`已恢复 ${keys.length} 个密钥`);
+      },
+    });
+  } finally {
+    setBusy(button, false);
+  }
+}
+
 function ringValues(key, now = Date.now()) {
   const period = getTotpOptions(key).period;
   const remaining = getRemainingSeconds(key, now);
@@ -479,6 +628,7 @@ async function renderKeys() {
   renderListMeta(visible.length);
   setHidden('#empty-state', state.keys.length !== 0);
   setHidden('#no-results', state.keys.length === 0 || visible.length !== 0);
+  renderMultiSelectUi(visible);
   if (visible.length === 0) {
     $('#token-list').replaceChildren();
     return;
@@ -498,23 +648,26 @@ async function renderKeys() {
     const icon = getKeyIcon(key);
     const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account].filter(Boolean).join(' · ') || 'TOTP';
     const note = key.note ? `<p class="token-note" title="${escapeHtml(key.note)}">${escapeHtml(key.note)}</p>` : '';
-    const draggable = state.settings.sortMode === 'custom' ? 'true' : 'false';
+    const draggable = state.settings.sortMode === 'custom' && !state.multiSelectMode ? 'true' : 'false';
     const frequent = frequentIds.has(key.id);
     const customPeers = state.settings.sortMode === 'custom' ? visible.filter((item) => item.favorite === key.favorite) : [];
     const customIndex = customPeers.findIndex((item) => item.id === key.id);
     const reorderControls = state.settings.sortMode === 'custom' ? `
       <button class="small-btn reorder-btn" type="button" data-action="move-up" aria-label="上移 ${escapeHtml(key.name)}" title="上移"${customIndex <= 0 ? ' disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"></path></svg></button>
       <button class="small-btn reorder-btn" type="button" data-action="move-down" aria-label="下移 ${escapeHtml(key.name)}" title="下移"${customIndex < 0 || customIndex >= customPeers.length - 1 ? ' disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>` : '';
+    const selected = state.selectedKeyIds.has(key.id);
+    const selectControl = state.multiSelectMode ? `<label class="token-select"><input class="token-select-input" type="checkbox" aria-label="选择 ${escapeHtml(key.name)}"${selected ? ' checked' : ''}><span aria-hidden="true"></span></label>` : '';
     return `
-      <article class="token-item${frequent ? ' frequent' : ''}" draggable="${draggable}" data-key-id="${escapeHtml(key.id)}" data-counter="${getCounter(key)}">
+      <article class="token-item${frequent ? ' frequent' : ''}${state.multiSelectMode ? ' selectable' : ''}${selected ? ' selected' : ''}" draggable="${draggable}" data-key-id="${escapeHtml(key.id)}" data-counter="${getCounter(key)}">
         <div class="token-top">
+          ${selectControl}
           <div class="token-icon${icon.matched ? '' : ' initial'}" aria-hidden="true">${escapeHtml(icon.value)}</div>
           <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div></div>
           <button class="favorite-btn${key.favorite ? ' active' : ''}" type="button" data-action="favorite" aria-label="${key.favorite ? '取消收藏' : '收藏'}" aria-pressed="${key.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
         ${note}
         <div class="token-code-row">
-          <button class="token-code" type="button" data-action="copy-code" aria-label="复制 ${escapeHtml(key.name)} 的验证码"><span class="token-code-value">${escapeHtml(formatCode(code))}</span><span class="copy-affordance" aria-hidden="true">点击复制</span></button>
+          <button class="token-code" type="button" data-action="copy-code" aria-label="${state.multiSelectMode ? `选择 ${escapeHtml(key.name)}` : `复制 ${escapeHtml(key.name)} 的验证码`}"${state.multiSelectMode ? ' aria-disabled="true" tabindex="-1"' : ''}><span class="token-code-value">${escapeHtml(formatCode(code))}</span>${state.multiSelectMode ? '' : '<span class="copy-affordance" aria-hidden="true">点击复制</span>'}</button>
           <svg class="progress-ring ${ring.status}" viewBox="0 0 36 36" aria-label="剩余 ${ring.remaining} 秒" role="img">
             <circle class="ring-bg" cx="18" cy="18" r="15"></circle>
             <circle class="ring-value" cx="18" cy="18" r="15" stroke-dasharray="${ring.circumference}" stroke-dashoffset="${ring.offset}"></circle>
@@ -1127,15 +1280,32 @@ async function importKeysFromForm(event) {
   }
 }
 
-function exportedVault() {
+function exportKeys() {
+  if (!(state.exportKeyIds instanceof Set)) return state.keys;
+  return state.keys.filter((key) => state.exportKeyIds.has(key.id));
+}
+
+function exportedVault(keys = exportKeys()) {
   return {
     format: '2fa-authenticator-backup',
     version: VAULT_VERSION,
     account: state.accountName,
     exportedAt: new Date().toISOString(),
-    keys: state.keys,
-    deletedItems: state.deletedItems,
+    keys,
+    deletedItems: state.exportKeyIds instanceof Set ? [] : state.deletedItems,
   };
+}
+
+function openExportDialog(keyIds = null) {
+  state.exportKeyIds = keyIds ? new Set(keyIds) : null;
+  const count = exportKeys().length;
+  $('#export-title').textContent = state.exportKeyIds ? '导出所选密钥' : '导出备份';
+  $('#export-scope').textContent = state.exportKeyIds ? `将导出已选择的 ${count} 个密钥。` : '将导出当前保险库中的全部数据。';
+  $('#export-form').reset();
+  hideError('#export-error');
+  setHidden('#export-warning', true);
+  setHidden('#export-password-group', false);
+  openModal('export-modal', '#export-format');
 }
 
 async function exportKeysFromForm(event) {
@@ -1144,7 +1314,9 @@ async function exportKeysFromForm(event) {
   const button = $('#export-submit');
   setBusy(button, true, '正在导出…');
   try {
-    if (state.keys.length === 0) throw new Error('没有可导出的密钥');
+    const keys = exportKeys();
+    if (keys.length === 0) throw new Error('没有可导出的密钥');
+    const selectedExport = state.exportKeyIds instanceof Set;
     const format = $('#export-format').value;
     const date = new Date().toISOString().slice(0, 10);
     const accountSlug = state.accountName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]+/g, '-');
@@ -1153,15 +1325,20 @@ async function exportKeysFromForm(event) {
       const validation = validatePassword(password);
       if (!validation.valid) throw new Error(validation.error);
       const encrypted = await encryptBackup(exportedVault(), password);
-      downloadText(`2fa-${accountSlug}-${date}.encrypted.json`, JSON.stringify(encrypted, null, 2), 'application/json');
+      downloadText(`2fa-${accountSlug}-${date}${selectedExport ? '-selected' : ''}.encrypted.json`, JSON.stringify(encrypted, null, 2), 'application/json');
     } else if (format === 'plain') {
-      downloadText(`2fa-${accountSlug}-${date}.json`, JSON.stringify(exportedVault(), null, 2), 'application/json');
+      downloadText(`2fa-${accountSlug}-${date}${selectedExport ? '-selected' : ''}.json`, JSON.stringify(exportedVault(), null, 2), 'application/json');
     } else {
-      downloadText(`2fa-${accountSlug}-${date}.otpauth.txt`, state.keys.map(buildOtpauthUri).join('\n'));
+      downloadText(`2fa-${accountSlug}-${date}${selectedExport ? '-selected' : ''}.otpauth.txt`, keys.map(buildOtpauthUri).join('\n'));
     }
     closeModal('export-modal');
     $('#export-form').reset();
-    showToast('备份已导出');
+    if (selectedExport) {
+      state.multiSelectMode = false;
+      state.selectedKeyIds.clear();
+      renderKeys();
+    }
+    showToast(selectedExport ? `已导出 ${keys.length} 个密钥` : '备份已导出');
   } catch (error) {
     showError('#export-error', error.message);
   } finally {
@@ -1434,6 +1611,11 @@ function setupEvents() {
     if (!card) return;
     const key = state.keys.find((item) => item.id === card.dataset.keyId);
     if (!key) return;
+    if (state.multiSelectMode) {
+      event.preventDefault();
+      toggleKeySelection(key.id);
+      return;
+    }
     if (event.target.closest('[data-action="favorite"]')) {
       key.favorite = !key.favorite;
       await saveVault({ silent: true });
@@ -1448,7 +1630,7 @@ function setupEvents() {
 
   $('#token-list').addEventListener('dragstart', (event) => {
     const card = event.target.closest('.token-item');
-    if (!card || state.settings.sortMode !== 'custom') return;
+    if (!card || state.multiSelectMode || state.settings.sortMode !== 'custom') return;
     state.draggedId = card.dataset.keyId;
     card.classList.add('dragging');
     event.dataTransfer.effectAllowed = 'move';
@@ -1479,6 +1661,28 @@ function setupEvents() {
   });
 
   $('#search-input').addEventListener('input', (event) => { state.search = event.target.value.trim(); renderKeys(); });
+  $('#multi-select-toggle').addEventListener('click', () => setMultiSelectMode(!state.multiSelectMode));
+  $('#select-visible').addEventListener('change', (event) => {
+    const visibleIds = getVisibleKeys().map((key) => key.id);
+    for (const id of visibleIds) {
+      if (event.target.checked) state.selectedKeyIds.add(id);
+      else state.selectedKeyIds.delete(id);
+    }
+    updateSelectionCards();
+    renderMultiSelectUi();
+  });
+  $('#bulk-favorite').addEventListener('click', () => bulkSetFavorite(true));
+  $('#bulk-unfavorite').addEventListener('click', () => bulkSetFavorite(false));
+  $('#bulk-group-select').addEventListener('change', () => { $('#bulk-move').disabled = selectedKeys().length === 0 || $('#bulk-group-select').value === '__choose'; });
+  $('#bulk-move').addEventListener('click', bulkMoveToGroup);
+  $('#bulk-export').addEventListener('click', () => openExportDialog([...state.selectedKeyIds]));
+  $('#bulk-delete').addEventListener('click', bulkDeleteSelected);
+  $('#bulk-cancel').addEventListener('click', () => setMultiSelectMode(false));
+  document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented || event.key !== 'Escape' || !state.multiSelectMode || document.querySelector('.modal-overlay:not(.hidden)')) return;
+    event.preventDefault();
+    setMultiSelectMode(false);
+  });
   $('#clear-filters').addEventListener('click', () => {
     state.search = '';
     state.groupFilter = '__all';
@@ -1519,7 +1723,8 @@ function setupEvents() {
     input.addEventListener(input.matches('select, input[type="file"]') ? 'change' : 'input', () => resetImportPreview());
   }
   $('#import-modal').addEventListener('modal:close', () => resetImportPreview({ resetForm: true }));
-  $('#export-open').addEventListener('click', () => { $('#export-form').reset(); hideError('#export-error'); setHidden('#export-warning', true); setHidden('#export-password-group', false); openModal('export-modal', '#export-format'); });
+  $('#export-open').addEventListener('click', () => openExportDialog());
+  $('#export-modal').addEventListener('modal:close', () => { state.exportKeyIds = null; });
   $('#export-format').addEventListener('change', (event) => {
     const encrypted = event.target.value === 'encrypted';
     setHidden('#export-password-group', !encrypted);

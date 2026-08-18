@@ -87,6 +87,18 @@ describe('static application shell', () => {
     expect(app).toContain('scanQrImage(imageItem.getAsFile())');
   });
 
+  it('supports accessible bulk selection over the current filtered results', () => {
+    for (const id of ['multi-select-toggle', 'multi-select-tools', 'select-visible', 'bulk-actions', 'bulk-group-select', 'bulk-favorite', 'bulk-unfavorite', 'bulk-export', 'bulk-delete', 'bulk-cancel']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(app).toContain('const visibleIds = getVisibleKeys().map((key) => key.id)');
+    expect(app).toContain("if (state.multiSelectMode) {");
+    expect(app).toContain("state.deletedItems.unshift(...keys.map((key) => ({ ...key, deletedAt })))");
+    expect(app).toContain("state.multiSelectMode || state.settings.sortMode !== 'custom'");
+    expect(app).toContain("event.defaultPrevented || event.key !== 'Escape' || !state.multiSelectMode");
+    expect(app).toContain('await saveVault();');
+  });
+
   it('uses accessible application dialogs instead of native prompt and confirm calls', () => {
     expect(app).not.toMatch(/\bprompt\s*\(/);
     expect(app).not.toMatch(/\bconfirm\s*\(/);
