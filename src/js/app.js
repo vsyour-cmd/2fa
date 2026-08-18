@@ -716,7 +716,7 @@ function switchAddTab(tab) {
   for (const panel of $$('[data-add-panel]')) setHidden(panel, panel.dataset.addPanel !== tab);
 }
 
-function fillAddFromOtpauth(parsed) {
+function fillAddFromOtpauth(parsed, message = '已识别二维码，请确认后添加') {
   $('#add-name').value = parsed.name;
   $('#add-issuer').value = parsed.issuer || '';
   $('#add-account').value = parsed.account || '';
@@ -725,26 +725,43 @@ function fillAddFromOtpauth(parsed) {
   $('#add-digits').value = String(parsed.digits || 6);
   $('#add-algorithm').value = parsed.algorithm || 'SHA-1';
   switchAddTab('manual');
-  showToast('已识别二维码，请确认后添加');
+  showToast(message);
+}
+
+function openOtpAuthValue(value, source = 'qr') {
+  const text = String(value || '').trim()
+    .replace(/^otpauth-migration:\/\//i, 'otpauth-migration://')
+    .replace(/^otpauth:\/\//i, 'otpauth://');
+  if (text.startsWith('otpauth-migration://')) {
+    parseGoogleMigrationUri(text);
+    if (!$('#add-modal').classList.contains('hidden')) closeModal('add-modal', false);
+    resetImportPreview({ resetForm: true });
+    $('#import-text').value = text;
+    openModal('import-modal', '#import-strategy');
+    showToast(source === 'paste' ? '已从剪贴板识别 Google Authenticator 迁移包' : '已识别 Google Authenticator 迁移包');
+    return;
+  }
+  const parsed = parseOtpauthUri(text);
+  if (!parsed) throw new Error('仅支持 TOTP 的 otpauth:// 链接');
+  if (source === 'paste') resetAddForm();
+  fillAddFromOtpauth(parsed, source === 'paste' ? '已从剪贴板识别 OTPAuth 链接，请确认后添加' : undefined);
+  if (source === 'paste') openModal('add-modal', '#add-name');
 }
 
 function processQrResult(value) {
   try {
-    if (value.startsWith('otpauth-migration://')) {
-      parseGoogleMigrationUri(value);
-      closeModal('add-modal');
-      $('#import-form').reset();
-      $('#import-text').value = value;
-      openModal('import-modal', '#import-strategy');
-      showToast('已识别 Google Authenticator 迁移包');
-      return;
-    }
-    const parsed = parseOtpauthUri(value);
-    if (!parsed) throw new Error('仅支持 TOTP 的 otpauth:// 二维码');
-    fillAddFromOtpauth(parsed);
+    openOtpAuthValue(value);
   } catch (error) {
     showError('#qr-error', error.message);
     showError('#qr-image-error', error.message);
+  }
+}
+
+function processPastedOtpAuth(value) {
+  try {
+    openOtpAuthValue(value, 'paste');
+  } catch {
+    showToast('剪贴板中的 OTPAuth 链接无效');
   }
 }
 
@@ -1537,6 +1554,16 @@ function setupEvents() {
   });
   dropZone.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $('#qr-image-input').click(); } });
   document.addEventListener('paste', async (event) => {
+    const clipboardText = String(event.clipboardData?.getData('text/plain') || event.clipboardData?.getData('text') || '').trim();
+    if (/^otpauth(?:-migration)?:\/\//i.test(clipboardText)) {
+      event.preventDefault();
+      if (!state.masterKey) {
+        showToast('请先解锁保险库');
+        return;
+      }
+      processPastedOtpAuth(clipboardText);
+      return;
+    }
     const imagePanel = $('[data-add-panel="image"]');
     if ($('#add-modal').classList.contains('hidden') || imagePanel.classList.contains('hidden')) return;
     const imageItem = [...(event.clipboardData?.items || [])].find((item) => item.type.startsWith('image/'));

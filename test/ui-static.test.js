@@ -72,6 +72,21 @@ describe('static application shell', () => {
     expect(app).not.toContain('解析并导入');
   });
 
+  it('handles pasted OTPAuth text globally before preserving image paste fallback', () => {
+    const pasteHandler = app.indexOf("document.addEventListener('paste'");
+    const textRead = app.indexOf("clipboardData?.getData('text/plain')", pasteHandler);
+    const imageRead = app.indexOf("item.type.startsWith('image/')", pasteHandler);
+    expect(pasteHandler).toBeGreaterThan(-1);
+    expect(textRead).toBeGreaterThan(pasteHandler);
+    expect(imageRead).toBeGreaterThan(textRead);
+    expect(app).toContain('/^otpauth(?:-migration)?:\\/\\//i.test(clipboardText)');
+    expect(app).toContain("showToast('请先解锁保险库')");
+    expect(app).toContain("showToast('剪贴板中的 OTPAuth 链接无效')");
+    expect(app).toContain("openOtpAuthValue(value, 'paste')");
+    expect(app).toContain('resetImportPreview({ resetForm: true })');
+    expect(app).toContain('scanQrImage(imageItem.getAsFile())');
+  });
+
   it('uses accessible application dialogs instead of native prompt and confirm calls', () => {
     expect(app).not.toMatch(/\bprompt\s*\(/);
     expect(app).not.toMatch(/\bconfirm\s*\(/);
