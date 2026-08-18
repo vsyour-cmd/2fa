@@ -101,6 +101,7 @@
               <label class="sr-only" for="search-input">搜索密钥</label>
               <input id="search-input" type="search" placeholder="搜索名称、发行方、账户或备注…" autocomplete="off">
             </div>
+            <button id="multi-select-toggle" class="btn btn-secondary multi-select-toggle" type="button" aria-pressed="false">多选</button>
             <div class="quick-sort">
               <label for="sort-quick">排列方式</label>
               <select id="sort-quick">
@@ -122,6 +123,13 @@
             </div>
           </div>
           <div class="toolbar-meta"><span id="list-summary">0 个验证码</span><span id="sort-hint">智能排序会根据使用频次和最近使用自动调整</span></div>
+          <div id="multi-select-tools" class="multi-select-tools hidden">
+            <label class="select-visible-row" for="select-visible">
+              <input id="select-visible" type="checkbox">
+              <span id="select-visible-label">全选当前筛选结果</span>
+            </label>
+            <span class="field-hint">卡片点击只会切换选择，不会复制验证码</span>
+          </div>
           <div id="group-filters" class="filter-row" aria-label="按分组筛选"></div>
         </div>
 
@@ -139,9 +147,28 @@
         </div>
 
         <footer class="footer-actions">
-          <button id="import-open" class="btn btn-secondary" type="button">导入</button>
-          <button id="export-open" class="btn btn-secondary" type="button">导出</button>
-          <button id="trash-open" class="btn btn-ghost" type="button">回收站 <span id="trash-count" class="badge">0</span></button>
+          <div id="standard-actions" class="standard-actions">
+            <button id="import-open" class="btn btn-secondary" type="button">导入</button>
+            <button id="export-open" class="btn btn-secondary" type="button">导出</button>
+            <button id="trash-open" class="btn btn-ghost" type="button">回收站 <span id="trash-count" class="badge">0</span></button>
+          </div>
+          <div id="bulk-actions" class="bulk-actions card hidden" role="region" aria-label="批量操作">
+            <div class="bulk-primary-actions">
+              <button id="bulk-favorite" class="btn btn-secondary" type="button">收藏</button>
+              <button id="bulk-unfavorite" class="btn btn-secondary" type="button">取消收藏</button>
+              <div class="bulk-group-control">
+                <label class="sr-only" for="bulk-group-select">移动到分组</label>
+                <select id="bulk-group-select" aria-label="选择目标分组"><option value="__choose" selected disabled>移动到分组…</option></select>
+                <button id="bulk-move" class="btn btn-secondary" type="button">移动</button>
+              </div>
+              <button id="bulk-export" class="btn btn-secondary" type="button">导出所选</button>
+              <button id="bulk-delete" class="btn btn-danger" type="button">移入回收站</button>
+            </div>
+            <div class="bulk-selection-status" aria-live="polite">
+              <strong id="bulk-selected-count">已选 0 项</strong>
+              <button id="bulk-cancel" class="btn btn-ghost" type="button">取消</button>
+            </div>
+          </div>
         </footer>
       </section>
     </main>
@@ -329,6 +356,7 @@
       <div class="modal">
         <div class="modal-header"><h2 id="export-title">导出备份</h2><button class="icon-btn" type="button" data-close-modal="export-modal" aria-label="关闭">×</button></div>
         <form id="export-form">
+          <p id="export-scope" class="field-hint">将导出当前保险库中的全部数据。</p>
           <div class="form-group"><label for="export-format">格式</label><select id="export-format"><option value="encrypted">密码加密 JSON（推荐）</option><option value="plain">明文 JSON</option><option value="otpauth">OTPAuth URI 列表</option></select></div>
           <div id="export-password-group" class="form-group"><label for="export-password">导出密码</label><input id="export-password" type="password" autocomplete="new-password"><p class="field-hint">请使用与主密码不同的强密码。</p></div>
           <div id="export-warning" class="warning hidden">该格式含有明文密钥，请只保存到安全位置。</div>
