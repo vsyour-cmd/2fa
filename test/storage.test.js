@@ -33,6 +33,11 @@ describe('settings migration', () => {
     expect(saveSettings({ ...DEFAULT_SETTINGS, columnsPerRow: '4' }).columnsPerRow).toBe('4');
     expect(saveSettings({ ...DEFAULT_SETTINGS, columnsPerRow: '9' }).columnsPerRow).toBe('auto');
   });
+
+  it('persists the oldest-used sorting mode', () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    expect(saveSettings({ ...DEFAULT_SETTINGS, sortMode: 'stale' }).sortMode).toBe('stale');
+  });
 });
 
 describe('offline conflict detection', () => {

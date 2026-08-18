@@ -224,6 +224,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .token-title-line { display: flex; min-width: 0; align-items: center; gap: 7px; }
 .token-name { min-width: 0; flex: 0 1 auto; overflow: hidden; margin-bottom: 2px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .token-subtitle { overflow: hidden; color: var(--text-muted); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
+.token-last-used { overflow: hidden; margin-top: 4px; color: var(--text-soft); font-size: 0.72rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .token-note { display: -webkit-box; overflow: hidden; margin: 11px 0 -4px; color: var(--text-soft); font-size: 0.78rem; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .usage-badge { flex: 0 0 auto; padding: 2px 7px; color: var(--primary-hover); background: var(--primary-soft); border-radius: 999px; font-size: 0.75rem; font-weight: 820; }
 .favorite-btn { width: 40px; height: 40px; flex: 0 0 40px; padding: 0; color: var(--text-muted); background: transparent; border: 0; border-radius: 10px; font-size: 1.05rem; touch-action: manipulation; }

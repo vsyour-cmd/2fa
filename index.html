@@ -107,6 +107,7 @@
               <select id="sort-quick">
                 <option value="smart">智能 · 常用优先</option>
                 <option value="recent">最近使用</option>
+                <option value="stale">最久未使用</option>
                 <option value="name">按名称</option>
                 <option value="custom">自定义拖拽</option>
               </select>
@@ -287,7 +288,7 @@
         <form id="settings-form">
           <div class="settings-grid">
             <div class="form-group"><label for="theme-select">主题</label><select id="theme-select"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
-            <div class="form-group"><label for="sort-select">排序</label><select id="sort-select"><option value="smart">智能 · 常用优先</option><option value="recent">最近使用</option><option value="name">按名称</option><option value="custom">自定义拖拽</option></select><p class="field-hint">智能排序综合复制次数和最近使用时间，收藏始终置顶。</p></div>
+            <div class="form-group"><label for="sort-select">排序</label><select id="sort-select"><option value="smart">智能 · 常用优先</option><option value="recent">最近使用</option><option value="stale">最久未使用</option><option value="name">按名称</option><option value="custom">自定义拖拽</option></select><p class="field-hint">智能排序综合复制次数和最近使用时间；“最久未使用”会优先显示从未使用的密钥。</p></div>
             <div class="form-group"><label for="auto-lock-minutes">无操作自动锁定（分钟，0 为关闭）</label><input id="auto-lock-minutes" type="number" min="0" max="240"></div>
             <label class="check-row"><input id="lock-on-hidden" type="checkbox"><span>页面进入后台时立即锁定</span></label>
             <label class="check-row"><input id="clipboard-clear" type="checkbox"><span>复制后 30 秒自动清空剪贴板</span></label>
@@ -329,9 +330,10 @@
       </div>
     </div>
 
-    <div id="trash-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="trash-title">
+    <div id="trash-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="trash-title" aria-describedby="trash-description">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">保留 30 天</p><h2 id="trash-title">回收站</h2></div><button class="icon-btn" type="button" data-close-modal="trash-modal" aria-label="关闭">×</button></div>
+        <p id="trash-description" class="field-hint">从列表移除的密钥会保留在这里，30 天内可以随时恢复；只有“彻底删除”会立即永久删除。</p>
         <div id="trash-list" class="manage-list"></div>
       </div>
     </div>

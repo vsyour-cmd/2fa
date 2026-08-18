@@ -65,6 +65,12 @@ export function compareSmartKeys(left, right, now = Date.now()) {
   return orderDifference || left.name.localeCompare(right.name, 'zh-CN');
 }
 
+export function compareStaleKeys(left, right) {
+  const lastUsedDifference = Math.max(0, Number(left?.lastUsed || 0)) - Math.max(0, Number(right?.lastUsed || 0));
+  if (lastUsedDifference !== 0) return lastUsedDifference;
+  return String(left?.name || '').localeCompare(String(right?.name || ''), 'zh-CN');
+}
+
 export function normalizeVaultData(raw) {
   if (Array.isArray(raw)) {
     return { version: 3, keys: raw.map(normalizeKey), deletedItems: [] };

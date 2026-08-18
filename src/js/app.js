@@ -71,6 +71,7 @@ import {
 import {
   DEFAULT_ACCOUNT,
   compareSmartKeys,
+  compareStaleKeys,
   downloadText,
   escapeHtml,
   formatDateTime,
@@ -438,6 +439,7 @@ function getVisibleKeys() {
   const now = Date.now();
   return filtered.sort((left, right) => {
     if (state.settings.sortMode === 'smart') return compareSmartKeys(left, right, now);
+    if (state.settings.sortMode === 'stale') return compareStaleKeys(left, right);
     if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
     if (state.settings.sortMode === 'name') return left.name.localeCompare(right.name, 'zh-CN');
     if (state.settings.sortMode === 'recent') return Number(right.lastUsed || 0) - Number(left.lastUsed || 0) || left.name.localeCompare(right.name, 'zh-CN');
@@ -452,6 +454,7 @@ function renderListMeta(visibleCount) {
   const hints = {
     smart: '智能排序会根据使用频次和最近使用自动调整',
     recent: '最近复制的验证码排在前面',
+    stale: '从未使用和最久未使用的验证码排在前面',
     name: '按名称顺序排列，收藏仍会置顶',
     custom: '按住卡片拖拽即可调整顺序',
   };
@@ -647,6 +650,7 @@ async function renderKeys() {
     const ring = ringValues(key);
     const icon = getKeyIcon(key);
     const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account].filter(Boolean).join(' · ') || 'TOTP';
+    const lastUsed = Number(key.lastUsed || 0) > 0 ? formatDateTime(key.lastUsed) : '从未使用';
     const note = key.note ? `<p class="token-note" title="${escapeHtml(key.note)}">${escapeHtml(key.note)}</p>` : '';
     const draggable = state.settings.sortMode === 'custom' && !state.multiSelectMode ? 'true' : 'false';
     const frequent = frequentIds.has(key.id);
@@ -662,7 +666,7 @@ async function renderKeys() {
         <div class="token-top">
           ${selectControl}
           <div class="token-icon${icon.matched ? '' : ' initial'}" aria-hidden="true">${escapeHtml(icon.value)}</div>
-          <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div></div>
+          <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div><div class="token-last-used" title="最近使用时间：${escapeHtml(lastUsed)}">最近使用：${escapeHtml(lastUsed)}</div></div>
           <button class="favorite-btn${key.favorite ? ' active' : ''}" type="button" data-action="favorite" aria-label="${key.favorite ? '取消收藏' : '收藏'}" aria-pressed="${key.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
         ${note}
@@ -679,7 +683,7 @@ async function renderKeys() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11Z"></path><path d="M12 11v5M9.5 13.5h5"></path></svg>
             <span class="group-label-text">${escapeHtml(key.group || '未分组')}</span>${key.group ? '' : '<span class="group-label-add">设置</span>'}
           </button>
-          <div class="token-actions">${reorderControls}<button class="small-btn" type="button" data-action="edit">编辑</button><button class="small-btn delete" type="button" data-action="delete">删除</button></div>
+          <div class="token-actions">${reorderControls}<button class="small-btn" type="button" data-action="edit">编辑</button><button class="small-btn delete" type="button" data-action="delete">移入回收站</button></div>
         </div>
       </article>`;
   }));
@@ -798,7 +802,7 @@ async function copyKeyCode(key, card) {
   setTimeout(() => card?.classList.remove('copied'), 520);
   card?.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(.98)' }, { transform: 'scale(1)' }], { duration: 180 });
   scheduleSave();
-  if (['smart', 'recent'].includes(state.settings.sortMode)) setTimeout(() => renderKeys(), 650);
+  if (['smart', 'recent', 'stale'].includes(state.settings.sortMode)) setTimeout(() => renderKeys(), 650);
 }
 
 async function moveKeyInCustomOrder(id, direction) {
@@ -1360,7 +1364,7 @@ function applySortMode(sortMode, announce = false) {
   $('#sort-select').value = state.settings.sortMode;
   renderKeys();
   if (announce) {
-    const labels = { smart: '已启用智能排序', recent: '已按最近使用排序', name: '已按名称排序', custom: '已启用自定义拖拽排序' };
+    const labels = { smart: '已启用智能排序', recent: '已按最近使用排序', stale: '已按最久未使用排序', name: '已按名称排序', custom: '已启用自定义拖拽排序' };
     showToast(labels[state.settings.sortMode] || '排序已更新');
   }
 }

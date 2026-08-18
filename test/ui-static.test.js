@@ -52,6 +52,22 @@ describe('static application shell', () => {
     expect(app).toContain('${key.note}');
   });
 
+  it('shows recent use and offers an oldest-used view', () => {
+    expect(html.match(/<option value="stale">最久未使用<\/option>/g)).toHaveLength(2);
+    expect(app).toContain('compareStaleKeys(left, right)');
+    expect(app).toContain('class="token-last-used"');
+    expect(app).toContain("'从未使用'");
+    expect(app).toContain("['smart', 'recent', 'stale']");
+  });
+
+  it('moves keys to a recoverable trash before permanent deletion', () => {
+    expect(html).toContain('30 天内可以随时恢复');
+    expect(app).toContain('data-action="delete">移入回收站</button>');
+    expect(app).toContain('state.deletedItems.unshift({ ...removed, deletedAt: Date.now() })');
+    expect(app).toContain('data-trash-action="restore">恢复</button>');
+    expect(app).toContain('此操作无法撤销');
+  });
+
   it('waits for a fresh verification code during the final second', () => {
     expect(app).toContain('验证码即将过期，正在复制新码');
     expect(app).toContain('验证码即将过期，注意尽快粘贴');
