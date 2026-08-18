@@ -21,7 +21,7 @@ describe('static application shell', () => {
   });
 
   it('contains the core accessible views and dialogs', () => {
-    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
+    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'workflow-edit-modal', 'workflow-run-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('aria-live="polite"');
@@ -52,6 +52,23 @@ describe('static application shell', () => {
     expect(html).toContain('maxlength="500"');
     expect(app).toContain('class="token-note"');
     expect(app).toContain('${key.note}');
+  });
+
+  it('stores encrypted workflow notes with ordered 2FA links and a guided run view', () => {
+    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-key-select', 'workflow-selected-keys', 'workflow-run-steps', 'workflow-run-keys']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).toContain('data-vault-view="workflow"');
+    expect(html).toContain('每个非空行会显示为一个编号步骤');
+    expect(app).toContain('workflowNotes: state.workflowNotes');
+    expect(app).toContain('deletedWorkflowNotes: state.deletedWorkflowNotes');
+    expect(app).toContain('state.editingWorkflowLinks.push(workflowLinkSnapshot(key))');
+    expect(app).toContain('data-workflow-link-action="up"');
+    expect(app).toContain('data-workflow-run-key-id=');
+    expect(app).toContain('await copyKeyCode(key, null)');
+    expect(app).toContain("'操作笔记已创建'");
+    expect(styles).toContain('.workflow-note-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(styles).toContain('.workflow-order-button { display: inline-grid; width: 44px; height: 44px;');
   });
 
   it('lets touch and keyboard users expand long notes without cluttering short notes', () => {
@@ -139,6 +156,8 @@ describe('static application shell', () => {
     expect(app).toContain('state.deletedItems.unshift({ ...removed, deletedAt: Date.now() })');
     expect(app).toContain('data-trash-action="restore">恢复</button>');
     expect(app).toContain('此操作无法撤销');
+    expect(app).toContain('state.deletedWorkflowNotes.unshift({ ...note, deletedAt: Date.now() })');
+    expect(app).toContain('data-trash-kind="workflow"');
   });
 
   it('waits for a fresh verification code during the final second', () => {

@@ -46,6 +46,37 @@ export function normalizeKey(raw = {}, index = 0) {
   };
 }
 
+export function normalizeWorkflowNote(raw = {}) {
+  const sourceLinks = Array.isArray(raw.linkedKeys)
+    ? raw.linkedKeys
+    : (Array.isArray(raw.keyIds) ? raw.keyIds : []);
+  const seen = new Set();
+  const linkedKeys = [];
+  for (const source of sourceLinks) {
+    const link = typeof source === 'string' ? { keyId: source } : (source || {});
+    const keyId = String(link.keyId || link.id || '').trim();
+    if (!keyId || seen.has(keyId)) continue;
+    seen.add(keyId);
+    linkedKeys.push({
+      keyId,
+      name: String(link.name || '').trim().slice(0, 100),
+      issuer: String(link.issuer || '').trim().slice(0, 100),
+      account: String(link.account || '').trim().slice(0, 160),
+    });
+    if (linkedKeys.length >= 50) break;
+  }
+  const createdAt = Number(raw.createdAt || Date.now());
+  const updatedAt = Number(raw.updatedAt || createdAt);
+  return {
+    id: String(raw.id || generateId()),
+    title: String(raw.title || '未命名笔记').trim().slice(0, 100) || '未命名笔记',
+    content: String(raw.content || raw.steps || '').trim().slice(0, 5000),
+    linkedKeys,
+    createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
+  };
+}
+
 export function getSmartSortScore(key, now = Date.now()) {
   const useCount = Math.max(0, Number(key?.useCount || 0));
   const lastUsed = Math.max(0, Number(key?.lastUsed || 0));
@@ -73,16 +104,23 @@ export function compareStaleKeys(left, right) {
 
 export function normalizeVaultData(raw) {
   if (Array.isArray(raw)) {
-    return { version: 3, keys: raw.map(normalizeKey), deletedItems: [] };
+    return { version: 3, keys: raw.map(normalizeKey), deletedItems: [], workflowNotes: [], deletedWorkflowNotes: [] };
   }
   const source = raw && typeof raw === 'object' ? raw : {};
   const keyList = Array.isArray(source.keys) ? source.keys : [];
   const deleted = Array.isArray(source.deletedItems) ? source.deletedItems : [];
+  const workflowNotes = Array.isArray(source.workflowNotes) ? source.workflowNotes : [];
+  const deletedWorkflowNotes = Array.isArray(source.deletedWorkflowNotes) ? source.deletedWorkflowNotes : [];
   return {
     version: 3,
     keys: keyList.map(normalizeKey),
     deletedItems: deleted.map((item, index) => ({
       ...normalizeKey(item.key || item, index),
+      deletedAt: Number(item.deletedAt || Date.now()),
+    })),
+    workflowNotes: workflowNotes.map(normalizeWorkflowNote),
+    deletedWorkflowNotes: deletedWorkflowNotes.map((item) => ({
+      ...normalizeWorkflowNote(item.note || item),
       deletedAt: Number(item.deletedAt || Date.now()),
     })),
   };

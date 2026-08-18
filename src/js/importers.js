@@ -6,6 +6,7 @@ import {
   generateId,
   normalizeAlgorithm,
   normalizeKey,
+  normalizeWorkflowNote,
   uniqueName,
 } from './utils.js';
 
@@ -243,7 +244,13 @@ export async function parseImportContent(content, password = '') {
     return { source: 'Aegis', items: mapAegisDatabase(database) };
   }
   if (Array.isArray(payload?.services)) return { source: '2FAS', items: parse2Fas(payload) };
-  if (Array.isArray(payload?.keys)) return { source: '2FA Authenticator', items: payload.keys.map(normalizeKey) };
+  if (Array.isArray(payload?.keys)) {
+    return {
+      source: '2FA Authenticator',
+      items: payload.keys.map(normalizeKey),
+      workflowNotes: Array.isArray(payload.workflowNotes) ? payload.workflowNotes.map(normalizeWorkflowNote) : [],
+    };
+  }
   if (Array.isArray(payload?.entries) && payload.entries.some((item) => item?.info?.secret)) {
     return { source: 'Aegis', items: mapAegisDatabase(payload) };
   }
@@ -334,6 +341,7 @@ export function createImportPlan(valid, existingKeys = [], strategy = 'skip', in
 export function applyImportPlan(plan, existingKeys = [], createId = generateId) {
   const keys = existingKeys.map((key) => ({ ...key }));
   const createdIds = new Map();
+  const importedKeyIds = new Map();
   let nextOrder = Math.max(-1, ...keys.map((key) => Number(key.order || 0))) + 1;
 
   for (const item of plan?.items || []) {
@@ -342,6 +350,12 @@ export function applyImportPlan(plan, existingKeys = [], createId = generateId) 
       nextOrder += 1;
       keys.push(added);
       createdIds.set(item.resultRef, added.id);
+      importedKeyIds.set(item.candidate.id, added.id);
+      continue;
+    }
+    if (item.action === 'skip') {
+      const targetId = item.target.kind === 'planned' ? createdIds.get(item.target.ref) : item.target.id;
+      if (targetId) importedKeyIds.set(item.candidate.id, targetId);
       continue;
     }
     if (item.action !== 'overwrite') continue;
@@ -358,7 +372,8 @@ export function applyImportPlan(plan, existingKeys = [], createId = generateId) 
       lastUsed: previous.lastUsed,
       useCount: previous.useCount,
     };
+    importedKeyIds.set(item.candidate.id, previous.id);
   }
 
-  return { keys, stats: { ...plan.stats } };
+  return { keys, importedKeyIds, stats: { ...plan.stats } };
 }

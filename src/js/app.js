@@ -87,6 +87,7 @@ import {
   normalizeKey,
   normalizeSecret,
   normalizeVaultData,
+  normalizeWorkflowNote,
   uniqueName,
 } from './utils.js';
 
@@ -103,6 +104,8 @@ const state = {
   keyIterations: PBKDF2_ITERATIONS.CURRENT,
   keys: [],
   deletedItems: [],
+  workflowNotes: [],
+  deletedWorkflowNotes: [],
   settings: loadSettings(),
   search: '',
   groupFilter: '__all',
@@ -119,6 +122,8 @@ const state = {
   multiSelectMode: false,
   selectedKeyIds: new Set(),
   exportKeyIds: null,
+  vaultView: 'tokens',
+  editingWorkflowLinks: [],
 };
 
 let qrScanner;
@@ -129,13 +134,21 @@ let quickUnlockCache = null;
 let quickUnlockTimer = null;
 
 function vaultPayload() {
-  return { version: VAULT_VERSION, keys: state.keys, deletedItems: state.deletedItems };
+  return {
+    version: VAULT_VERSION,
+    keys: state.keys,
+    deletedItems: state.deletedItems,
+    workflowNotes: state.workflowNotes,
+    deletedWorkflowNotes: state.deletedWorkflowNotes,
+  };
 }
 
 function useVaultData(raw) {
   const normalized = normalizeVaultData(raw);
   state.keys = normalized.keys;
   state.deletedItems = normalized.deletedItems;
+  state.workflowNotes = normalized.workflowNotes;
+  state.deletedWorkflowNotes = normalized.deletedWorkflowNotes;
 }
 
 function clearSensitiveState() {
@@ -145,6 +158,8 @@ function clearSensitiveState() {
   state.accountName = '';
   state.keys = [];
   state.deletedItems = [];
+  state.workflowNotes = [];
+  state.deletedWorkflowNotes = [];
   state.keyIterations = PBKDF2_ITERATIONS.CURRENT;
   state.search = '';
   state.groupFilter = '__all';
@@ -154,6 +169,8 @@ function clearSensitiveState() {
   state.multiSelectMode = false;
   state.selectedKeyIds.clear();
   state.exportKeyIds = null;
+  state.vaultView = 'tokens';
+  state.editingWorkflowLinks = [];
   document.body.classList.remove('bulk-mode');
   clearTimeout(state.saveTimer);
   clearTimeout(state.clipboardTimer);
@@ -402,6 +419,8 @@ async function setupAccount(password, accountName) {
   state.keyIterations = PBKDF2_ITERATIONS.CURRENT;
   state.keys = [];
   state.deletedItems = [];
+  state.workflowNotes = [];
+  state.deletedWorkflowNotes = [];
   const saved = await saveVault({ silent: true });
   if (!saved) throw new Error('无法将新账户保存到云端');
   await rememberCurrentSession();
@@ -841,12 +860,220 @@ function updateTokenNoteControls() {
   }
 }
 
+function workflowSteps(content) {
+  return String(content || '').split(/\r?\n/).map((step) => step.trim()).filter(Boolean);
+}
+
+function workflowLinkSnapshot(key) {
+  return { keyId: key.id, name: key.name, issuer: key.issuer, account: key.account };
+}
+
+function resolveWorkflowLink(link) {
+  const active = state.keys.find((key) => key.id === link.keyId);
+  if (active) return { key: active, status: 'active', label: active.name };
+  const recycled = state.deletedItems.find((key) => key.id === link.keyId);
+  if (recycled) return { key: recycled, status: 'recycled', label: recycled.name };
+  return { key: null, status: 'unavailable', label: link.name || '已删除的条目' };
+}
+
+function setVaultView(view, focus = false) {
+  state.vaultView = view === 'workflow' ? 'workflow' : 'tokens';
+  const workflowActive = state.vaultView === 'workflow';
+  setHidden('#tokens-view', workflowActive);
+  setHidden('#workflow-view', !workflowActive);
+  for (const button of $$('[data-vault-view]')) {
+    const active = button.dataset.vaultView === state.vaultView;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+    button.tabIndex = active ? 0 : -1;
+  }
+  if (workflowActive && state.multiSelectMode) {
+    state.multiSelectMode = false;
+    state.selectedKeyIds.clear();
+    document.body.classList.remove('bulk-mode');
+  }
+  if (focus) document.getElementById(workflowActive ? 'workflow-view' : 'tokens-view')?.focus({ preventScroll: true });
+}
+
+function renderWorkflowNotes() {
+  $('#tokens-tab-count').textContent = String(state.keys.length);
+  $('#workflow-tab-count').textContent = String(state.workflowNotes.length);
+  setHidden('#workflow-empty', state.workflowNotes.length !== 0);
+  const notes = [...state.workflowNotes].sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  $('#workflow-note-list').innerHTML = notes.map((note) => {
+    const steps = workflowSteps(note.content);
+    const previewSteps = steps.slice(0, 3).map((step) => `<li>${escapeHtml(step)}</li>`).join('');
+    const remaining = steps.length - 3;
+    const linkStates = note.linkedKeys.map(resolveWorkflowLink);
+    const previewLinks = linkStates.slice(0, 4).map((item) => `<span class="workflow-link-chip${item.status === 'active' ? '' : ' unavailable'}"><span>${escapeHtml(item.label)}</span>${item.status === 'recycled' ? ' · 回收站' : item.status === 'unavailable' ? ' · 不可用' : ''}</span>`).join('');
+    const hiddenLinks = linkStates.length - 4;
+    return `
+      <article class="workflow-note-card" data-workflow-id="${escapeHtml(note.id)}">
+        <div class="workflow-note-header">
+          <div><h3 title="${escapeHtml(note.title)}">${escapeHtml(note.title)}</h3><span class="workflow-note-meta">${steps.length} 个步骤 · ${note.linkedKeys.length} 个验证码 · 更新于 ${escapeHtml(formatDateTime(note.updatedAt))}</span></div>
+        </div>
+        <ol class="workflow-note-steps">${previewSteps || '<li>尚未记录具体步骤</li>'}${remaining > 0 ? `<li class="workflow-note-more">还有 ${remaining} 个步骤…</li>` : ''}</ol>
+        <div class="workflow-note-links">${previewLinks || '<span class="workflow-link-chip"><span>未关联验证码</span></span>'}${hiddenLinks > 0 ? `<span class="workflow-link-chip"><span>另有 ${hiddenLinks} 个</span></span>` : ''}</div>
+        <div class="workflow-note-actions"><button class="btn btn-primary" type="button" data-workflow-action="run">开始操作</button><div class="workflow-note-secondary-actions"><button class="small-btn" type="button" data-workflow-action="edit">编辑</button><button class="small-btn delete" type="button" data-workflow-action="delete">移入回收站</button></div></div>
+      </article>`;
+  }).join('');
+}
+
+function renderWorkflowKeyPicker() {
+  const selectedIds = new Set(state.editingWorkflowLinks.map((link) => link.keyId));
+  const available = state.keys.filter((key) => !selectedIds.has(key.id));
+  const select = $('#workflow-key-select');
+  select.innerHTML = available.length === 0
+    ? '<option value="">没有其他可关联条目</option>'
+    : '<option value="">选择一个 2FA 条目…</option>' + available.map((key) => `<option value="${escapeHtml(key.id)}">${escapeHtml(key.name)}${key.account ? ` · ${escapeHtml(key.account)}` : ''}</option>`).join('');
+  select.disabled = available.length === 0;
+  $('#workflow-key-add').disabled = available.length === 0;
+  $('#workflow-selected-keys').innerHTML = state.editingWorkflowLinks.map((link, index) => {
+    const resolved = resolveWorkflowLink(link);
+    const key = resolved.key || link;
+    const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account].filter(Boolean).join(' · ') || (resolved.status === 'active' ? 'TOTP' : resolved.status === 'recycled' ? '当前位于回收站' : '原条目已不可用');
+    return `
+      <li class="workflow-selected-key" data-workflow-link-index="${index}">
+        <span class="workflow-selected-key-number">${index + 1}</span>
+        <div class="workflow-selected-key-main"><strong>${escapeHtml(resolved.label)}</strong><span>${escapeHtml(subtitle)}</span></div>
+        <div class="workflow-selected-key-actions">
+          <button class="workflow-order-button" type="button" data-workflow-link-action="up" aria-label="上移 ${escapeHtml(resolved.label)}"${index === 0 ? ' disabled' : ''}>↑</button>
+          <button class="workflow-order-button" type="button" data-workflow-link-action="down" aria-label="下移 ${escapeHtml(resolved.label)}"${index === state.editingWorkflowLinks.length - 1 ? ' disabled' : ''}>↓</button>
+          <button class="workflow-order-button remove" type="button" data-workflow-link-action="remove" aria-label="移除 ${escapeHtml(resolved.label)}">×</button>
+        </div>
+      </li>`;
+  }).join('');
+}
+
+function openWorkflowEditor(id = '') {
+  const note = state.workflowNotes.find((item) => item.id === id);
+  $('#workflow-form').reset();
+  hideError('#workflow-error');
+  $('#workflow-id').value = note?.id || '';
+  $('#workflow-title').value = note?.title || '';
+  $('#workflow-content').value = note?.content || '';
+  $('#workflow-edit-title').textContent = note ? '编辑操作笔记' : '新建操作笔记';
+  state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
+  renderWorkflowKeyPicker();
+  openModal('workflow-edit-modal', '#workflow-title');
+}
+
+async function saveWorkflowNote(event) {
+  event.preventDefault();
+  hideError('#workflow-error');
+  const button = $('#workflow-submit');
+  setBusy(button, true, '正在保存…');
+  try {
+    const id = $('#workflow-id').value;
+    const title = $('#workflow-title').value.trim();
+    const content = $('#workflow-content').value.trim();
+    if (!title) throw new Error('请输入笔记标题');
+    if (!content) throw new Error('请至少填写一个操作步骤');
+    const index = state.workflowNotes.findIndex((note) => note.id === id);
+    const previous = index >= 0 ? state.workflowNotes[index] : null;
+    const note = normalizeWorkflowNote({
+      id: previous?.id || generateId(),
+      title,
+      content,
+      linkedKeys: state.editingWorkflowLinks.map((link) => {
+        const current = state.keys.find((key) => key.id === link.keyId) || state.deletedItems.find((key) => key.id === link.keyId);
+        return current ? workflowLinkSnapshot(current) : link;
+      }),
+      createdAt: previous?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    });
+    if (index >= 0) state.workflowNotes[index] = note;
+    else state.workflowNotes.push(note);
+    await saveVault();
+    closeModal('workflow-edit-modal');
+    state.editingWorkflowLinks = [];
+    renderAll();
+    setVaultView('workflow');
+    showToast(previous ? '操作笔记已更新' : '操作笔记已创建');
+  } catch (error) {
+    showError('#workflow-error', error.message);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function deleteWorkflowNote(id) {
+  const index = state.workflowNotes.findIndex((note) => note.id === id);
+  if (index < 0) return;
+  const note = state.workflowNotes[index];
+  const confirmed = await askConfirm({
+    title: '将笔记移入回收站',
+    message: `确定将“${note.title}”移入回收站？之后仍可恢复。`,
+    confirmText: '移入回收站',
+  });
+  if (!confirmed) return;
+  state.workflowNotes.splice(index, 1);
+  state.deletedWorkflowNotes.unshift({ ...note, deletedAt: Date.now() });
+  await saveVault();
+  renderAll();
+  showToast('操作笔记已移入回收站', {
+    actionLabel: '撤销',
+    duration: 6_000,
+    onAction: async () => {
+      const trashIndex = state.deletedWorkflowNotes.findIndex((item) => item.id === note.id);
+      if (trashIndex >= 0) state.deletedWorkflowNotes.splice(trashIndex, 1);
+      state.workflowNotes.push(note);
+      await saveVault();
+      renderAll();
+      showToast('已恢复操作笔记');
+    },
+  });
+}
+
+function renderWorkflowRunKey(link, index) {
+  const resolved = resolveWorkflowLink(link);
+  const key = resolved.key || link;
+  const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account].filter(Boolean).join(' · ') || 'TOTP';
+  const action = resolved.status === 'active'
+    ? `<button class="workflow-copy-code" type="button" data-workflow-run-key-id="${escapeHtml(link.keyId)}" aria-label="复制 ${escapeHtml(resolved.label)} 的当前验证码"><span class="workflow-code-value">——————</span><span class="workflow-code-time">正在生成</span></button>`
+    : `<span class="workflow-unavailable-label">${resolved.status === 'recycled' ? '条目在回收站，恢复后可用' : '原条目已不可用'}</span>`;
+  return `<li class="workflow-run-key" data-workflow-key-id="${escapeHtml(link.keyId)}"><span class="workflow-run-key-number">${index + 1}</span><div class="workflow-run-key-main"><strong>${escapeHtml(resolved.label)}</strong><span>${escapeHtml(subtitle)}</span></div>${action}</li>`;
+}
+
+async function updateWorkflowRunCodes(now = Date.now()) {
+  if ($('#workflow-run-modal').classList.contains('hidden')) return;
+  await Promise.all($$('#workflow-run-keys [data-workflow-run-key-id]').map(async (button) => {
+    const key = state.keys.find((item) => item.id === button.dataset.workflowRunKeyId);
+    if (!key) return;
+    try {
+      const code = await generateTOTP(key.secret, now, key);
+      $('.workflow-code-value', button).textContent = formatCode(code);
+      $('.workflow-code-time', button).textContent = `剩余 ${getRemainingSeconds(key, now)} 秒`;
+    } catch {
+      $('.workflow-code-value', button).textContent = '不可用';
+      $('.workflow-code-time', button).textContent = '请检查密钥';
+    }
+  }));
+}
+
+async function openWorkflowRun(id) {
+  const note = state.workflowNotes.find((item) => item.id === id);
+  if (!note) return;
+  $('#workflow-run-modal').dataset.workflowId = note.id;
+  $('#workflow-run-title').textContent = note.title;
+  const steps = workflowSteps(note.content);
+  $('#workflow-run-steps').innerHTML = (steps.length ? steps : ['未记录具体步骤']).map((step) => `<li>${escapeHtml(step)}</li>`).join('');
+  $('#workflow-run-key-count').textContent = note.linkedKeys.length ? `共 ${note.linkedKeys.length} 个` : '未关联验证码';
+  $('#workflow-run-keys').innerHTML = note.linkedKeys.length
+    ? note.linkedKeys.map(renderWorkflowRunKey).join('')
+    : '<li class="field-hint center">这条笔记没有关联 2FA 条目</li>';
+  openModal('workflow-run-modal', note.linkedKeys.length ? '[data-workflow-run-key-id]' : '[data-close-modal="workflow-run-modal"]');
+  await updateWorkflowRunCodes();
+}
+
 function renderAll() {
   renderGroupFilters();
   updateGroupOptions();
-  $('#trash-count').textContent = String(state.deletedItems.length);
+  $('#trash-count').textContent = String(state.deletedItems.length + state.deletedWorkflowNotes.length);
   renderKeys();
+  renderWorkflowNotes();
   renderBackupReminder();
+  setVaultView(state.vaultView);
 }
 
 async function updateDisplay() {
@@ -877,6 +1104,7 @@ async function updateDisplay() {
     $('.ring-value', svg).setAttribute('stroke-dashoffset', String(ring.offset));
     $('text', svg).textContent = String(ring.remaining);
   }
+  await updateWorkflowRunCodes(now);
 }
 
 function startUpdateTimer() {
@@ -1241,25 +1469,32 @@ async function deleteKey(id) {
 
 function pruneTrash() {
   const cutoff = Date.now() - Number(state.settings.trashRetentionDays) * 86_400_000;
-  const before = state.deletedItems.length;
+  const before = state.deletedItems.length + state.deletedWorkflowNotes.length;
   state.deletedItems = state.deletedItems.filter((item) => item.deletedAt >= cutoff);
-  if (state.deletedItems.length !== before) scheduleSave();
+  state.deletedWorkflowNotes = state.deletedWorkflowNotes.filter((item) => item.deletedAt >= cutoff);
+  if (state.deletedItems.length + state.deletedWorkflowNotes.length !== before) scheduleSave();
 }
 
 function renderTrash() {
   const retentionDays = Number(state.settings.trashRetentionDays);
   $('#trash-retention-label').textContent = `保留 ${retentionDays} 天`;
-  $('#trash-description').textContent = `从列表移除的密钥会暂存在这里，${retentionDays} 天内可以随时恢复；只有“彻底删除”会立即永久删除。`;
+  $('#trash-description').textContent = `移除的密钥和操作笔记会暂存在这里，${retentionDays} 天内可以随时恢复；只有“彻底删除”会立即永久删除。`;
   const list = $('#trash-list');
-  if (state.deletedItems.length === 0) {
+  if (state.deletedItems.length + state.deletedWorkflowNotes.length === 0) {
     list.innerHTML = '<p class="field-hint center">回收站是空的</p>';
     return;
   }
-  list.innerHTML = state.deletedItems.map((item) => `
-    <div class="manage-row" data-trash-id="${escapeHtml(item.id)}">
-      <div class="manage-row-main"><strong>${escapeHtml(item.name)}</strong><span>删除于 ${escapeHtml(formatDateTime(item.deletedAt))}</span></div>
+  const keyRows = state.deletedItems.map((item) => `
+    <div class="manage-row" data-trash-kind="key" data-trash-id="${escapeHtml(item.id)}">
+      <div class="manage-row-main"><strong>${escapeHtml(item.name)}</strong><span>2FA 条目 · 删除于 ${escapeHtml(formatDateTime(item.deletedAt))}</span></div>
       <div class="manage-actions"><button class="small-btn" type="button" data-trash-action="restore">恢复</button><button class="small-btn delete" type="button" data-trash-action="purge">彻底删除</button></div>
     </div>`).join('');
+  const noteRows = state.deletedWorkflowNotes.map((note) => `
+    <div class="manage-row" data-trash-kind="workflow" data-trash-id="${escapeHtml(note.id)}">
+      <div class="manage-row-main"><strong>${escapeHtml(note.title)}</strong><span>操作笔记 · 删除于 ${escapeHtml(formatDateTime(note.deletedAt))}</span></div>
+      <div class="manage-actions"><button class="small-btn" type="button" data-trash-action="restore">恢复</button><button class="small-btn delete" type="button" data-trash-action="purge">彻底删除</button></div>
+    </div>`).join('');
+  list.innerHTML = keyRows + noteRows;
 }
 
 async function restoreTrashItem(id) {
@@ -1294,6 +1529,40 @@ async function purgeTrashItem(id) {
   renderAll();
   openModal('trash-modal');
   showToast('已彻底删除');
+}
+
+async function restoreWorkflowTrashItem(id) {
+  const index = state.deletedWorkflowNotes.findIndex((note) => note.id === id);
+  if (index < 0) return;
+  const [note] = state.deletedWorkflowNotes.splice(index, 1);
+  const existing = new Set(state.workflowNotes.map((item) => item.title.toLocaleLowerCase()));
+  note.title = uniqueName(note.title, existing);
+  state.workflowNotes.push(normalizeWorkflowNote(note));
+  await saveVault();
+  renderTrash();
+  renderAll();
+  showToast('操作笔记已恢复');
+}
+
+async function purgeWorkflowTrashItem(id) {
+  const note = state.deletedWorkflowNotes.find((item) => item.id === id);
+  if (!note) return;
+  const confirmed = await askConfirm({
+    title: '彻底删除操作笔记',
+    message: `彻底删除“${note.title}”？此操作无法撤销。`,
+    confirmText: '彻底删除',
+  });
+  if (!confirmed) {
+    renderTrash();
+    openModal('trash-modal');
+    return;
+  }
+  state.deletedWorkflowNotes = state.deletedWorkflowNotes.filter((item) => item.id !== id);
+  await saveVault();
+  renderTrash();
+  renderAll();
+  openModal('trash-modal');
+  showToast('操作笔记已彻底删除');
 }
 
 function renderGroups() {
@@ -1361,7 +1630,7 @@ function updateImportSubmitState() {
     button.disabled = false;
     return;
   }
-  const count = state.importPreview.plan.stats.actionable;
+  const count = state.importPreview.plan.stats.actionable + state.importPreview.workflowNotes.length;
   button.textContent = count > 0 ? `确认导入 ${count} 条` : '没有可导入条目';
   button.disabled = count === 0;
 }
@@ -1383,7 +1652,7 @@ function importSecretHint(secret) {
   return normalized.length > 4 ? `密钥尾号 ${normalized.slice(-4)}` : '密钥已隐藏';
 }
 
-function renderImportPreview(source, plan) {
+function renderImportPreview(source, plan, workflowNoteCount = 0) {
   const actionMeta = {
     add: { label: '新增', detail: '将新增到保险库' },
     overwrite: { label: '覆盖', detail: '将覆盖同名条目' },
@@ -1416,7 +1685,7 @@ function renderImportPreview(source, plan) {
   preview.innerHTML = `
     <div class="import-preview-header">
       <div><p>${escapeHtml(source)} · 解析完成</p><strong>确认导入内容</strong></div>
-      <span>确认前保险库不会改变</span>
+      <span>确认前保险库不会改变${workflowNoteCount ? ` · 含 ${workflowNoteCount} 条操作笔记` : ''}</span>
     </div>
     <div class="import-preview-stats" aria-label="导入统计">
       <span class="add"><strong>${plan.stats.add}</strong> 新增</span>
@@ -1446,11 +1715,12 @@ async function importKeysFromForm(event) {
       if (!content) throw new Error('请选择文件或粘贴导入链接');
       const parsed = await parseImportContent(content, $('#import-password').value);
       const { valid, invalid } = await validateImportedItems(parsed.items, generateTOTP);
+      const workflowNotes = parsed.workflowNotes || [];
       if (revision !== state.importRevision) return;
-      if (valid.length === 0) throw new Error(`没有有效的可导入条目，已跳过 ${invalid.length} 个`);
+      if (valid.length === 0 && workflowNotes.length === 0) throw new Error(`没有有效的可导入条目，已跳过 ${invalid.length} 个`);
       const plan = createImportPlan(valid, state.keys, $('#import-strategy').value, invalid);
-      state.importPreview = { source: parsed.source, plan };
-      renderImportPreview(parsed.source, plan);
+      state.importPreview = { source: parsed.source, plan, workflowNotes };
+      renderImportPreview(parsed.source, plan, workflowNotes.length);
     } catch (error) {
       showError('#import-error', error.code === 'PASSWORD_REQUIRED' ? `${error.message}，然后重试` : error.message);
     } finally {
@@ -1465,12 +1735,25 @@ async function importKeysFromForm(event) {
   setBusy(button, true, '正在导入…');
   try {
     const result = applyImportPlan(pending.plan, state.keys, generateId);
-    if (result.stats.actionable === 0) throw new Error('没有可导入的条目，请更改同名处理方式');
+    const existingNoteNames = new Set(state.workflowNotes.map((note) => note.title.toLocaleLowerCase()));
+    const importedNotes = pending.workflowNotes.map((rawNote) => {
+      const note = normalizeWorkflowNote(rawNote);
+      const linkedKeys = note.linkedKeys.map((link) => {
+        const keyId = result.importedKeyIds.get(link.keyId) || link.keyId;
+        const key = result.keys.find((item) => item.id === keyId);
+        return key ? workflowLinkSnapshot(key) : { ...link, keyId };
+      });
+      const title = uniqueName(note.title, existingNoteNames);
+      existingNoteNames.add(title.toLocaleLowerCase());
+      return normalizeWorkflowNote({ ...note, id: generateId(), title, linkedKeys, updatedAt: Date.now() });
+    });
+    if (result.stats.actionable + importedNotes.length === 0) throw new Error('没有可导入的条目，请更改同名处理方式');
     state.keys = result.keys;
+    state.workflowNotes.push(...importedNotes);
     await saveVault();
     renderAll();
     const skipped = result.stats.skip + result.stats.invalid;
-    showToast(`导入完成：新增 ${result.stats.add}，覆盖 ${result.stats.overwrite}，跳过 ${skipped}`);
+    showToast(`导入完成：新增 ${result.stats.add}，覆盖 ${result.stats.overwrite}，笔记 ${importedNotes.length}，跳过 ${skipped}`);
     completed = true;
   } catch (error) {
     if (error.code === 'STALE_IMPORT') resetImportPreview({ clearError: false });
@@ -1488,13 +1771,16 @@ function exportKeys() {
 }
 
 function exportedVault(keys = exportKeys()) {
+  const selectedExport = state.exportKeyIds instanceof Set;
   return {
     format: '2fa-authenticator-backup',
     version: VAULT_VERSION,
     account: state.accountName,
     exportedAt: new Date().toISOString(),
     keys,
-    deletedItems: state.exportKeyIds instanceof Set ? [] : state.deletedItems,
+    deletedItems: selectedExport ? [] : state.deletedItems,
+    workflowNotes: selectedExport ? [] : state.workflowNotes,
+    deletedWorkflowNotes: selectedExport ? [] : state.deletedWorkflowNotes,
   };
 }
 
@@ -1502,7 +1788,7 @@ function openExportDialog(keyIds = null) {
   state.exportKeyIds = keyIds ? new Set(keyIds) : null;
   const count = exportKeys().length;
   $('#export-title').textContent = state.exportKeyIds ? '导出所选密钥' : '导出备份';
-  $('#export-scope').textContent = state.exportKeyIds ? `将导出已选择的 ${count} 个密钥。` : '将导出当前保险库中的全部数据。';
+  $('#export-scope').textContent = state.exportKeyIds ? `将导出已选择的 ${count} 个密钥。` : `将导出 ${count} 个密钥、${state.workflowNotes.length} 条操作笔记和回收站数据。`;
   $('#export-form').reset();
   hideError('#export-error');
   setHidden('#export-warning', true);
@@ -1560,9 +1846,11 @@ async function exportKeysFromForm(event) {
   setBusy(button, true, '正在导出…');
   try {
     const keys = exportKeys();
-    if (keys.length === 0) throw new Error('没有可导出的密钥');
     const selectedExport = state.exportKeyIds instanceof Set;
     const format = $('#export-format').value;
+    if (keys.length === 0 && (selectedExport || format === 'otpauth' || state.workflowNotes.length === 0)) {
+      throw new Error(format === 'otpauth' ? '没有可导出的密钥' : '没有可导出的数据');
+    }
     const date = new Date().toISOString().slice(0, 10);
     const accountSlug = state.accountName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]+/g, '-');
     if (format === 'encrypted') {
@@ -1924,6 +2212,17 @@ function setupEvents() {
     applyTheme(state.settings.theme);
   });
   $('#settings-open').addEventListener('click', () => { fillSettingsForm(); openModal('settings-modal', '#theme-select'); });
+  for (const button of $$('[data-vault-view]')) button.addEventListener('click', () => setVaultView(button.dataset.vaultView));
+  $('#vault-view-tabs').addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const tabs = $$('[data-vault-view]', event.currentTarget);
+    const current = tabs.indexOf(document.activeElement);
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
+    const next = tabs[(current + direction + tabs.length) % tabs.length];
+    setVaultView(next.dataset.vaultView);
+    next.focus();
+  });
   $('#settings-form').addEventListener('submit', saveSettingsFromForm);
   $('#quick-unlock-enabled').addEventListener('change', renderQuickUnlockSettings);
   $('#sort-quick').addEventListener('change', (event) => applySortMode(event.target.value, true));
@@ -1937,6 +2236,52 @@ function setupEvents() {
 
   $('#add-open').addEventListener('click', () => { resetAddForm(); openModal('add-modal', '#add-name'); });
   $('[data-action="open-add"]').addEventListener('click', () => { resetAddForm(); openModal('add-modal', '#add-name'); });
+  $('#workflow-add-open').addEventListener('click', () => openWorkflowEditor());
+  $('[data-action="open-workflow-add"]').addEventListener('click', () => openWorkflowEditor());
+  $('#workflow-form').addEventListener('submit', saveWorkflowNote);
+  $('#workflow-edit-modal').addEventListener('modal:close', () => { state.editingWorkflowLinks = []; });
+  $('#workflow-key-add').addEventListener('click', () => {
+    const key = state.keys.find((item) => item.id === $('#workflow-key-select').value);
+    if (!key || state.editingWorkflowLinks.some((link) => link.keyId === key.id)) return;
+    state.editingWorkflowLinks.push(workflowLinkSnapshot(key));
+    renderWorkflowKeyPicker();
+  });
+  $('#workflow-selected-keys').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-workflow-link-action]');
+    const row = event.target.closest('[data-workflow-link-index]');
+    if (!button || !row) return;
+    const index = Number(row.dataset.workflowLinkIndex);
+    if (!Number.isInteger(index) || !state.editingWorkflowLinks[index]) return;
+    if (button.dataset.workflowLinkAction === 'remove') state.editingWorkflowLinks.splice(index, 1);
+    else {
+      const direction = button.dataset.workflowLinkAction === 'up' ? -1 : 1;
+      const target = index + direction;
+      if (!state.editingWorkflowLinks[target]) return;
+      [state.editingWorkflowLinks[index], state.editingWorkflowLinks[target]] = [state.editingWorkflowLinks[target], state.editingWorkflowLinks[index]];
+    }
+    renderWorkflowKeyPicker();
+  });
+  $('#workflow-note-list').addEventListener('click', async (event) => {
+    const card = event.target.closest('[data-workflow-id]');
+    const action = event.target.closest('[data-workflow-action]')?.dataset.workflowAction;
+    if (!card || !action) return;
+    if (action === 'run') await openWorkflowRun(card.dataset.workflowId);
+    else if (action === 'edit') openWorkflowEditor(card.dataset.workflowId);
+    else if (action === 'delete') await deleteWorkflowNote(card.dataset.workflowId);
+  });
+  $('#workflow-run-keys').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-workflow-run-key-id]');
+    if (!button) return;
+    const key = state.keys.find((item) => item.id === button.dataset.workflowRunKeyId);
+    if (!key) return;
+    button.disabled = true;
+    try {
+      await copyKeyCode(key, null);
+      await updateWorkflowRunCodes();
+    } finally {
+      button.disabled = false;
+    }
+  });
   for (const button of $$('[data-add-tab]')) button.addEventListener('click', () => switchAddTab(button.dataset.addTab));
   $('#add-form').addEventListener('submit', addKeyFromForm);
   $('#edit-form').addEventListener('submit', saveEditedKey);
@@ -2050,21 +2395,26 @@ function setupEvents() {
         event.target.dispatchEvent(new Event('input', { bubbles: true }));
         return;
       }
-      state.search = '';
-      $('#search-input').value = '';
-      renderKeys();
-      $('#token-list').focus();
+      if (state.vaultView === 'tokens') {
+        state.search = '';
+        $('#search-input').value = '';
+        renderKeys();
+        $('#token-list').focus();
+      }
       return;
     }
     if (inputTarget) return;
-    if (event.key === '/' || ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k')) {
+    if (state.vaultView === 'tokens' && (event.key === '/' || ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k'))) {
       event.preventDefault();
       $('#search-input').focus();
       $('#search-input').select();
     } else if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLocaleLowerCase() === 'n') {
       event.preventDefault();
-      resetAddForm();
-      openModal('add-modal', '#add-name');
+      if (state.vaultView === 'workflow') openWorkflowEditor();
+      else {
+        resetAddForm();
+        openModal('add-modal', '#add-name');
+      }
     }
   });
   $('#duplicate-key').addEventListener('click', duplicateEditedKey);
@@ -2103,7 +2453,10 @@ function setupEvents() {
     const row = event.target.closest('[data-trash-id]');
     const action = event.target.closest('[data-trash-action]')?.dataset.trashAction;
     if (!row || !action) return;
-    if (action === 'restore') restoreTrashItem(row.dataset.trashId);
+    if (row.dataset.trashKind === 'workflow') {
+      if (action === 'restore') restoreWorkflowTrashItem(row.dataset.trashId);
+      else purgeWorkflowTrashItem(row.dataset.trashId);
+    } else if (action === 'restore') restoreTrashItem(row.dataset.trashId);
     else purgeTrashItem(row.dataset.trashId);
   });
 

@@ -15,6 +15,7 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **Offline Access**: After the first online visit, the app can start without a network connection; encrypted vaults are cached in IndexedDB and synchronized with explicit conflict handling
 - **QR Migration**: Scan from camera, images, or clipboard, and display an offline migration QR from the edit screen
 - **Complete Management**: Search, groups, notes, favorites, smart ordering, recent-use badges, custom ordering, bulk actions, cloning, and configurable trash retention
+- **Workflow Notes**: Save step-by-step procedures, link multiple 2FA entries in usage order, and view or copy live codes while following the workflow
 - **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
 - **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports with gentle periodic backup reminders
 - **Security Controls**: Auto-lock, background lock, clipboard clearing, copy vibration, password strength, safe re-encryption, and optional five-minute PIN quick unlock
@@ -185,7 +186,7 @@ Use "Lock Current Vault" in Settings to return to login; when PIN quick unlock i
 
 ### Import/Export
 
-**Export Backup**: choose password-encrypted JSON (recommended), plaintext JSON, or an OTPAuth URI list. Plaintext formats contain raw secrets and must be protected.
+**Export Backup**: choose password-encrypted JSON (recommended), plaintext JSON, or an OTPAuth URI list. Full JSON backups include keys, workflow notes, and their links. Plaintext formats contain raw secrets and must be protected.
 
 **Import Backup**:
 1. Choose a file or paste an OTPAuth/Google migration URI

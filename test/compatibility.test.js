@@ -74,6 +74,22 @@ describe('backward compatibility', () => {
     const vault = normalizeVaultData([{ id: 1, name: 'Legacy', secret: 'JBSWY3DPEHPK3PXP' }]);
     expect(vault.keys[0]).toMatchObject({ id: '1', group: '', note: '', period: 30, digits: 6, algorithm: 'SHA-1', favorite: false, useCount: 0 });
     expect(vault.deletedItems).toEqual([]);
+    expect(vault.workflowNotes).toEqual([]);
+    expect(vault.deletedWorkflowNotes).toEqual([]);
+  });
+
+  it('normalizes workflow notes and legacy key id links', () => {
+    const vault = normalizeVaultData({
+      keys: [],
+      workflowNotes: [{
+        id: 'note-1', title: ' 发布流程 ', content: ' 登录\n确认 ', keyIds: ['github', 'github', 'cloudflare'],
+      }],
+      deletedWorkflowNotes: [{ id: 'note-2', title: '旧流程', content: '停用', linkedKeys: [{ keyId: 'legacy', name: 'Legacy' }], deletedAt: 123 }],
+    });
+    expect(vault.workflowNotes[0]).toMatchObject({
+      id: 'note-1', title: '发布流程', content: '登录\n确认', linkedKeys: [{ keyId: 'github' }, { keyId: 'cloudflare' }],
+    });
+    expect(vault.deletedWorkflowNotes[0]).toMatchObject({ id: 'note-2', deletedAt: 123 });
   });
 
   it('normalizes optional notes and limits their stored length', () => {
@@ -120,9 +136,20 @@ describe('backward compatibility', () => {
     expect(applied.keys[0]).toMatchObject({
       id: 'existing-github', secret: 'JBSWY3DPEHPK3PXP', order: 4, favorite: true, lastUsed: 123, useCount: 7,
     });
+    expect(applied.importedKeyIds.get(overwritten.items[0].candidate.id)).toBe('existing-github');
 
     const renamed = createImportPlan([candidates[0]], existing, 'all');
     expect(renamed.items[0]).toMatchObject({ action: 'add', originalName: 'GitHub', candidate: { name: 'GitHub (2)' } });
+  });
+
+  it('keeps workflow notes when parsing native backups', async () => {
+    const parsed = await parseImportContent(JSON.stringify({
+      format: '2fa-authenticator-backup',
+      keys: [{ id: 'github', name: 'GitHub', secret: 'JBSWY3DPEHPK3PXP' }],
+      workflowNotes: [{ id: 'note-1', title: '发布', content: '登录', linkedKeys: [{ keyId: 'github', name: 'GitHub' }] }],
+    }));
+    expect(parsed.workflowNotes).toHaveLength(1);
+    expect(parsed.workflowNotes[0]).toMatchObject({ title: '发布', linkedKeys: [{ keyId: 'github', name: 'GitHub' }] });
   });
 
   it('uses the frozen plan for duplicate entries in the same import batch', () => {
