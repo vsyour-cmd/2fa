@@ -144,7 +144,7 @@ npx wrangler deploy
 
 - `wrangler.jsonc` 会在上传或部署前自动执行 `npm run build`，生成 `static/` 静态资源目录。
 - `main` 分支用于生产部署，其他分支用于预览版本。
-- Cloudflare 中的 Worker 名称必须与 `wrangler.jsonc` 的 `name`（`2fa-sync`）一致。
+- Cloudflare 中的 Worker 名称必须与 `wrangler.jsonc` 的 `name`（`2fa`）一致。
 - 自动部署前需在 Worker 环境中保留 `ADMIN_PASSWORD` Secret；GitHub 同步不会覆盖 Secret。
 
 ## 使用说明

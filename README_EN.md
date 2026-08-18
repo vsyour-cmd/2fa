@@ -144,7 +144,7 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 
 - `wrangler.jsonc` automatically runs `npm run build` before uploads and deployments, creating the `static/` assets directory.
 - The `main` branch is used for production deployments and other branches create previews.
-- The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`2fa-sync`).
+- The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`2fa`).
 - Keep the `ADMIN_PASSWORD` Secret configured in the Worker environment; GitHub deployments do not overwrite it.
 
 ## Usage Guide
