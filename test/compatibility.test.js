@@ -87,7 +87,7 @@ describe('backward compatibility', () => {
       deletedWorkflowNotes: [{ id: 'note-2', title: '旧流程', content: '停用', linkedKeys: [{ keyId: 'legacy', name: 'Legacy' }], deletedAt: 123 }],
     });
     expect(vault.workflowNotes[0]).toMatchObject({
-      id: 'note-1', title: '发布流程', content: '登录\n确认', linkedKeys: [{ keyId: 'github' }, { keyId: 'cloudflare' }],
+      id: 'note-1', title: '发布流程', content: '登录\n确认', linkedKeys: [{ keyId: 'github' }, { keyId: 'cloudflare' }], favorite: false, lastUsed: 0, useCount: 0,
     });
     expect(vault.deletedWorkflowNotes[0]).toMatchObject({ id: 'note-2', deletedAt: 123 });
   });

@@ -108,6 +108,13 @@ describe('static application shell', () => {
     expect(styles).toContain('.workflow-markdown-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.markdown-body code {');
     expect(styles).toContain('.workflow-order-button { display: inline-grid; width: 44px; height: 44px;');
+    expect(html).toContain('id="workflow-sort"');
+    expect(app).toContain('compareSmartWorkflowNotes(left, right, now)');
+    expect(app).toContain('note.useCount = Math.max(0, Number(note.useCount || 0)) + 1');
+    expect(app).toContain('class="workflow-note-card${frequent ? \' frequent\' : \'\'}"');
+    expect(app).toContain('class="usage-badge recent"');
+    expect(app).toContain('data-workflow-action="favorite"');
+    expect(styles).toContain('.workflow-note-card.frequent::before');
   });
 
   it('lets touch and keyboard users expand long notes without cluttering short notes', () => {
@@ -170,7 +177,7 @@ describe('static application shell', () => {
   });
 
   it('shows recent use and offers an oldest-used view', () => {
-    expect(html.match(/<option value="stale">最久未使用<\/option>/g)).toHaveLength(2);
+    expect(html.match(/<option value="stale">最久未使用<\/option>/g)).toHaveLength(3);
     expect(app).toContain('compareStaleKeys(left, right)');
     expect(app).toContain('class="token-last-used"');
     expect(app).toContain("'从未使用'");

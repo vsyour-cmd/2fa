@@ -16,6 +16,7 @@ describe('settings migration', () => {
   it('uses smart ordering for new installations', () => {
     vi.stubGlobal('localStorage', memoryStorage());
     expect(loadSettings().sortMode).toBe('smart');
+    expect(loadSettings().workflowSortMode).toBe('smart');
     expect(loadSettings().columnsPerRow).toBe('auto');
     expect(DEFAULT_SETTINGS.settingsVersion).toBe(3);
   });
@@ -37,6 +38,8 @@ describe('settings migration', () => {
   it('persists the oldest-used sorting mode', () => {
     vi.stubGlobal('localStorage', memoryStorage());
     expect(saveSettings({ ...DEFAULT_SETTINGS, sortMode: 'stale' }).sortMode).toBe('stale');
+    expect(saveSettings({ ...DEFAULT_SETTINGS, workflowSortMode: 'stale' }).workflowSortMode).toBe('stale');
+    expect(saveSettings({ ...DEFAULT_SETTINGS, workflowSortMode: 'custom' }).workflowSortMode).toBe('smart');
   });
 
   it('defaults copy vibration on and preserves an explicit opt-out', () => {

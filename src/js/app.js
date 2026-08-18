@@ -79,7 +79,9 @@ import {
 import {
   DEFAULT_ACCOUNT,
   compareSmartKeys,
+  compareSmartWorkflowNotes,
   compareStaleKeys,
+  compareStaleWorkflowNotes,
   downloadText,
   escapeHtml,
   formatDateTime,
@@ -910,17 +912,31 @@ function setVaultView(view, focus = false) {
 function renderWorkflowNotes() {
   $('#tokens-tab-count').textContent = String(state.keys.length);
   $('#workflow-tab-count').textContent = String(state.workflowNotes.length);
+  $('#workflow-sort').value = state.settings.workflowSortMode;
   setHidden('#workflow-empty', state.workflowNotes.length !== 0);
-  const notes = [...state.workflowNotes].sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  const notes = getSortedWorkflowNotes();
+  const now = Date.now();
+  const frequentIds = new Set(state.settings.workflowSortMode === 'smart'
+    ? [...state.workflowNotes]
+      .filter((note) => Number(note.useCount || 0) >= 2)
+      .sort((left, right) => compareSmartWorkflowNotes(left, right, now))
+      .slice(0, 3)
+      .map((note) => note.id)
+    : []);
   $('#workflow-note-list').innerHTML = notes.map((note) => {
     const preview = renderMarkdown(note.content);
     const linkStates = note.linkedKeys.map(resolveWorkflowLink);
     const previewLinks = linkStates.slice(0, 4).map((item) => `<span class="workflow-link-chip${item.status === 'active' ? '' : ' unavailable'}"><span>${escapeHtml(item.label)}</span>${item.status === 'recycled' ? ' · 回收站' : item.status === 'unavailable' ? ' · 不可用' : ''}</span>`).join('');
     const hiddenLinks = linkStates.length - 4;
+    const lastUsedAt = Number(note.lastUsed || 0);
+    const lastUsed = lastUsedAt > 0 ? formatDateTime(lastUsedAt) : '从未使用';
+    const recentlyUsed = lastUsedAt > 0 && now - lastUsedAt <= RECENT_USAGE_WINDOW_MS;
+    const frequent = frequentIds.has(note.id);
     return `
-      <article class="workflow-note-card" data-workflow-id="${escapeHtml(note.id)}">
+      <article class="workflow-note-card${frequent ? ' frequent' : ''}" data-workflow-id="${escapeHtml(note.id)}">
         <div class="workflow-note-header">
-          <div><h3 title="${escapeHtml(note.title)}">${escapeHtml(note.title)}</h3><span class="workflow-note-meta">Markdown · ${note.content.length} 个字符 · ${note.linkedKeys.length} 个验证码 · 更新于 ${escapeHtml(formatDateTime(note.updatedAt))}</span></div>
+          <div class="workflow-note-heading-main"><div class="workflow-note-title-line"><h3 title="${escapeHtml(note.title)}">${escapeHtml(note.title)}</h3><div class="token-badges">${frequent ? `<span class="usage-badge" title="已使用 ${Number(note.useCount || 0)} 次">常用</span>` : ''}${recentlyUsed ? `<span class="usage-badge recent" title="最近使用：${escapeHtml(lastUsed)}">最近使用</span>` : ''}</div></div><span class="workflow-note-meta">Markdown · ${note.content.length} 个字符 · ${note.linkedKeys.length} 个验证码 · 更新于 ${escapeHtml(formatDateTime(note.updatedAt))}</span><span class="workflow-note-usage" title="最近使用时间：${escapeHtml(lastUsed)}">最近使用：${escapeHtml(lastUsed)} · 已使用 ${Number(note.useCount || 0)} 次</span></div>
+          <button class="favorite-btn${note.favorite ? ' active' : ''}" type="button" data-workflow-action="favorite" aria-label="${note.favorite ? '取消收藏' : '收藏'} ${escapeHtml(note.title)}" aria-pressed="${note.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
         <div class="workflow-note-preview markdown-body">${preview || '<p class="markdown-empty">尚未记录操作内容</p>'}</div>
         <div class="workflow-note-links">${previewLinks || '<span class="workflow-link-chip"><span>未关联验证码</span></span>'}${hiddenLinks > 0 ? `<span class="workflow-link-chip"><span>另有 ${hiddenLinks} 个</span></span>` : ''}</div>
@@ -929,12 +945,23 @@ function renderWorkflowNotes() {
   }).join('');
 }
 
+function getSortedWorkflowNotes() {
+  const now = Date.now();
+  return [...state.workflowNotes].sort((left, right) => {
+    if (state.settings.workflowSortMode === 'smart') return compareSmartWorkflowNotes(left, right, now);
+    if (state.settings.workflowSortMode === 'stale') return compareStaleWorkflowNotes(left, right);
+    if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
+    if (state.settings.workflowSortMode === 'name') return left.title.localeCompare(right.title, 'zh-CN');
+    return Number(right.lastUsed || 0) - Number(left.lastUsed || 0) || left.title.localeCompare(right.title, 'zh-CN');
+  });
+}
+
 function updateTokenWorkflowSelectionCount() {
   $('#token-workflow-selection-count').textContent = `已选 ${state.editingTokenWorkflowNoteIds.size} 条`;
 }
 
 function renderTokenWorkflowPicker() {
-  const notes = [...state.workflowNotes].sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  const notes = getSortedWorkflowNotes();
   setHidden('#token-workflow-empty', notes.length !== 0);
   setHidden('#token-workflow-list', notes.length === 0);
   $('#token-workflow-submit').disabled = notes.length === 0;
@@ -1063,6 +1090,9 @@ async function saveWorkflowNote(event) {
         const current = state.keys.find((key) => key.id === link.keyId) || state.deletedItems.find((key) => key.id === link.keyId);
         return current ? workflowLinkSnapshot(current) : link;
       }),
+      favorite: previous?.favorite || false,
+      lastUsed: previous?.lastUsed || 0,
+      useCount: previous?.useCount || 0,
       createdAt: previous?.createdAt || Date.now(),
       updatedAt: Date.now(),
     });
@@ -1148,6 +1178,10 @@ async function openWorkflowRun(id) {
     : '<li class="field-hint center">这个场景没有关联 2FA 条目</li>';
   openModal('workflow-run-modal', note.linkedKeys.length ? '[data-workflow-run-key-id]' : '[data-close-modal="workflow-run-modal"]');
   await updateWorkflowRunCodes();
+  note.lastUsed = Date.now();
+  note.useCount = Math.max(0, Number(note.useCount || 0)) + 1;
+  scheduleSave();
+  renderWorkflowNotes();
 }
 
 function renderAll() {
@@ -1999,6 +2033,16 @@ function applySortMode(sortMode, announce = false) {
   }
 }
 
+function applyWorkflowSortMode(workflowSortMode, announce = false) {
+  state.settings = saveSettings({ ...state.settings, workflowSortMode });
+  $('#workflow-sort').value = state.settings.workflowSortMode;
+  renderWorkflowNotes();
+  if (announce) {
+    const labels = { smart: '使用场景已启用智能排序', recent: '使用场景已按最近使用排序', stale: '使用场景已按最久未使用排序', name: '使用场景已按名称排序' };
+    showToast(labels[state.settings.workflowSortMode] || '使用场景排序已更新');
+  }
+}
+
 async function saveSettingsFromForm(event) {
   event.preventDefault();
   hideError('#settings-error');
@@ -2360,6 +2404,7 @@ function setupEvents() {
   $('[data-action="open-add"]').addEventListener('click', () => { resetAddForm(); openModal('add-modal', '#add-name'); });
   $('#workflow-add-open').addEventListener('click', () => openWorkflowEditor());
   $('[data-action="open-workflow-add"]').addEventListener('click', () => openWorkflowEditor());
+  $('#workflow-sort').addEventListener('change', (event) => applyWorkflowSortMode(event.target.value, true));
   $('#workflow-form').addEventListener('submit', saveWorkflowNote);
   $('#workflow-edit-modal').addEventListener('modal:close', () => { state.editingWorkflowLinks = []; });
   $('#workflow-content').addEventListener('input', renderWorkflowMarkdownPreview);
@@ -2389,7 +2434,13 @@ function setupEvents() {
     const card = event.target.closest('[data-workflow-id]');
     const action = event.target.closest('[data-workflow-action]')?.dataset.workflowAction;
     if (!card || !action) return;
-    if (action === 'run') await openWorkflowRun(card.dataset.workflowId);
+    if (action === 'favorite') {
+      const note = state.workflowNotes.find((item) => item.id === card.dataset.workflowId);
+      if (!note) return;
+      note.favorite = !note.favorite;
+      await saveVault({ silent: true });
+      renderWorkflowNotes();
+    } else if (action === 'run') await openWorkflowRun(card.dataset.workflowId);
     else if (action === 'edit') openWorkflowEditor(card.dataset.workflowId);
     else if (action === 'delete') await deleteWorkflowNote(card.dataset.workflowId);
   });

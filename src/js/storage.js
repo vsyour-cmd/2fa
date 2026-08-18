@@ -9,6 +9,7 @@ const QUICK_UNLOCK_KEY = '2fa_quick_unlock_v1';
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system',
   sortMode: 'smart',
+  workflowSortMode: 'smart',
   columnsPerRow: 'auto',
   autoLockMinutes: 15,
   lockOnHidden: false,
@@ -241,6 +242,7 @@ export function loadSettings() {
   if (!saved || typeof saved !== 'object') return { ...DEFAULT_SETTINGS };
   const migrated = { ...saved };
   if (Number(migrated.settingsVersion || 0) < 2 && migrated.sortMode === 'custom') migrated.sortMode = 'smart';
+  if (!['smart', 'name', 'recent', 'stale'].includes(migrated.workflowSortMode)) migrated.workflowSortMode = DEFAULT_SETTINGS.workflowSortMode;
   if (!['auto', '1', '2', '3', '4'].includes(String(migrated.columnsPerRow || 'auto'))) migrated.columnsPerRow = 'auto';
   return { ...DEFAULT_SETTINGS, ...migrated, columnsPerRow: String(migrated.columnsPerRow || 'auto'), settingsVersion: 3 };
 }
@@ -249,6 +251,7 @@ export function saveSettings(settings) {
   const safe = {
     theme: ['system', 'light', 'dark'].includes(settings.theme) ? settings.theme : DEFAULT_SETTINGS.theme,
     sortMode: ['smart', 'custom', 'name', 'recent', 'stale'].includes(settings.sortMode) ? settings.sortMode : DEFAULT_SETTINGS.sortMode,
+    workflowSortMode: ['smart', 'name', 'recent', 'stale'].includes(settings.workflowSortMode) ? settings.workflowSortMode : DEFAULT_SETTINGS.workflowSortMode,
     columnsPerRow: ['auto', '1', '2', '3', '4'].includes(String(settings.columnsPerRow)) ? String(settings.columnsPerRow) : DEFAULT_SETTINGS.columnsPerRow,
     autoLockMinutes: Math.max(0, Math.min(240, Number(settings.autoLockMinutes) || 0)),
     lockOnHidden: Boolean(settings.lockOnHidden),

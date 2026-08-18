@@ -72,6 +72,9 @@ export function normalizeWorkflowNote(raw = {}) {
     title: String(raw.title || '未命名场景').trim().slice(0, 100) || '未命名场景',
     content: String(raw.content || raw.steps || '').trim().slice(0, 5000),
     linkedKeys,
+    favorite: Boolean(raw.favorite),
+    lastUsed: Number.isFinite(Number(raw.lastUsed)) ? Math.max(0, Number(raw.lastUsed)) : 0,
+    useCount: Number.isFinite(Number(raw.useCount)) ? Math.max(0, Math.floor(Number(raw.useCount))) : 0,
     createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
   };
@@ -100,6 +103,22 @@ export function compareStaleKeys(left, right) {
   const lastUsedDifference = Math.max(0, Number(left?.lastUsed || 0)) - Math.max(0, Number(right?.lastUsed || 0));
   if (lastUsedDifference !== 0) return lastUsedDifference;
   return String(left?.name || '').localeCompare(String(right?.name || ''), 'zh-CN');
+}
+
+export function compareSmartWorkflowNotes(left, right, now = Date.now()) {
+  if (Boolean(left.favorite) !== Boolean(right.favorite)) return left.favorite ? -1 : 1;
+  const scoreDifference = getSmartSortScore(right, now) - getSmartSortScore(left, now);
+  if (Math.abs(scoreDifference) > 0.001) return scoreDifference;
+  const recentDifference = Number(right.lastUsed || 0) - Number(left.lastUsed || 0);
+  if (recentDifference !== 0) return recentDifference;
+  const updatedDifference = Number(right.updatedAt || 0) - Number(left.updatedAt || 0);
+  return updatedDifference || String(left.title || '').localeCompare(String(right.title || ''), 'zh-CN');
+}
+
+export function compareStaleWorkflowNotes(left, right) {
+  const lastUsedDifference = Math.max(0, Number(left?.lastUsed || 0)) - Math.max(0, Number(right?.lastUsed || 0));
+  if (lastUsedDifference !== 0) return lastUsedDifference;
+  return String(left?.title || '').localeCompare(String(right?.title || ''), 'zh-CN');
 }
 
 export function matchesKeyFilter(key = {}, query = '') {
