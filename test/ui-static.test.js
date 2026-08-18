@@ -20,6 +20,14 @@ describe('static application shell', () => {
     expect(themeBoot).toBeLessThan(stylesheet);
   });
 
+  it('uses a responsive 3D gradient background with an accessible static fallback', () => {
+    expect(styles).toContain('body::before, body::after');
+    expect(styles).toContain('@keyframes ambient-orbit');
+    expect(styles).toContain('@keyframes perspective-grid-drift');
+    expect(styles).toContain('transform: perspective(620px) rotateX(66deg)');
+    expect(styles).toContain('body::before, body::after { animation: none !important; }');
+  });
+
   it('contains the core accessible views and dialogs', () => {
     for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'token-workflow-modal', 'workflow-edit-modal', 'workflow-run-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
       expect(html).toContain(`id="${id}"`);

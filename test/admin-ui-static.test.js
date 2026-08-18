@@ -39,4 +39,12 @@ describe('admin console static shell', () => {
     expect(styles).toContain('@media (prefers-color-scheme: dark)');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
   });
+
+  it('uses the shared 3D gradient language without adding runtime assets', () => {
+    expect(styles).toContain('body::before, body::after');
+    expect(styles).toContain('@keyframes admin-ambient-orbit');
+    expect(styles).toContain('@keyframes admin-perspective-grid-drift');
+    expect(styles).toContain('transform: perspective(620px) rotateX(66deg)');
+    expect(styles).toContain('body::before, body::after { animation: none !important; }');
+  });
 });
