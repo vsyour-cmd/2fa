@@ -855,7 +855,7 @@ async function renderKeys() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11Z"></path><path d="M12 11v5M9.5 13.5h5"></path></svg>
             <span class="group-label-text">${escapeHtml(key.group || '未分组')}</span>${key.group ? '' : '<span class="group-label-add">设置</span>'}
           </button>
-          <div class="token-actions">${reorderControls}<button class="small-btn token-workflow-button" type="button" data-action="link-workflows" aria-label="为 ${escapeHtml(key.name)} 关联操作笔记，当前 ${linkedWorkflowCount} 条">关联笔记${linkedWorkflowCount ? `<span class="badge">${linkedWorkflowCount}</span>` : ''}</button><button class="small-btn" type="button" data-action="edit">编辑</button><button class="small-btn delete" type="button" data-action="delete">移入回收站</button></div>
+          <div class="token-actions">${reorderControls}<button class="small-btn token-workflow-button" type="button" data-action="link-workflows" aria-label="为 ${escapeHtml(key.name)} 关联使用场景，当前 ${linkedWorkflowCount} 个">关联场景${linkedWorkflowCount ? `<span class="badge">${linkedWorkflowCount}</span>` : ''}</button><button class="small-btn" type="button" data-action="edit">编辑</button><button class="small-btn delete" type="button" data-action="delete">移入回收站</button></div>
         </div>
       </article>`;
   }));
@@ -953,7 +953,7 @@ function openTokenWorkflowModal(keyId) {
   state.editingTokenWorkflowNoteIds = new Set(state.workflowNotes
     .filter((note) => note.linkedKeys.some((link) => link.keyId === key.id))
     .map((note) => note.id));
-  $('#token-workflow-key-name').textContent = `为“${key.name}”选择操作笔记`;
+  $('#token-workflow-key-name').textContent = `为“${key.name}”选择使用场景`;
   renderTokenWorkflowPicker();
   openModal('token-workflow-modal', state.workflowNotes.length ? '#token-workflow-list input' : '#token-workflow-create');
 }
@@ -982,7 +982,7 @@ async function saveTokenWorkflowLinks(event) {
     state.editingTokenWorkflowKeyId = '';
     state.editingTokenWorkflowNoteIds.clear();
     renderAll();
-    showToast(changed ? `已关联 ${nextNotes.filter((note) => note.linkedKeys.some((link) => link.keyId === key.id)).length} 条笔记` : '关联未更改');
+    showToast(changed ? `已关联 ${nextNotes.filter((note) => note.linkedKeys.some((link) => link.keyId === key.id)).length} 个场景` : '关联未更改');
   } catch (error) {
     showError('#token-workflow-error', error.message || '关联保存失败');
   } finally {
@@ -1035,7 +1035,7 @@ function openWorkflowEditor(id = '') {
   $('#workflow-id').value = note?.id || '';
   $('#workflow-title').value = note?.title || '';
   $('#workflow-content').value = note?.content || '';
-  $('#workflow-edit-title').textContent = note ? '编辑操作笔记' : '新建操作笔记';
+  $('#workflow-edit-title').textContent = note ? '编辑使用场景' : '新建使用场景';
   state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
   renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
@@ -1051,7 +1051,7 @@ async function saveWorkflowNote(event) {
     const id = $('#workflow-id').value;
     const title = $('#workflow-title').value.trim();
     const content = $('#workflow-content').value.trim();
-    if (!title) throw new Error('请输入笔记标题');
+    if (!title) throw new Error('请输入场景名称');
     if (!content) throw new Error('请填写操作内容');
     const index = state.workflowNotes.findIndex((note) => note.id === id);
     const previous = index >= 0 ? state.workflowNotes[index] : null;
@@ -1073,7 +1073,7 @@ async function saveWorkflowNote(event) {
     state.editingWorkflowLinks = [];
     renderAll();
     setVaultView('workflow');
-    showToast(previous ? '操作笔记已更新' : '操作笔记已创建');
+    showToast(previous ? '使用场景已更新' : '使用场景已创建');
   } catch (error) {
     showError('#workflow-error', error.message);
   } finally {
@@ -1086,7 +1086,7 @@ async function deleteWorkflowNote(id) {
   if (index < 0) return;
   const note = state.workflowNotes[index];
   const confirmed = await askConfirm({
-    title: '将笔记移入回收站',
+    title: '将使用场景移入回收站',
     message: `确定将“${note.title}”移入回收站？之后仍可恢复。`,
     confirmText: '移入回收站',
   });
@@ -1095,7 +1095,7 @@ async function deleteWorkflowNote(id) {
   state.deletedWorkflowNotes.unshift({ ...note, deletedAt: Date.now() });
   await saveVault();
   renderAll();
-  showToast('操作笔记已移入回收站', {
+  showToast('使用场景已移入回收站', {
     actionLabel: '撤销',
     duration: 6_000,
     onAction: async () => {
@@ -1104,7 +1104,7 @@ async function deleteWorkflowNote(id) {
       state.workflowNotes.push(note);
       await saveVault();
       renderAll();
-      showToast('已恢复操作笔记');
+      showToast('已恢复使用场景');
     },
   });
 }
@@ -1145,7 +1145,7 @@ async function openWorkflowRun(id) {
   $('#workflow-run-key-count').textContent = note.linkedKeys.length ? `共 ${note.linkedKeys.length} 个` : '未关联验证码';
   $('#workflow-run-keys').innerHTML = note.linkedKeys.length
     ? note.linkedKeys.map(renderWorkflowRunKey).join('')
-    : '<li class="field-hint center">这条笔记没有关联 2FA 条目</li>';
+    : '<li class="field-hint center">这个场景没有关联 2FA 条目</li>';
   openModal('workflow-run-modal', note.linkedKeys.length ? '[data-workflow-run-key-id]' : '[data-close-modal="workflow-run-modal"]');
   await updateWorkflowRunCodes();
 }
@@ -1562,7 +1562,7 @@ function pruneTrash() {
 function renderTrash() {
   const retentionDays = Number(state.settings.trashRetentionDays);
   $('#trash-retention-label').textContent = `保留 ${retentionDays} 天`;
-  $('#trash-description').textContent = `移除的密钥和操作笔记会暂存在这里，${retentionDays} 天内可以随时恢复；只有“彻底删除”会立即永久删除。`;
+  $('#trash-description').textContent = `移除的密钥和使用场景会暂存在这里，${retentionDays} 天内可以随时恢复；只有“彻底删除”会立即永久删除。`;
   const list = $('#trash-list');
   if (state.deletedItems.length + state.deletedWorkflowNotes.length === 0) {
     list.innerHTML = '<p class="field-hint center">回收站是空的</p>';
@@ -1575,7 +1575,7 @@ function renderTrash() {
     </div>`).join('');
   const noteRows = state.deletedWorkflowNotes.map((note) => `
     <div class="manage-row" data-trash-kind="workflow" data-trash-id="${escapeHtml(note.id)}">
-      <div class="manage-row-main"><strong>${escapeHtml(note.title)}</strong><span>操作笔记 · 删除于 ${escapeHtml(formatDateTime(note.deletedAt))}</span></div>
+      <div class="manage-row-main"><strong>${escapeHtml(note.title)}</strong><span>使用场景 · 删除于 ${escapeHtml(formatDateTime(note.deletedAt))}</span></div>
       <div class="manage-actions"><button class="small-btn" type="button" data-trash-action="restore">恢复</button><button class="small-btn delete" type="button" data-trash-action="purge">彻底删除</button></div>
     </div>`).join('');
   list.innerHTML = keyRows + noteRows;
@@ -1625,14 +1625,14 @@ async function restoreWorkflowTrashItem(id) {
   await saveVault();
   renderTrash();
   renderAll();
-  showToast('操作笔记已恢复');
+  showToast('使用场景已恢复');
 }
 
 async function purgeWorkflowTrashItem(id) {
   const note = state.deletedWorkflowNotes.find((item) => item.id === id);
   if (!note) return;
   const confirmed = await askConfirm({
-    title: '彻底删除操作笔记',
+    title: '彻底删除使用场景',
     message: `彻底删除“${note.title}”？此操作无法撤销。`,
     confirmText: '彻底删除',
   });
@@ -1646,7 +1646,7 @@ async function purgeWorkflowTrashItem(id) {
   renderTrash();
   renderAll();
   openModal('trash-modal');
-  showToast('操作笔记已彻底删除');
+  showToast('使用场景已彻底删除');
 }
 
 function renderGroups() {
@@ -1769,7 +1769,7 @@ function renderImportPreview(source, plan, workflowNoteCount = 0) {
   preview.innerHTML = `
     <div class="import-preview-header">
       <div><p>${escapeHtml(source)} · 解析完成</p><strong>确认导入内容</strong></div>
-      <span>确认前保险库不会改变${workflowNoteCount ? ` · 含 ${workflowNoteCount} 条操作笔记` : ''}</span>
+      <span>确认前保险库不会改变${workflowNoteCount ? ` · 含 ${workflowNoteCount} 个使用场景` : ''}</span>
     </div>
     <div class="import-preview-stats" aria-label="导入统计">
       <span class="add"><strong>${plan.stats.add}</strong> 新增</span>
@@ -1837,7 +1837,7 @@ async function importKeysFromForm(event) {
     await saveVault();
     renderAll();
     const skipped = result.stats.skip + result.stats.invalid;
-    showToast(`导入完成：新增 ${result.stats.add}，覆盖 ${result.stats.overwrite}，笔记 ${importedNotes.length}，跳过 ${skipped}`);
+    showToast(`导入完成：新增 ${result.stats.add}，覆盖 ${result.stats.overwrite}，场景 ${importedNotes.length}，跳过 ${skipped}`);
     completed = true;
   } catch (error) {
     if (error.code === 'STALE_IMPORT') resetImportPreview({ clearError: false });
@@ -1872,7 +1872,7 @@ function openExportDialog(keyIds = null) {
   state.exportKeyIds = keyIds ? new Set(keyIds) : null;
   const count = exportKeys().length;
   $('#export-title').textContent = state.exportKeyIds ? '导出所选密钥' : '导出备份';
-  $('#export-scope').textContent = state.exportKeyIds ? `将导出已选择的 ${count} 个密钥。` : `将导出 ${count} 个密钥、${state.workflowNotes.length} 条操作笔记和回收站数据。`;
+  $('#export-scope').textContent = state.exportKeyIds ? `将导出已选择的 ${count} 个密钥。` : `将导出 ${count} 个密钥、${state.workflowNotes.length} 个使用场景和回收站数据。`;
   $('#export-form').reset();
   hideError('#export-error');
   setHidden('#export-warning', true);

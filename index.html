@@ -109,7 +109,7 @@
 
         <div id="vault-view-tabs" class="segmented vault-view-tabs" role="tablist" aria-label="保险库内容">
           <button id="tokens-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="tokens-view" data-vault-view="tokens">验证码 <span id="tokens-tab-count" class="badge">0</span></button>
-          <button id="workflow-tab" type="button" role="tab" aria-selected="false" aria-controls="workflow-view" data-vault-view="workflow">操作笔记 <span id="workflow-tab-count" class="badge">0</span></button>
+          <button id="workflow-tab" type="button" role="tab" aria-selected="false" aria-controls="workflow-view" data-vault-view="workflow">使用场景 <span id="workflow-tab-count" class="badge">0</span></button>
         </div>
 
         <div id="tokens-view" role="tabpanel" aria-labelledby="tokens-tab">
@@ -211,17 +211,17 @@
           <div class="workflow-heading">
             <div>
               <p class="eyebrow">加密保存</p>
-              <h2>操作笔记</h2>
+              <h2>使用场景</h2>
               <p>记录办事流程，并按顺序关联需要使用的验证码。</p>
             </div>
-            <button id="workflow-add-open" class="btn btn-primary" type="button">新建笔记</button>
+            <button id="workflow-add-open" class="btn btn-primary" type="button">新建场景</button>
           </div>
           <div id="workflow-note-list" class="workflow-note-grid" aria-live="polite"></div>
           <div id="workflow-empty" class="empty-state compact hidden">
             <div aria-hidden="true">✦</div>
-            <h2>还没有操作笔记</h2>
+            <h2>还没有使用场景</h2>
             <p>把重复操作的步骤和所需验证码记录下来，下次照着做即可。</p>
-            <button class="btn btn-primary" type="button" data-action="open-workflow-add">创建第一条笔记</button>
+            <button class="btn btn-primary" type="button" data-action="open-workflow-add">创建第一个场景</button>
           </div>
         </section>
       </section>
@@ -346,15 +346,15 @@
 
     <div id="token-workflow-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="token-workflow-title">
       <div class="modal">
-        <div class="modal-header"><div><p class="eyebrow">双向关联</p><h2 id="token-workflow-title">关联操作笔记</h2></div><button class="icon-btn" type="button" data-close-modal="token-workflow-modal" aria-label="关闭">×</button></div>
+        <div class="modal-header"><div><p class="eyebrow">双向关联</p><h2 id="token-workflow-title">关联使用场景</h2></div><button class="icon-btn" type="button" data-close-modal="token-workflow-modal" aria-label="关闭">×</button></div>
         <form id="token-workflow-form">
           <p id="token-workflow-key-name" class="quick-group-key"></p>
-          <div class="token-workflow-heading"><p>勾选使用这个验证码的笔记</p><span id="token-workflow-selection-count" aria-live="polite">已选 0 条</span></div>
-          <div id="token-workflow-list" class="token-workflow-list" role="group" aria-label="可关联的操作笔记"></div>
+          <div class="token-workflow-heading"><p>勾选需要这个验证码的场景</p><span id="token-workflow-selection-count" aria-live="polite">已选 0 个</span></div>
+          <div id="token-workflow-list" class="token-workflow-list" role="group" aria-label="可关联的使用场景"></div>
           <div id="token-workflow-empty" class="token-workflow-empty hidden">
-            <strong>还没有操作笔记</strong>
-            <span>先创建一条笔记，再回来关联这个验证码。</span>
-            <button id="token-workflow-create" class="btn btn-secondary" type="button">新建操作笔记</button>
+            <strong>还没有使用场景</strong>
+            <span>先创建一个场景，再回来关联这个验证码。</span>
+            <button id="token-workflow-create" class="btn btn-secondary" type="button">新建使用场景</button>
           </div>
           <div id="token-workflow-error" class="error hidden" role="alert"></div>
           <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="token-workflow-modal">取消</button><button id="token-workflow-submit" class="btn btn-primary" type="submit">保存关联</button></div>
@@ -364,10 +364,10 @@
 
     <div id="workflow-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-edit-title">
       <div class="modal modal-wide">
-        <div class="modal-header"><div><p class="eyebrow">加密操作笔记</p><h2 id="workflow-edit-title">新建操作笔记</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-edit-modal" aria-label="关闭">×</button></div>
+        <div class="modal-header"><div><p class="eyebrow">加密保存</p><h2 id="workflow-edit-title">新建使用场景</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-edit-modal" aria-label="关闭">×</button></div>
         <form id="workflow-form" novalidate>
           <input id="workflow-id" type="hidden">
-          <div class="form-group"><label for="workflow-title">笔记标题</label><input id="workflow-title" type="text" maxlength="100" aria-describedby="workflow-title-hint" placeholder="例如：发布网站" required><p id="workflow-title-hint" class="field-hint">用一句话说明这套流程要完成什么。</p></div>
+          <div class="form-group"><label for="workflow-title">场景名称</label><input id="workflow-title" type="text" maxlength="100" aria-describedby="workflow-title-hint" placeholder="例如：发布网站" required><p id="workflow-title-hint" class="field-hint">用一句话说明这个场景要完成什么。</p></div>
           <div class="form-group">
             <div class="workflow-editor-label-row"><label for="workflow-content">操作流程（Markdown）</label><span id="workflow-character-count">0 / 5000</span></div>
             <div class="workflow-markdown-editor">
@@ -388,18 +388,18 @@
             <p id="workflow-key-filter-status" class="field-hint workflow-key-filter-status" aria-live="polite"></p>
             <label class="sr-only" for="workflow-key-select">选择要关联的 2FA 条目</label>
             <div class="workflow-key-add-row"><select id="workflow-key-select" aria-describedby="workflow-key-hint"></select><button id="workflow-key-add" class="btn btn-secondary" type="button">添加</button></div>
-            <p id="workflow-key-hint" class="field-hint">执行笔记时会按下方顺序显示当前验证码；可用箭头调整顺序。</p>
+            <p id="workflow-key-hint" class="field-hint">使用场景时会按下方顺序显示当前验证码；可用箭头调整顺序。</p>
             <ol id="workflow-selected-keys" class="workflow-selected-keys" aria-label="已关联的 2FA 条目"></ol>
           </div>
           <div id="workflow-error" class="error hidden" role="alert"></div>
-          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="workflow-edit-modal">取消</button><button id="workflow-submit" class="btn btn-primary" type="submit">保存笔记</button></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="workflow-edit-modal">取消</button><button id="workflow-submit" class="btn btn-primary" type="submit">保存场景</button></div>
         </form>
       </div>
     </div>
 
     <div id="workflow-run-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-run-title">
       <div class="modal modal-wide workflow-run-modal">
-        <div class="modal-header"><div><p class="eyebrow">查看加密笔记</p><h2 id="workflow-run-title">操作笔记</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-run-modal" aria-label="关闭">×</button></div>
+        <div class="modal-header"><div><p class="eyebrow">查看加密内容</p><h2 id="workflow-run-title">使用场景</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-run-modal" aria-label="关闭">×</button></div>
         <section class="workflow-run-section" aria-labelledby="workflow-run-content-title"><h3 id="workflow-run-content-title">操作内容</h3><div id="workflow-run-content" class="markdown-body workflow-run-content"></div></section>
         <section class="workflow-run-section" aria-labelledby="workflow-run-keys-title"><div class="workflow-run-section-heading"><h3 id="workflow-run-keys-title">所需验证码</h3><span id="workflow-run-key-count"></span></div><ol id="workflow-run-keys" class="workflow-run-keys"></ol></section>
         <div class="modal-actions"><button class="btn btn-primary" type="button" data-close-modal="workflow-run-modal">完成并关闭</button></div>
@@ -472,7 +472,7 @@
     <div id="trash-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="trash-title" aria-describedby="trash-description">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p id="trash-retention-label" class="eyebrow">保留 30 天</p><h2 id="trash-title">回收站</h2></div><button class="icon-btn" type="button" data-close-modal="trash-modal" aria-label="关闭">×</button></div>
-        <p id="trash-description" class="field-hint">移除的密钥和操作笔记会暂存在这里，到期前可以随时恢复；只有“彻底删除”会立即永久删除。</p>
+        <p id="trash-description" class="field-hint">移除的密钥和使用场景会暂存在这里，到期前可以随时恢复；只有“彻底删除”会立即永久删除。</p>
         <div id="trash-list" class="manage-list"></div>
       </div>
     </div>
@@ -482,7 +482,7 @@
         <div class="modal-header"><div><p class="eyebrow">迁移工具</p><h2 id="import-title">导入备份或密钥</h2></div><button class="icon-btn" type="button" data-close-modal="import-modal" aria-label="关闭">×</button></div>
         <form id="import-form">
           <p id="import-description" class="dialog-message import-intro">先解析预览，再确认写入。预览会逐条标出新增、覆盖、跳过和无效条目。</p>
-          <div class="form-group"><label for="import-file">备份文件</label><input id="import-file" type="file" accept=".json,.txt,.2fas,application/json,text/plain" aria-describedby="import-file-hint"><p id="import-file-hint" class="field-hint">本应用的完整备份可恢复密钥和操作笔记；也支持 Aegis、2FAS、andOTP 备份及 OTPAuth 文本列表。最大 5 MB。</p></div>
+          <div class="form-group"><label for="import-file">备份文件</label><input id="import-file" type="file" accept=".json,.txt,.2fas,application/json,text/plain" aria-describedby="import-file-hint"><p id="import-file-hint" class="field-hint">本应用的完整备份可恢复密钥和使用场景；也支持 Aegis、2FAS、andOTP 备份及 OTPAuth 文本列表。最大 5 MB。</p></div>
           <div class="form-group"><label for="import-text">或粘贴 otpauth:// / otpauth-migration:// 链接</label><textarea id="import-text" rows="4" autocomplete="off" spellcheck="false" aria-describedby="import-text-hint"></textarea><p id="import-text-hint" class="field-hint">普通 OTPAuth 链接可每行粘贴一个；也支持 Google Authenticator 迁移链接。</p></div>
           <div class="form-group"><label for="import-password">导入密码</label><div class="input-with-action"><input id="import-password" type="password" autocomplete="off" aria-describedby="import-password-hint"><button class="input-action" type="button" data-toggle-password="import-password" aria-label="显示密码" aria-pressed="false">显示</button></div><p id="import-password-hint" class="field-hint">仅导入 Aegis 或本应用的加密备份时填写，普通备份请留空。</p></div>
           <div class="form-group"><label for="import-strategy">同名条目</label><select id="import-strategy" aria-describedby="import-strategy-hint"><option value="skip">跳过重名</option><option value="overwrite">覆盖已有</option><option value="all">全部导入（自动重命名）</option></select><p id="import-strategy-hint" class="field-hint">决定名称重复时如何处理；预览确认前不会写入保险库。</p></div>

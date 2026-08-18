@@ -69,7 +69,7 @@ export function normalizeWorkflowNote(raw = {}) {
   const updatedAt = Number(raw.updatedAt || createdAt);
   return {
     id: String(raw.id || generateId()),
-    title: String(raw.title || '未命名笔记').trim().slice(0, 100) || '未命名笔记',
+    title: String(raw.title || '未命名场景').trim().slice(0, 100) || '未命名场景',
     content: String(raw.content || raw.steps || '').trim().slice(0, 5000),
     linkedKeys,
     createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),

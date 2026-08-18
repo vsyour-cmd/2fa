@@ -87,7 +87,7 @@ describe('static application shell', () => {
     expect(app).toContain('data-workflow-link-action="up"');
     expect(app).toContain('data-workflow-run-key-id=');
     expect(app).toContain('await copyKeyCode(key, null)');
-    expect(app).toContain("'操作笔记已创建'");
+    expect(app).toContain("'使用场景已创建'");
     expect(styles).toContain('.workflow-note-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.workflow-markdown-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.markdown-body code {');
