@@ -66,6 +66,18 @@ export async function generateTOTP(secret, time = Date.now(), options = {}) {
   return String(binary % modulus).padStart(digits, '0');
 }
 
+export async function generateTOTPWindow(secret, time = Date.now(), options = {}) {
+  const periodMs = getTotpOptions(options).period * 1000;
+  const timestamp = Number(time);
+  if (!Number.isFinite(timestamp) || timestamp < periodMs) throw new Error('时间参数无效');
+  const [previous, current, next] = await Promise.all([
+    generateTOTP(secret, timestamp - periodMs, options),
+    generateTOTP(secret, timestamp, options),
+    generateTOTP(secret, timestamp + periodMs, options),
+  ]);
+  return { previous, current, next };
+}
+
 export function parseOtpauthUri(uri) {
   if (!String(uri || '').toLowerCase().startsWith('otpauth://totp/')) return null;
   try {
