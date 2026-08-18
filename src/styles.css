@@ -153,7 +153,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); outlin
 input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .input-with-action { position: relative; }
 .input-with-action input { padding-right: 70px; }
-.input-action { position: absolute; top: 5px; right: 5px; min-width: 58px; height: 36px; padding: 0 9px; color: var(--primary); background: var(--primary-soft); border: 0; border-radius: 8px; font-size: 0.78rem; font-weight: 800; }
+.input-with-action .pin-input { padding-left: 70px; }
+.input-action { position: absolute; top: 50%; right: 2px; min-width: 58px; height: 44px; padding: 0 9px; color: var(--primary); background: var(--primary-soft); border: 0; border-radius: 8px; font-size: 0.78rem; font-weight: 800; transform: translateY(-50%); }
+.input-action:active:not(:disabled) { transform: translateY(-50%) scale(0.97); }
 .field-hint { margin: 7px 0 0; color: var(--text-muted); font-size: 0.78rem; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
 .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }

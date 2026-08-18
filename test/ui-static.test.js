@@ -78,6 +78,27 @@ describe('static application shell', () => {
     expect(html).toContain('预览确认前不会写入保险库');
   });
 
+  it('offers accessible visibility toggles for every sensitive input', () => {
+    const sensitiveFields = [
+      'login-password', 'quick-unlock-pin', 'new-password', 'confirm-password',
+      'add-secret', 'edit-secret', 'quick-unlock-new-pin', 'quick-unlock-confirm-pin',
+      'import-password', 'export-password', 'current-password', 'changed-password',
+      'changed-password-confirm',
+    ];
+    for (const field of sensitiveFields) {
+      expect(html).toContain(`data-toggle-password="${field}"`);
+    }
+    expect(html.match(/data-toggle-password=/g)).toHaveLength(sensitiveFields.length);
+    expect(html.match(/aria-pressed="false">显示<\/button>/g)).toHaveLength(sensitiveFields.length);
+    expect(app).toContain("toggle.setAttribute('aria-pressed', String(reveal))");
+    expect(app).toContain("modal.addEventListener('modal:close', () => concealSensitiveFields(modal))");
+    expect(app).toContain("concealSensitiveFields($('#unlock-screen'))");
+    expect(app).toContain("document.addEventListener('reset'");
+    expect(styles).toContain('.input-action { position: absolute; top: 50%; right: 2px; min-width: 58px; height: 44px;');
+    expect(styles).toContain('.input-action:active:not(:disabled) { transform: translateY(-50%) scale(0.97); }');
+    expect(styles).toContain('.input-with-action .pin-input { padding-left: 70px; }');
+  });
+
   it('shows recent use and offers an oldest-used view', () => {
     expect(html.match(/<option value="stale">最久未使用<\/option>/g)).toHaveLength(2);
     expect(app).toContain('compareStaleKeys(left, right)');

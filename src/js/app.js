@@ -481,6 +481,7 @@ async function lockAll(message = '', allowQuickUnlock = false) {
 }
 
 function switchAuthView(view) {
+  concealSensitiveFields($('#unlock-screen'));
   const setup = view === 'setup';
   setHidden('#quick-unlock-form', true);
   setHidden('#login-form', setup);
@@ -1756,8 +1757,26 @@ async function resolveConflict(choice) {
   }
 }
 
+function setSensitiveVisibility(toggle, reveal) {
+  const input = document.getElementById(toggle.dataset.togglePassword);
+  if (!input) return;
+  const subject = input.classList.contains('pin-input') ? 'PIN' : input.id.endsWith('secret') ? '密钥' : '密码';
+  input.type = reveal ? 'text' : 'password';
+  toggle.textContent = reveal ? '隐藏' : '显示';
+  toggle.setAttribute('aria-label', `${reveal ? '隐藏' : '显示'}${subject}`);
+  toggle.setAttribute('aria-pressed', String(reveal));
+}
+
+function concealSensitiveFields(root = document) {
+  for (const toggle of $$('[data-toggle-password]', root)) setSensitiveVisibility(toggle, false);
+}
+
 function setupEvents() {
   setupModalAccessibility();
+
+  for (const modal of $$('.modal-overlay')) {
+    modal.addEventListener('modal:close', () => concealSensitiveFields(modal));
+  }
 
   document.addEventListener('click', (event) => {
     const closeButton = event.target.closest('[data-close-modal]');
@@ -1768,12 +1787,12 @@ function setupEvents() {
     }
     const toggle = event.target.closest('[data-toggle-password]');
     if (toggle) {
-      const input = document.getElementById(toggle.dataset.togglePassword);
-      const reveal = input.type === 'password';
-      input.type = reveal ? 'text' : 'password';
-      toggle.textContent = reveal ? '隐藏' : '显示';
-      toggle.setAttribute('aria-label', reveal ? '隐藏密码' : '显示密码');
+      setSensitiveVisibility(toggle, document.getElementById(toggle.dataset.togglePassword)?.type === 'password');
     }
+  });
+
+  document.addEventListener('reset', (event) => {
+    concealSensitiveFields(event.target);
   });
 
   for (const button of $$('[data-auth-view]')) button.addEventListener('click', () => switchAuthView(button.dataset.authView));

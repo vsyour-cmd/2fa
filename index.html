@@ -45,7 +45,7 @@
               <label for="login-password">主密码</label>
               <div class="input-with-action">
                 <input id="login-password" type="password" autocomplete="current-password" aria-describedby="login-password-hint" required>
-                <button class="input-action" type="button" data-toggle-password="login-password" aria-label="显示密码">显示</button>
+                <button class="input-action" type="button" data-toggle-password="login-password" aria-label="显示密码" aria-pressed="false">显示</button>
               </div>
               <p id="login-password-hint" class="field-hint">用于解密所选账户的保险库；密码无法找回，请妥善保存。</p>
             </div>
@@ -55,7 +55,7 @@
 
           <form id="quick-unlock-form" class="hidden" novalidate>
             <p class="quick-unlock-account">快速解锁 <strong id="quick-unlock-account"></strong></p>
-            <div class="form-group"><label for="quick-unlock-pin">6 位 PIN</label><input id="quick-unlock-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required></div>
+            <div class="form-group"><label for="quick-unlock-pin">6 位 PIN</label><div class="input-with-action"><input id="quick-unlock-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required><button class="input-action" type="button" data-toggle-password="quick-unlock-pin" aria-label="显示 PIN" aria-pressed="false">显示</button></div></div>
             <div id="quick-unlock-error" class="error hidden" role="alert"></div>
             <button id="quick-unlock-submit" class="btn btn-primary btn-block" type="submit">快速解锁</button>
             <button id="quick-unlock-password" class="text-btn quick-unlock-password" type="button">改用主密码</button>
@@ -69,14 +69,14 @@
             </div>
             <div class="form-group">
               <label for="new-password">主密码</label>
-              <input id="new-password" type="password" autocomplete="new-password" aria-describedby="setup-password-hint setup-strength-label" required>
+              <div class="input-with-action"><input id="new-password" type="password" autocomplete="new-password" aria-describedby="setup-password-hint setup-strength-label" required><button class="input-action" type="button" data-toggle-password="new-password" aria-label="显示密码" aria-pressed="false">显示</button></div>
               <p id="setup-password-hint" class="field-hint">用于加密全部验证码数据；密码无法找回，请妥善保存。</p>
               <div id="setup-strength" class="password-strength" data-score="0"><span></span></div>
               <p id="setup-strength-label" class="field-hint">密码强度</p>
             </div>
             <div class="form-group">
               <label for="confirm-password">确认密码</label>
-              <input id="confirm-password" type="password" autocomplete="new-password" required>
+              <div class="input-with-action"><input id="confirm-password" type="password" autocomplete="new-password" required><button class="input-action" type="button" data-toggle-password="confirm-password" aria-label="显示密码" aria-pressed="false">显示</button></div>
             </div>
             <div id="setup-error" class="error hidden" role="alert"></div>
             <button id="setup-submit" class="btn btn-primary btn-block" type="submit">创建加密保险库</button>
@@ -221,7 +221,7 @@
           </div>
           <div class="form-group">
             <label for="add-secret">密钥 (Base32)</label>
-            <div class="input-with-action"><input id="add-secret" class="mono" type="password" autocomplete="off" aria-describedby="add-secret-hint" required><button class="input-action" type="button" data-toggle-password="add-secret">显示</button></div>
+            <div class="input-with-action"><input id="add-secret" class="mono" type="password" autocomplete="off" aria-describedby="add-secret-hint" required><button class="input-action" type="button" data-toggle-password="add-secret" aria-label="显示密钥" aria-pressed="false">显示</button></div>
             <p id="add-secret-hint" class="field-hint">从服务的两步验证设置中获取，通常由字母 A–Z 和数字 2–7 组成。</p>
           </div>
           <div class="form-group"><label for="add-icon">图标</label><input id="add-icon" type="text" maxlength="16" aria-describedby="add-icon-hint" placeholder="例如 🔐"><p id="add-icon-hint" class="field-hint">可选；填写一个 Emoji，留空会根据发行方自动匹配。</p></div>
@@ -271,7 +271,7 @@
           </div>
           <div class="form-group">
             <label for="edit-secret">密钥 (Secret)</label>
-            <div class="input-with-action"><input id="edit-secret" class="mono" type="password" autocomplete="off" aria-describedby="edit-secret-hint" required><button class="input-action" type="button" data-toggle-password="edit-secret">显示</button></div>
+            <div class="input-with-action"><input id="edit-secret" class="mono" type="password" autocomplete="off" aria-describedby="edit-secret-hint" required><button class="input-action" type="button" data-toggle-password="edit-secret" aria-label="显示密钥" aria-pressed="false">显示</button></div>
             <p id="edit-secret-hint" class="field-hint">从服务的两步验证设置中获取，通常由字母 A–Z 和数字 2–7 组成。</p>
             <div class="inline-actions"><button id="copy-secret" class="text-btn" type="button">复制原始密钥</button><button id="copy-uri" class="text-btn" type="button">复制 OTPAuth URI</button><button id="show-qr" class="text-btn" type="button">显示二维码</button><button id="duplicate-key" class="text-btn" type="button">复制为副本</button></div>
             <div id="edit-qr-panel" class="edit-qr-panel hidden" role="region" aria-label="OTPAuth 迁移二维码">
@@ -330,8 +330,8 @@
           <div id="quick-unlock-pin-fields" class="settings-security-panel hidden">
             <p id="quick-unlock-settings-status" class="field-hint"></p>
             <div class="form-grid">
-              <div class="form-group"><label for="quick-unlock-new-pin">6 位 PIN</label><input id="quick-unlock-new-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"></div>
-              <div class="form-group"><label for="quick-unlock-confirm-pin">确认 PIN</label><input id="quick-unlock-confirm-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"></div>
+              <div class="form-group"><label for="quick-unlock-new-pin">6 位 PIN</label><div class="input-with-action"><input id="quick-unlock-new-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"><button class="input-action" type="button" data-toggle-password="quick-unlock-new-pin" aria-label="显示 PIN" aria-pressed="false">显示</button></div></div>
+              <div class="form-group"><label for="quick-unlock-confirm-pin">确认 PIN</label><div class="input-with-action"><input id="quick-unlock-confirm-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"><button class="input-action" type="button" data-toggle-password="quick-unlock-confirm-pin" aria-label="显示 PIN" aria-pressed="false">显示</button></div></div>
             </div>
             <p class="field-hint">PIN 只用于当前标签页锁定后的短时恢复；刷新、跨标签页或超过 5 分钟仍需主密码。</p>
           </div>
@@ -390,7 +390,7 @@
           <p id="import-description" class="dialog-message import-intro">先解析预览，再确认写入。预览会逐条标出新增、覆盖、跳过和无效条目。</p>
           <div class="form-group"><label for="import-file">备份文件</label><input id="import-file" type="file" accept=".json,.txt,.2fas,application/json,text/plain" aria-describedby="import-file-hint"><p id="import-file-hint" class="field-hint">支持本应用、Aegis、2FAS、andOTP 的备份，以及 OTPAuth 文本列表；最大 5 MB。</p></div>
           <div class="form-group"><label for="import-text">或粘贴 otpauth:// / otpauth-migration:// 链接</label><textarea id="import-text" rows="4" autocomplete="off" spellcheck="false" aria-describedby="import-text-hint"></textarea><p id="import-text-hint" class="field-hint">普通 OTPAuth 链接可每行粘贴一个；也支持 Google Authenticator 迁移链接。</p></div>
-          <div class="form-group"><label for="import-password">导入密码</label><input id="import-password" type="password" autocomplete="off" aria-describedby="import-password-hint"><p id="import-password-hint" class="field-hint">仅导入 Aegis 或本应用的加密备份时填写，普通备份请留空。</p></div>
+          <div class="form-group"><label for="import-password">导入密码</label><div class="input-with-action"><input id="import-password" type="password" autocomplete="off" aria-describedby="import-password-hint"><button class="input-action" type="button" data-toggle-password="import-password" aria-label="显示密码" aria-pressed="false">显示</button></div><p id="import-password-hint" class="field-hint">仅导入 Aegis 或本应用的加密备份时填写，普通备份请留空。</p></div>
           <div class="form-group"><label for="import-strategy">同名条目</label><select id="import-strategy" aria-describedby="import-strategy-hint"><option value="skip">跳过重名</option><option value="overwrite">覆盖已有</option><option value="all">全部导入（自动重命名）</option></select><p id="import-strategy-hint" class="field-hint">决定名称重复时如何处理；预览确认前不会写入保险库。</p></div>
           <div id="import-error" class="error hidden" role="alert"></div>
           <div id="import-preview" class="import-preview hidden" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -405,7 +405,7 @@
         <form id="export-form">
           <p id="export-scope" class="field-hint">将导出当前保险库中的全部数据。</p>
           <div class="form-group"><label for="export-format">格式</label><select id="export-format" aria-describedby="export-format-hint"><option value="encrypted">密码加密 JSON（推荐）</option><option value="plain">明文 JSON</option><option value="otpauth">OTPAuth URI 列表</option></select><p id="export-format-hint" class="field-hint">加密 JSON 适合安全备份；明文 JSON 和 OTPAuth URI 会直接包含密钥。</p></div>
-          <div id="export-password-group" class="form-group"><label for="export-password">导出密码</label><input id="export-password" type="password" autocomplete="new-password" aria-describedby="export-password-hint"><p id="export-password-hint" class="field-hint">用于打开这份备份，请使用与主密码不同的强密码。</p></div>
+          <div id="export-password-group" class="form-group"><label for="export-password">导出密码</label><div class="input-with-action"><input id="export-password" type="password" autocomplete="new-password" aria-describedby="export-password-hint"><button class="input-action" type="button" data-toggle-password="export-password" aria-label="显示密码" aria-pressed="false">显示</button></div><p id="export-password-hint" class="field-hint">用于打开这份备份，请使用与主密码不同的强密码。</p></div>
           <div id="export-warning" class="warning hidden">该格式含有明文密钥，请只保存到安全位置。</div>
           <div id="export-error" class="error hidden" role="alert"></div>
           <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="export-modal">取消</button><button id="export-submit" class="btn btn-primary" type="submit">下载备份</button></div>
@@ -418,9 +418,9 @@
         <div class="modal-header"><h2 id="change-password-title">修改主密码</h2><button class="icon-btn" type="button" data-close-modal="change-password-modal" aria-label="关闭">×</button></div>
         <form id="change-password-form">
           <p id="change-password-description" class="dialog-message form-intro">保存后会用新密码重新加密当前保险库；账户名称和验证码内容不会改变。</p>
-          <div class="form-group"><label for="current-password">当前密码</label><input id="current-password" type="password" autocomplete="current-password" required></div>
-          <div class="form-group"><label for="changed-password">新密码</label><input id="changed-password" type="password" autocomplete="new-password" aria-describedby="change-strength-label" required><div id="change-strength" class="password-strength" data-score="0"><span></span></div><p id="change-strength-label" class="field-hint">密码强度</p></div>
-          <div class="form-group"><label for="changed-password-confirm">确认新密码</label><input id="changed-password-confirm" type="password" autocomplete="new-password" required></div>
+          <div class="form-group"><label for="current-password">当前密码</label><div class="input-with-action"><input id="current-password" type="password" autocomplete="current-password" required><button class="input-action" type="button" data-toggle-password="current-password" aria-label="显示密码" aria-pressed="false">显示</button></div></div>
+          <div class="form-group"><label for="changed-password">新密码</label><div class="input-with-action"><input id="changed-password" type="password" autocomplete="new-password" aria-describedby="change-strength-label" required><button class="input-action" type="button" data-toggle-password="changed-password" aria-label="显示密码" aria-pressed="false">显示</button></div><div id="change-strength" class="password-strength" data-score="0"><span></span></div><p id="change-strength-label" class="field-hint">密码强度</p></div>
+          <div class="form-group"><label for="changed-password-confirm">确认新密码</label><div class="input-with-action"><input id="changed-password-confirm" type="password" autocomplete="new-password" required><button class="input-action" type="button" data-toggle-password="changed-password-confirm" aria-label="显示密码" aria-pressed="false">显示</button></div></div>
           <div id="change-password-error" class="error hidden" role="alert"></div>
           <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="change-password-modal">取消</button><button id="change-password-submit" class="btn btn-primary" type="submit">重新加密并保存</button></div>
         </form>
