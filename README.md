@@ -19,6 +19,7 @@
 - **迁移工具**：导入 Google Authenticator、Aegis、2FAS、andOTP 和 OTPAuth URI
 - **安全备份**：密码加密 JSON、明文 JSON 和 OTPAuth URI 三种导出格式，并提供温和的定期备份提醒
 - **安全设置**：自动锁定、后台锁定、剪贴板自动清理、复制震动、密码强度、安全改密和可选的 5 分钟 PIN 快速解锁
+- **管理后台**：独立管理员登录、用户状态与备注管理、可恢复的保险库重置，以及 90 天操作日志查询
 
 ## 技术架构
 
@@ -39,7 +40,8 @@
 |------|------|
 | 数据加密 | AES-256-GCM，客户端加密后传输 |
 | 密钥派生 | PBKDF2-SHA256，600,000 次迭代  |
-| 用户标识 | 密码哈希 (PBKDF2) |
+| 用户标识 | 账户名与主密码派生的匿名保险库键；后台索引不包含主密码 |
+| 后台认证 | 独立管理员密码、短时 Bearer 会话、登录限流和操作审计 |
 
 ## 部署教程
 
@@ -90,6 +92,8 @@ docker compose up -d
 | `TRUST_PROXY_HOPS` | `0` | 可信反向代理跳数；明确位于单层反代后时设为 `1` |
 | `RATE_LIMIT` | `20` | 每个 IP 在一个时间窗口内允许的 API 请求数 |
 | `RATE_WINDOW_MS` | `60000` | API 限流时间窗口（毫秒） |
+| `ADMIN_USERNAME` | `admin` | 管理后台用户名 |
+| `ADMIN_PASSWORD` | 无 | 管理后台密码；至少 10 位，未配置时后台保持关闭 |
 
 ### 方式二：Cloudflare Workers 部署
 
@@ -108,6 +112,14 @@ npx wrangler login
 #### 步骤 2：配置 KV
 
 默认的 `wrangler.jsonc` 只声明 `DATA_KV` binding，首次部署时 Wrangler 会引导创建或绑定 KV。若需要固定现有命名空间，可在 `kv_namespaces[0]` 中增加 `id`。
+
+配置管理后台密码（密码不会写入仓库）：
+
+```bash
+npx wrangler secret put ADMIN_PASSWORD
+```
+
+使用 Cloudflare Builds 时，也可以在 Worker 的 **Settings → Variables and Secrets** 中添加加密 Secret `ADMIN_PASSWORD`。管理员用户名默认为 `admin`。
 
 #### 步骤 3：测试和构建
 
@@ -133,6 +145,7 @@ npx wrangler deploy
 - `wrangler.jsonc` 会在上传或部署前自动执行 `npm run build`，生成 `static/` 静态资源目录。
 - `main` 分支用于生产部署，其他分支用于预览版本。
 - Cloudflare 中的 Worker 名称必须与 `wrangler.jsonc` 的 `name`（`2fa-sync`）一致。
+- 自动部署前需在 Worker 环境中保留 `ADMIN_PASSWORD` Secret；GitHub 同步不会覆盖 Secret。
 
 ## 使用说明
 
@@ -147,6 +160,13 @@ npx wrangler deploy
 
 1. 输入主密码
 2. 点击「解锁」
+
+### 管理后台
+
+1. 访问 `/admin.html`，使用独立管理员凭据登录
+2. 可搜索用户、调整管理名称/备注、停用或恢复在线访问，并按操作类型和结果查询日志
+3. 后台不能查看或直接修改用户主密码；“重置保险库”会移走当前密文，让用户重新创建保险库，旧密文保留 30 天并可在后台恢复
+4. 老用户会在升级后的下一次在线登录或保存时上报账户标识；此前以“待识别用户”显示
 
 ### 主题与设置
 

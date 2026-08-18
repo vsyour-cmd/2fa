@@ -19,6 +19,7 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
 - **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports with gentle periodic backup reminders
 - **Security Controls**: Auto-lock, background lock, clipboard clearing, copy vibration, password strength, safe re-encryption, and optional five-minute PIN quick unlock
+- **Admin Console**: Separate admin login, user status and notes, recoverable vault reset, and 90-day audit-log search
 
 ## Architecture
 
@@ -39,7 +40,8 @@ Browser <--HTTP/HTTPS--> Express Server <--SQLite--> Local Database
 |--------|---------|
 | Data Encryption | AES-256-GCM, encrypted on client before transmission |
 | Key Derivation | PBKDF2-SHA256, 600,000 iterations |
-| User Identification | Password hash (PBKDF2) |
+| User Identification | Anonymous vault key derived from account name and master password; the admin index never stores the master password |
+| Admin Authentication | Separate password, short-lived Bearer sessions, login throttling, and action auditing |
 
 ## Deployment Guide
 
@@ -90,6 +92,8 @@ docker compose up -d
 | `TRUST_PROXY_HOPS` | `0` | Trusted reverse-proxy hops; set to `1` only behind one known proxy |
 | `RATE_LIMIT` | `20` | API requests allowed per IP in each rate-limit window |
 | `RATE_WINDOW_MS` | `60000` | API rate-limit window in milliseconds |
+| `ADMIN_USERNAME` | `admin` | Admin console username |
+| `ADMIN_PASSWORD` | none | Admin console password; at least 10 characters, and the console stays disabled when omitted |
 
 ### Method 2: Cloudflare Workers Deployment
 
@@ -108,6 +112,14 @@ npx wrangler login
 #### Step 2: Configure KV
 
 The default `wrangler.jsonc` declares only the `DATA_KV` binding. Wrangler will prompt you to create or bind a namespace on the first deployment. Add an `id` to `kv_namespaces[0]` if you need to pin an existing namespace.
+
+Configure the admin password without committing it to the repository:
+
+```bash
+npx wrangler secret put ADMIN_PASSWORD
+```
+
+For Cloudflare Builds, you can instead add an encrypted `ADMIN_PASSWORD` Secret under **Settings → Variables and Secrets**. The default admin username is `admin`.
 
 #### Step 3: Test and build
 
@@ -133,6 +145,7 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 - `wrangler.jsonc` automatically runs `npm run build` before uploads and deployments, creating the `static/` assets directory.
 - The `main` branch is used for production deployments and other branches create previews.
 - The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`2fa-sync`).
+- Keep the `ADMIN_PASSWORD` Secret configured in the Worker environment; GitHub deployments do not overwrite it.
 
 ## Usage Guide
 
@@ -142,6 +155,13 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 2. Click "First time? Create account"
 3. Set a master password of at least 10 characters containing a letter and a number
 4. Confirm it and create the encrypted vault
+
+### Admin Console
+
+1. Open `/admin.html` and sign in with the separate admin credentials.
+2. Search users, update management labels and notes, suspend or restore online access, and filter logs by action and result.
+3. The server cannot view or directly change a user's master password. “Reset vault” archives the current ciphertext for 30 days and lets the user create a new vault; an admin can restore the archive during that period.
+4. Existing users report their account label on their next online login or save after the upgrade; until then they appear as unidentified users.
 
 ### Login
 

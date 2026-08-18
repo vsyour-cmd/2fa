@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v2.1.0';
+const CACHE_VERSION = 'v2.2.0';
 const STATIC_CACHE = `2fa-static-${CACHE_VERSION}`;
 const PRECACHE_URLS = ['/manifest.json', '/icons/icon.svg'];
 const APP_SHELL_RESOURCE_PATTERN = /\b(?:src|href)=["']([^"'#]+)["']/gi;
@@ -58,6 +58,14 @@ self.addEventListener('fetch', (event) => {
       JSON.stringify({ error: 'Network unavailable', offline: true }),
       { status: 503, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } },
     )));
+    return;
+  }
+
+  if (url.pathname === '/admin' || url.pathname === '/admin.html') {
+    event.respondWith(fetch(request).catch(() => new Response('管理后台需要联网使用', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    })));
     return;
   }
 

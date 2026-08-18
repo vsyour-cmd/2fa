@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, OfflineManager, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
+import { DEFAULT_SETTINGS, OfflineManager, apiGet, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -60,6 +60,23 @@ describe('offline conflict detection', () => {
   it('treats an old cache without a cloud base conservatively', () => {
     expect(manager.detectConflict({ locallyModified: true }, 200)).toBe(true);
     expect(manager.detectConflict({ locallyModified: false }, 200)).toBe(false);
+  });
+});
+
+describe('vault account metadata', () => {
+  it('sends non-ASCII account names in a URL-safe UTF-8 header', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ exists: false, data: null }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await apiGet('a'.repeat(64), '中文账户');
+
+    const [url, options] = fetchMock.mock.calls[0];
+    const encoded = options.headers['X-Vault-Account'];
+    expect(url).not.toContain(encodeURIComponent('中文账户'));
+    expect(Buffer.from(encoded, 'base64url').toString('utf8')).toBe('中文账户');
   });
 });
 

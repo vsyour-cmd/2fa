@@ -19,10 +19,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
 });
 
 export class ApiError extends Error {
-  constructor(message, status = 0) {
+  constructor(message, status = 0, code = '') {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -37,23 +38,33 @@ async function parseApiResponse(response) {
     const message = response.status === 429
       ? '请求过于频繁，请稍后再试'
       : (body.error || `API 错误 (${response.status})`);
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, body.code || '');
   }
   return body;
 }
 
-export async function apiGet(keyHash) {
-  const response = await fetch(`/api/data?key=${encodeURIComponent(keyHash)}`, {
-    headers: { Accept: 'application/json' },
+export async function apiGet(keyHash, accountName = '') {
+  const params = new URLSearchParams({ key: keyHash });
+  const headers = { Accept: 'application/json' };
+  if (accountName) headers['X-Vault-Account'] = encodeUtf8Base64Url(accountName);
+  const response = await fetch(`/api/data?${params.toString()}`, {
+    headers,
   });
   return parseApiResponse(response);
 }
 
-export async function apiSave(keyHash, encryptedData, salt, version = 3) {
+function encodeUtf8Base64Url(value) {
+  const bytes = new TextEncoder().encode(String(value));
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+export async function apiSave(keyHash, encryptedData, salt, version = 3, accountName = '') {
   const response = await fetch('/api/data', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ key: keyHash, data: encryptedData, salt, version }),
+    body: JSON.stringify({ key: keyHash, data: encryptedData, salt, version, accountName }),
   });
   return parseApiResponse(response);
 }

@@ -260,9 +260,10 @@ async function unlockWithPin(pin) {
   let record = null;
   if (offline.isOnline) {
     try {
-      const cloud = await loadCloudRecord(state.keyHash);
+      const cloud = await loadCloudRecord(state.keyHash, state.accountName);
       if (cloud.exists) record = cloud;
     } catch (error) {
+      if (error instanceof ApiError && error.status === 423) throw error;
       console.warn('Quick unlock cloud load failed:', error);
     }
   }
@@ -284,8 +285,8 @@ async function rememberCurrentSession() {
   });
 }
 
-async function loadCloudRecord(keyHash) {
-  return parseStoredCloudRecord(await apiGet(keyHash));
+async function loadCloudRecord(keyHash, accountName = state.accountName) {
+  return parseStoredCloudRecord(await apiGet(keyHash, accountName));
 }
 
 async function saveVault({ silent = false } = {}) {
@@ -293,11 +294,15 @@ async function saveVault({ silent = false } = {}) {
   const encryptedData = await encryptJson(vaultPayload(), state.masterKey);
   if (offline.isOnline) {
     try {
-      const result = await apiSave(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
+      const result = await apiSave(state.keyHash, encryptedData, state.salt, VAULT_VERSION, state.accountName);
       await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
       return true;
     } catch (error) {
       console.error('Cloud save failed:', error);
+      if (error instanceof ApiError && error.status === 423) {
+        await lockAll(error.message);
+        return false;
+      }
       await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
       if (!silent) showToast('已保存到本机，云端同步失败');
       return false;
@@ -339,7 +344,7 @@ async function migrateLegacyVault(password, legacyHash) {
   const newSalt = generateSalt();
   const newKey = await deriveKey(password, newSalt, PBKDF2_ITERATIONS.CURRENT);
   const encrypted = await encryptJson(vaultPayload(), newKey);
-  const result = await apiSave(newHash, encrypted, newSalt, VAULT_VERSION);
+  const result = await apiSave(newHash, encrypted, newSalt, VAULT_VERSION, state.accountName);
   const verification = await loadCloudRecord(newHash);
   if (!verification.exists) throw new Error('新账户数据验证失败');
   await decryptJson(verification.encryptedData, newKey);
@@ -369,10 +374,10 @@ async function unlockWithPassword(password, accountName) {
     let record = null;
     if (offline.isOnline) {
       try {
-        const cloud = await loadCloudRecord(candidate.hash);
+        const cloud = await loadCloudRecord(candidate.hash, normalizedAccount);
         if (cloud.exists) record = cloud;
       } catch (error) {
-        if (!(error instanceof ApiError)) throw error;
+        if (!(error instanceof ApiError) || error.status === 423) throw error;
       }
     }
     if (!record) {
@@ -403,13 +408,13 @@ async function setupAccount(password, accountName) {
   if (!offline.isOnline) throw new Error('首次创建账户需要联网');
   const normalizedAccount = normalizeAccountName(accountName);
   const scopedHash = await deriveKeyHash(password, normalizedAccount, 'scoped');
-  if ((await loadCloudRecord(scopedHash)).exists || await offline.get(scopedHash)) {
+  if ((await loadCloudRecord(scopedHash, normalizedAccount)).exists || await offline.get(scopedHash)) {
     throw new Error('该账户名和密码已存在，请直接登录');
   }
   if (normalizedAccount === DEFAULT_ACCOUNT) {
     for (const mode of ['legacy-v2', 'legacy-v1']) {
       const legacyHash = await deriveKeyHash(password, normalizedAccount, mode);
-      if ((await loadCloudRecord(legacyHash)).exists) throw new Error('检测到兼容账户，请直接登录');
+      if ((await loadCloudRecord(legacyHash, normalizedAccount)).exists) throw new Error('检测到兼容账户，请直接登录');
     }
   }
   state.accountName = normalizedAccount;
@@ -438,9 +443,10 @@ async function restoreSession(accountName) {
     let record = null;
     if (offline.isOnline) {
       try {
-        const cloud = await loadCloudRecord(state.keyHash);
+        const cloud = await loadCloudRecord(state.keyHash, state.accountName);
         if (cloud.exists) record = cloud;
       } catch (error) {
+        if (error instanceof ApiError && error.status === 423) throw error;
         console.warn('Session cloud load failed:', error);
       }
     }
@@ -1982,7 +1988,7 @@ async function changeMasterPassword(event) {
     const nextSalt = generateSalt();
     const nextKey = await deriveKey(nextPassword, nextSalt, PBKDF2_ITERATIONS.CURRENT);
     const encrypted = await encryptJson(vaultPayload(), nextKey);
-    const result = await apiSave(nextHash, encrypted, nextSalt, VAULT_VERSION);
+    const result = await apiSave(nextHash, encrypted, nextSalt, VAULT_VERSION, state.accountName);
     const verification = await loadCloudRecord(nextHash);
     if (!verification.exists) throw new Error('新密码数据验证失败，旧数据已保留');
     await decryptJson(verification.encryptedData, nextKey);
@@ -2003,6 +2009,11 @@ async function changeMasterPassword(event) {
     $('#change-password-form').reset();
     showToast('主密码已修改');
   } catch (error) {
+    if (error instanceof ApiError && error.status === 423) {
+      closeModal('change-password-modal');
+      await lockAll(error.message);
+      return;
+    }
     showError('#change-password-error', error.message);
   } finally {
     setBusy(button, false);
@@ -2029,7 +2040,7 @@ async function triggerSyncCheck() {
     }
     if (local?.locallyModified) {
       useVaultData(await decryptJson(local.encryptedData, state.masterKey));
-      const result = await apiSave(state.keyHash, local.encryptedData, local.salt, local.version || VAULT_VERSION);
+      const result = await apiSave(state.keyHash, local.encryptedData, local.salt, local.version || VAULT_VERSION, state.accountName);
       await offline.save(state.keyHash, local.encryptedData, local.salt, local.version || VAULT_VERSION, Number(result.updatedAt || Date.now()));
       renderAll();
       showToast('本地修改已同步到云端');
@@ -2040,6 +2051,10 @@ async function triggerSyncCheck() {
     renderAll();
   } catch (error) {
     console.error('Sync check failed:', error);
+    if (error instanceof ApiError && error.status === 423) {
+      await lockAll(error.message);
+      return;
+    }
     showToast('云端同步检查失败');
   }
 }
@@ -2049,7 +2064,7 @@ async function resolveConflict(choice) {
   try {
     if (choice === 'local') {
       useVaultData(await decryptJson(state.conflict.local.encryptedData, state.masterKey));
-      const result = await apiSave(state.keyHash, state.conflict.local.encryptedData, state.salt, VAULT_VERSION);
+      const result = await apiSave(state.keyHash, state.conflict.local.encryptedData, state.salt, VAULT_VERSION, state.accountName);
       await offline.save(state.keyHash, state.conflict.local.encryptedData, state.salt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
       showToast('已使用本地数据并同步到云端');
     } else {
@@ -2061,6 +2076,10 @@ async function resolveConflict(choice) {
     closeModal('conflict-modal');
     renderAll();
   } catch (error) {
+    if (error instanceof ApiError && error.status === 423) {
+      await lockAll(error.message);
+      return;
+    }
     showToast(`冲突处理失败：${error.message}`);
   }
 }

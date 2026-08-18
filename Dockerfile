@@ -13,7 +13,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Build the Vite frontend, then retain only runtime dependencies
-COPY index.html vite.config.mjs ./
+COPY index.html admin.html vite.config.mjs ./
 COPY src ./src
 COPY public ./public
 RUN npm run build && npm prune --omit=dev

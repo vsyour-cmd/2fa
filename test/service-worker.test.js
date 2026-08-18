@@ -85,4 +85,35 @@ describe('offline application shell', () => {
     await refreshPromise;
     expect(match).toHaveBeenCalledWith(request, { ignoreVary: true });
   });
+
+  it('keeps the admin console network-only', async () => {
+    const listeners = {};
+    const live = new Response('admin');
+    const context = {
+      URL,
+      Request,
+      Response,
+      fetch: vi.fn(async () => live),
+      caches: {
+        match: vi.fn(),
+        open: vi.fn(),
+        keys: vi.fn(async () => []),
+      },
+      self: {
+        location: { origin: 'https://example.test' },
+        addEventListener: (type, listener) => { listeners[type] = listener; },
+        skipWaiting: vi.fn(),
+        clients: { claim: vi.fn() },
+      },
+    };
+    vm.runInNewContext(source, context);
+
+    const request = new Request('https://example.test/admin.html');
+    let responsePromise;
+    listeners.fetch({ request, respondWith: (promise) => { responsePromise = promise; }, waitUntil: vi.fn() });
+
+    expect(await responsePromise).toBe(live);
+    expect(context.fetch).toHaveBeenCalledWith(request);
+    expect(context.caches.match).not.toHaveBeenCalled();
+  });
 });
