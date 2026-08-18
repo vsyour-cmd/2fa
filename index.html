@@ -52,6 +52,14 @@
             <button id="login-submit" class="btn btn-primary btn-block" type="submit">解锁保险库</button>
           </form>
 
+          <form id="quick-unlock-form" class="hidden" novalidate>
+            <p class="quick-unlock-account">快速解锁 <strong id="quick-unlock-account"></strong></p>
+            <div class="form-group"><label for="quick-unlock-pin">6 位 PIN</label><input id="quick-unlock-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required></div>
+            <div id="quick-unlock-error" class="error hidden" role="alert"></div>
+            <button id="quick-unlock-submit" class="btn btn-primary btn-block" type="submit">快速解锁</button>
+            <button id="quick-unlock-password" class="text-btn quick-unlock-password" type="button">改用主密码</button>
+          </form>
+
           <form id="setup-form" class="hidden" novalidate>
             <div class="form-group">
               <label for="setup-account">账户名称</label>
@@ -82,7 +90,7 @@
       <section id="main-app" class="hidden" aria-labelledby="vault-title">
         <header class="app-header">
           <div class="app-title">
-            <p class="eyebrow">当前保险库</p>
+            <p id="vault-eyebrow" class="eyebrow">当前保险库</p>
             <h1 id="vault-title">2FA Authenticator</h1>
           </div>
           <div class="header-controls">
@@ -134,7 +142,12 @@
           <div id="group-filters" class="filter-row" aria-label="按分组筛选"></div>
         </div>
 
-        <div id="token-list" class="token-grid" aria-live="polite"></div>
+        <aside id="backup-reminder" class="backup-reminder hidden" aria-labelledby="backup-reminder-title">
+          <div><strong id="backup-reminder-title">建议备份密钥</strong><span id="backup-reminder-message"></span></div>
+          <div class="backup-reminder-actions"><button id="backup-reminder-export" class="btn btn-primary" type="button">导出加密备份</button><button id="backup-reminder-dismiss" class="icon-btn" type="button" aria-label="暂时关闭备份提醒" title="暂时关闭">×</button></div>
+        </aside>
+
+        <div id="token-list" class="token-grid" tabindex="-1" aria-live="polite"></div>
         <div id="empty-state" class="empty-state hidden">
           <div aria-hidden="true">✦</div>
           <h2>还没有密钥</h2>
@@ -248,7 +261,12 @@
           <div class="form-group">
             <label for="edit-secret">密钥 (Secret)</label>
             <div class="input-with-action"><input id="edit-secret" class="mono" type="password" autocomplete="off" required><button class="input-action" type="button" data-toggle-password="edit-secret">显示</button></div>
-            <div class="inline-actions"><button id="copy-secret" class="text-btn" type="button">复制原始密钥</button><button id="copy-uri" class="text-btn" type="button">复制 OTPAuth URI</button></div>
+            <div class="inline-actions"><button id="copy-secret" class="text-btn" type="button">复制原始密钥</button><button id="copy-uri" class="text-btn" type="button">复制 OTPAuth URI</button><button id="show-qr" class="text-btn" type="button">显示二维码</button><button id="duplicate-key" class="text-btn" type="button">复制为副本</button></div>
+            <div id="edit-qr-panel" class="edit-qr-panel hidden" role="region" aria-label="OTPAuth 迁移二维码">
+              <canvas id="edit-qr-canvas" aria-label="可由另一台设备扫描的 OTPAuth 二维码"></canvas>
+              <p>二维码包含原始密钥，只在可信环境中展示和扫描。</p>
+              <button id="hide-qr" class="btn btn-secondary" type="button">隐藏二维码</button>
+            </div>
           </div>
           <div class="form-group"><label for="edit-icon">图标</label><input id="edit-icon" type="text" maxlength="16" placeholder="可选 Emoji"></div>
           <details class="advanced-panel">
@@ -292,13 +310,27 @@
             <div class="form-group"><label for="auto-lock-minutes">无操作自动锁定（分钟，0 为关闭）</label><input id="auto-lock-minutes" type="number" min="0" max="240"></div>
             <label class="check-row"><input id="lock-on-hidden" type="checkbox"><span>页面进入后台时立即锁定</span></label>
             <label class="check-row"><input id="clipboard-clear" type="checkbox"><span>复制后 30 秒自动清空剪贴板</span></label>
+            <label class="check-row"><input id="vibrate-on-copy" type="checkbox"><span>复制验证码时轻微震动</span></label>
+            <label class="check-row"><input id="quick-unlock-enabled" type="checkbox"><span>启用 5 分钟 PIN 快速解锁</span></label>
+            <div class="form-group"><label for="trash-retention-days">回收站保留天数</label><input id="trash-retention-days" type="number" min="1" max="365" inputmode="numeric"><p class="field-hint">到期后自动彻底删除，范围 1～365 天。</p></div>
           </div>
+          <div id="quick-unlock-pin-fields" class="settings-security-panel hidden">
+            <p id="quick-unlock-settings-status" class="field-hint"></p>
+            <div class="form-grid">
+              <div class="form-group"><label for="quick-unlock-new-pin">6 位 PIN</label><input id="quick-unlock-new-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"></div>
+              <div class="form-group"><label for="quick-unlock-confirm-pin">确认 PIN</label><input id="quick-unlock-confirm-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"></div>
+            </div>
+            <p class="field-hint">PIN 只用于当前标签页锁定后的短时恢复；刷新、跨标签页或超过 5 分钟仍需主密码。</p>
+          </div>
+          <div id="settings-error" class="error hidden" role="alert"></div>
+          <p class="settings-shortcuts">快捷键：<kbd>/</kbd> 搜索 · <kbd>N</kbd> 添加 · <kbd>Esc</kbd> 清空</p>
           <div class="settings-links">
+            <button id="install-app" class="btn btn-primary hidden" type="button">安装到主屏幕/桌面</button>
             <button id="groups-open" class="btn btn-secondary" type="button">管理分组</button>
             <button id="change-password-open" class="btn btn-secondary" type="button">修改主密码</button>
             <button id="login-other" class="btn btn-secondary" type="button">登录其他账户</button>
           </div>
-          <div class="modal-actions"><button id="lock-current" class="btn btn-ghost" type="button">退出当前账户</button><button id="lock-all" class="btn btn-danger" type="button">锁定全部会话</button><button class="btn btn-primary" type="submit">保存设置</button></div>
+          <div class="modal-actions"><button id="lock-current" class="btn btn-ghost" type="button">锁定当前账户</button><button id="lock-all" class="btn btn-danger" type="button">锁定全部会话</button><button id="settings-submit" class="btn btn-primary" type="submit">保存设置</button></div>
         </form>
       </div>
     </div>
@@ -332,8 +364,8 @@
 
     <div id="trash-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="trash-title" aria-describedby="trash-description">
       <div class="modal modal-wide">
-        <div class="modal-header"><div><p class="eyebrow">保留 30 天</p><h2 id="trash-title">回收站</h2></div><button class="icon-btn" type="button" data-close-modal="trash-modal" aria-label="关闭">×</button></div>
-        <p id="trash-description" class="field-hint">从列表移除的密钥会保留在这里，30 天内可以随时恢复；只有“彻底删除”会立即永久删除。</p>
+        <div class="modal-header"><div><p id="trash-retention-label" class="eyebrow">保留 30 天</p><h2 id="trash-title">回收站</h2></div><button class="icon-btn" type="button" data-close-modal="trash-modal" aria-label="关闭">×</button></div>
+        <p id="trash-description" class="field-hint">从列表移除的密钥会暂存在这里，到期前可以随时恢复；只有“彻底删除”会立即永久删除。</p>
         <div id="trash-list" class="manage-list"></div>
       </div>
     </div>

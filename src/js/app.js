@@ -1,10 +1,12 @@
 import {
   PBKDF2_ITERATIONS,
+  QUICK_UNLOCK_ITERATIONS,
   VAULT_VERSION,
   aesKeysEqual,
   decryptJson,
   deriveKey,
   deriveKeyHash,
+  deriveQuickUnlockHash,
   encryptBackup,
   encryptJson,
   exportAesKey,
@@ -21,6 +23,7 @@ import {
   validateImportedItems,
 } from './importers.js';
 import { QrScanner, scanQrImage } from './qr.js';
+import { drawQrToCanvas } from './qrcode.js';
 import {
   ApiError,
   OfflineManager,
@@ -30,12 +33,15 @@ import {
   clearAllSessions,
   getActiveAccount,
   getKnownAccounts,
+  getQuickUnlockConfig,
   getSession,
   getSessions,
   loadSettings,
   parseStoredCloudRecord,
   removeSession,
+  removeQuickUnlockConfig,
   saveSession,
+  saveQuickUnlockConfig,
   saveSettings,
   setActiveAccount,
 } from './storage.js';
@@ -85,6 +91,9 @@ import {
 } from './utils.js';
 
 const offline = new OfflineManager();
+const LAST_EXPORT_KEY = '2fa_last_export_v1';
+const BACKUP_DISMISSED_KEY = '2fa_backup_reminder_dismissed_v1';
+const BACKUP_REMINDER_DAYS = 30;
 const state = {
   masterKey: null,
   keyHash: '',
@@ -112,6 +121,10 @@ const state = {
 };
 
 let qrScanner;
+let deferredInstallPrompt = null;
+let isComposing = false;
+let quickUnlockCache = null;
+let quickUnlockTimer = null;
 
 function vaultPayload() {
   return { version: VAULT_VERSION, keys: state.keys, deletedItems: state.deletedItems };
@@ -151,6 +164,94 @@ function clearSensitiveState() {
   if (state.updateTimer) clearInterval(state.updateTimer);
   state.updateTimer = null;
   qrScanner?.stop();
+}
+
+function discardQuickUnlock(updateAuthUi = false) {
+  clearTimeout(quickUnlockTimer);
+  quickUnlockTimer = null;
+  quickUnlockCache = null;
+  if (updateAuthUi && !$('#unlock-screen').classList.contains('hidden')) {
+    setHidden('#quick-unlock-form', true);
+    setHidden('#login-form', false);
+    requestAnimationFrame(() => $('#login-password').focus());
+  }
+}
+
+function quickUnlockAvailable(accountName = '') {
+  return Boolean(quickUnlockCache
+    && quickUnlockCache.expiresAt > Date.now()
+    && normalizeAccountName(accountName) === quickUnlockCache.accountName
+    && getQuickUnlockConfig(quickUnlockCache.accountName));
+}
+
+async function cacheCurrentForQuickUnlock() {
+  if (!state.masterKey || !getQuickUnlockConfig(state.accountName)) return false;
+  clearTimeout(quickUnlockTimer);
+  quickUnlockCache = {
+    accountName: state.accountName,
+    keyHash: state.keyHash,
+    salt: state.salt,
+    keyStr: await exportAesKey(state.masterKey),
+    keyIterations: state.keyIterations,
+    expiresAt: Date.now() + 5 * 60_000,
+    attempts: 0,
+  };
+  quickUnlockTimer = setTimeout(() => discardQuickUnlock(true), 5 * 60_000);
+  return true;
+}
+
+function renderQuickUnlockEntry(accountName = '') {
+  const available = quickUnlockAvailable(accountName);
+  setHidden('#quick-unlock-form', !available);
+  setHidden('#login-form', available);
+  if (!available) return false;
+  $('#quick-unlock-account').textContent = quickUnlockCache.accountName;
+  $('#quick-unlock-pin').value = '';
+  hideError('#quick-unlock-error');
+  requestAnimationFrame(() => $('#quick-unlock-pin').focus());
+  return true;
+}
+
+function hashesEqual(left, right) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+}
+
+async function unlockWithPin(pin) {
+  if (!quickUnlockAvailable(quickUnlockCache?.accountName)) throw new Error('快速解锁已过期，请使用主密码');
+  const cache = quickUnlockCache;
+  const config = getQuickUnlockConfig(cache.accountName);
+  const derived = await deriveQuickUnlockHash(pin, config.salt, cache.accountName, config.iterations);
+  if (!hashesEqual(derived, config.hash)) {
+    cache.attempts += 1;
+    if (cache.attempts >= 3) {
+      discardQuickUnlock();
+      throw new Error('PIN 错误次数过多，请使用主密码');
+    }
+    throw new Error(`PIN 错误，还可尝试 ${3 - cache.attempts} 次`);
+  }
+
+  state.masterKey = await importAesKey(cache.keyStr);
+  state.keyHash = cache.keyHash;
+  state.salt = cache.salt;
+  state.accountName = cache.accountName;
+  state.keyIterations = cache.keyIterations;
+  let record = null;
+  if (offline.isOnline) {
+    try {
+      const cloud = await loadCloudRecord(state.keyHash);
+      if (cloud.exists) record = cloud;
+    } catch (error) {
+      console.warn('Quick unlock cloud load failed:', error);
+    }
+  }
+  if (!record) record = await offline.get(state.keyHash);
+  if (!record) throw new Error('保险库缓存不存在，请使用主密码');
+  useVaultData(await decryptJson(record.encryptedData, state.masterKey));
+  await rememberCurrentSession();
+  discardQuickUnlock();
 }
 
 async function rememberCurrentSession() {
@@ -339,12 +440,13 @@ async function restoreSession(accountName) {
 function showAuthScreen(accountName = '') {
   setHidden('#main-app', true);
   setHidden('#unlock-screen', false);
+  document.title = '2FA Authenticator';
   $('#login-account').value = accountName || '';
   $('#login-password').value = '';
   switchAuthView('login');
   renderKnownAccounts();
   renderSessionResume();
-  requestAnimationFrame(() => $('#login-account').focus());
+  if (!renderQuickUnlockEntry(accountName)) requestAnimationFrame(() => $('#login-account').focus());
 }
 
 function showMainApp() {
@@ -352,20 +454,25 @@ function showMainApp() {
   setHidden('#main-app', false);
   $('#search-input').value = state.search;
   renderAccountSwitch();
+  updateVaultTitle();
   pruneTrash();
   renderAll();
   startUpdateTimer();
   resetAutoLockTimer();
 }
 
-function lockCurrent() {
+async function lockCurrent(message = '') {
   const account = state.accountName;
+  await cacheCurrentForQuickUnlock();
   removeSession(account);
   clearSensitiveState();
   showAuthScreen(account);
+  if (message) showToast(message);
 }
 
-function lockAll(message = '') {
+async function lockAll(message = '', allowQuickUnlock = false) {
+  if (allowQuickUnlock) await cacheCurrentForQuickUnlock();
+  else discardQuickUnlock();
   clearAllSessions();
   clearSensitiveState();
   showAuthScreen();
@@ -374,6 +481,7 @@ function lockAll(message = '') {
 
 function switchAuthView(view) {
   const setup = view === 'setup';
+  setHidden('#quick-unlock-form', true);
   setHidden('#login-form', setup);
   setHidden('#setup-form', !setup);
   for (const button of $$('[data-auth-view]')) {
@@ -400,12 +508,23 @@ function renderAccountSwitch() {
   select.innerHTML = sessions.map((session) => `<option value="${escapeHtml(session.accountName)}">${escapeHtml(session.accountName)}</option>`).join('')
     + '<option value="__other">＋ 登录其他账户</option>';
   select.value = state.accountName;
+  updateVaultTitle();
+}
+
+function updateVaultTitle() {
+  if (!state.accountName) {
+    document.title = '2FA Authenticator';
+    return;
+  }
+  $('#vault-eyebrow').textContent = `当前保险库 · ${state.accountName}`;
+  $('#vault-eyebrow').title = state.accountName;
+  document.title = `${state.accountName} · 2FA Authenticator`;
 }
 
 function resetAutoLockTimer() {
   clearTimeout(state.autoLockTimer);
   if (!state.masterKey || Number(state.settings.autoLockMinutes) <= 0) return;
-  state.autoLockTimer = setTimeout(() => lockAll('由于长时间无操作，保险库已自动锁定'), Number(state.settings.autoLockMinutes) * 60_000);
+  state.autoLockTimer = setTimeout(() => lockAll('由于长时间无操作，保险库已自动锁定', true), Number(state.settings.autoLockMinutes) * 60_000);
 }
 
 function getGroups() {
@@ -667,7 +786,7 @@ async function renderKeys() {
       <article class="token-item${frequent ? ' frequent' : ''}${state.multiSelectMode ? ' selectable' : ''}${selected ? ' selected' : ''}" draggable="${draggable}" data-key-id="${escapeHtml(key.id)}" data-counter="${getCounter(key, cardNow)}">
         <div class="token-top">
           ${selectControl}
-          <div class="token-icon${icon.matched ? '' : ' initial'}" aria-hidden="true">${escapeHtml(icon.value)}</div>
+          <div class="token-icon${icon.matched ? '' : ` initial avatar-tone-${icon.tone}`}" aria-hidden="true">${escapeHtml(icon.value)}</div>
           <div class="token-meta"><div class="token-title-line"><div class="token-name">${escapeHtml(key.name)}</div>${frequent ? `<span class="usage-badge" title="已复制 ${Number(key.useCount || 0)} 次">常用</span>` : ''}</div><div class="token-subtitle">${escapeHtml(subtitle)}</div><div class="token-last-used" title="最近使用时间：${escapeHtml(lastUsed)}">最近使用：${escapeHtml(lastUsed)}</div></div>
           <button class="favorite-btn${key.favorite ? ' active' : ''}" type="button" data-action="favorite" aria-label="${key.favorite ? '取消收藏' : '收藏'}" aria-pressed="${key.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
@@ -702,6 +821,7 @@ function renderAll() {
   updateGroupOptions();
   $('#trash-count').textContent = String(state.deletedItems.length);
   renderKeys();
+  renderBackupReminder();
 }
 
 async function updateDisplay() {
@@ -758,7 +878,7 @@ async function copyText(value, successMessage = '已复制') {
     state.clipboardTimer = setTimeout(async () => {
       try {
         await navigator.clipboard.writeText('');
-        showToast('剪贴板已自动清空');
+        if (!document.hidden) showToast('剪贴板已自动清空');
       } catch { /* browser may revoke clipboard permission */ }
     }, 30_000);
   }
@@ -808,6 +928,7 @@ async function copyKeyCode(key, card) {
   }
   key.lastUsed = Date.now();
   key.useCount = Math.max(0, Number(key.useCount || 0)) + 1;
+  if (state.settings.vibrateOnCopy) navigator.vibrate?.(10);
   card?.classList.add('copied');
   setTimeout(() => card?.classList.remove('copied'), 520);
   card?.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(.98)' }, { transform: 'scale(1)' }], { duration: 180 });
@@ -969,8 +1090,47 @@ function openEditModal(id) {
   $('#edit-period').value = String(key.period);
   $('#edit-digits').value = String(key.digits);
   $('#edit-algorithm').value = key.algorithm;
+  setHidden('#edit-qr-panel', true);
   hideError('#edit-error');
   openModal('edit-modal', '#edit-name');
+}
+
+async function duplicateEditedKey() {
+  try {
+    const template = readKeyForm('edit');
+    await validateKeyInput(template, template.id);
+    const names = new Set(state.keys.map((key) => key.name.toLocaleLowerCase()));
+    const duplicateName = uniqueName(`${template.name} (副本)`, names);
+    closeModal('edit-modal');
+    resetAddForm();
+    $('#add-name').value = duplicateName;
+    $('#add-issuer').value = template.issuer;
+    $('#add-account').value = template.account;
+    $('#add-group').value = template.group;
+    $('#add-note').value = template.note;
+    $('#add-secret').value = template.secret;
+    $('#add-icon').value = template.icon;
+    $('#add-period').value = String(template.period);
+    $('#add-digits').value = String(template.digits);
+    $('#add-algorithm').value = template.algorithm;
+    openModal('add-modal', '#add-name');
+    showToast('副本拥有相同密钥，两个条目会生成相同验证码', { duration: 4_000 });
+  } catch (error) {
+    showError('#edit-error', error.message);
+  }
+}
+
+async function showEditedQr() {
+  try {
+    const key = readKeyForm('edit');
+    await validateKeyInput(key, key.id);
+    drawQrToCanvas($('#edit-qr-canvas'), buildOtpauthUri(key));
+    hideError('#edit-error');
+    setHidden('#edit-qr-panel', false);
+    $('#hide-qr').focus();
+  } catch (error) {
+    showError('#edit-error', error.message);
+  }
 }
 
 function openQuickGroupModal(id) {
@@ -1062,6 +1222,9 @@ function pruneTrash() {
 }
 
 function renderTrash() {
+  const retentionDays = Number(state.settings.trashRetentionDays);
+  $('#trash-retention-label').textContent = `保留 ${retentionDays} 天`;
+  $('#trash-description').textContent = `从列表移除的密钥会暂存在这里，${retentionDays} 天内可以随时恢复；只有“彻底删除”会立即永久删除。`;
   const list = $('#trash-list');
   if (state.deletedItems.length === 0) {
     list.innerHTML = '<p class="field-hint center">回收站是空的</p>';
@@ -1322,6 +1485,49 @@ function openExportDialog(keyIds = null) {
   openModal('export-modal', '#export-format');
 }
 
+function accountTimestamp(storageKey) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    if (typeof parsed === 'number') return parsed;
+    return Number(parsed?.[state.accountName] || 0);
+  } catch {
+    return Number(localStorage.getItem(storageKey) || 0);
+  }
+}
+
+function saveAccountTimestamp(storageKey, timestamp = Date.now()) {
+  let values = {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) values = parsed;
+  } catch { /* replace invalid legacy value */ }
+  values[state.accountName] = timestamp;
+  localStorage.setItem(storageKey, JSON.stringify(values));
+}
+
+function shouldRemindBackup(now = Date.now()) {
+  if (!state.accountName) return false;
+  const lastExport = accountTimestamp(LAST_EXPORT_KEY);
+  const dismissedAt = accountTimestamp(BACKUP_DISMISSED_KEY);
+  if (dismissedAt && now - dismissedAt < 7 * 86_400_000) return false;
+  if (!lastExport) return state.keys.length >= 5;
+  return state.keys.length >= 10 && now - lastExport > BACKUP_REMINDER_DAYS * 86_400_000;
+}
+
+function renderBackupReminder() {
+  const reminder = $('#backup-reminder');
+  if (!reminder) return;
+  const visible = shouldRemindBackup();
+  setHidden(reminder, !visible);
+  if (visible) $('#backup-reminder-message').textContent = `已有 ${state.keys.length} 个密钥，建议导出一份加密备份。`;
+}
+
+function recordBackupExport() {
+  saveAccountTimestamp(LAST_EXPORT_KEY);
+  saveAccountTimestamp(BACKUP_DISMISSED_KEY, 0);
+  renderBackupReminder();
+}
+
 async function exportKeysFromForm(event) {
   event.preventDefault();
   hideError('#export-error');
@@ -1351,7 +1557,7 @@ async function exportKeysFromForm(event) {
       state.multiSelectMode = false;
       state.selectedKeyIds.clear();
       renderKeys();
-    }
+    } else recordBackupExport();
     showToast(selectedExport ? `已导出 ${keys.length} 个密钥` : '备份已导出');
   } catch (error) {
     showError('#export-error', error.message);
@@ -1366,6 +1572,23 @@ function fillSettingsForm() {
   $('#auto-lock-minutes').value = String(state.settings.autoLockMinutes);
   $('#lock-on-hidden').checked = state.settings.lockOnHidden;
   $('#clipboard-clear').checked = state.settings.clipboardAutoClear;
+  $('#vibrate-on-copy').checked = state.settings.vibrateOnCopy;
+  $('#trash-retention-days').value = String(state.settings.trashRetentionDays);
+  $('#quick-unlock-enabled').checked = Boolean(getQuickUnlockConfig(state.accountName));
+  $('#quick-unlock-new-pin').value = '';
+  $('#quick-unlock-confirm-pin').value = '';
+  hideError('#settings-error');
+  renderQuickUnlockSettings();
+  updateInstallButton();
+}
+
+function renderQuickUnlockSettings() {
+  const enabled = $('#quick-unlock-enabled').checked;
+  const configured = Boolean(getQuickUnlockConfig(state.accountName));
+  setHidden('#quick-unlock-pin-fields', !enabled);
+  $('#quick-unlock-settings-status').textContent = configured
+    ? '快速解锁已配置；PIN 留空可保持不变，填写则会更新。'
+    : '首次启用需要设置一个 6 位 PIN。';
 }
 
 function applySortMode(sortMode, announce = false) {
@@ -1379,21 +1602,47 @@ function applySortMode(sortMode, announce = false) {
   }
 }
 
-function saveSettingsFromForm(event) {
+async function saveSettingsFromForm(event) {
   event.preventDefault();
-  state.settings = saveSettings({
-    ...state.settings,
-    theme: $('#theme-select').value,
-    sortMode: $('#sort-select').value,
-    autoLockMinutes: $('#auto-lock-minutes').value,
-    lockOnHidden: $('#lock-on-hidden').checked,
-    clipboardAutoClear: $('#clipboard-clear').checked,
-  });
-  applyTheme(state.settings.theme);
-  resetAutoLockTimer();
-  renderKeys();
-  closeModal('settings-modal');
-  showToast('设置已保存');
+  hideError('#settings-error');
+  const button = $('#settings-submit');
+  setBusy(button, true, '正在保存…');
+  try {
+    const enableQuickUnlock = $('#quick-unlock-enabled').checked;
+    const currentConfig = getQuickUnlockConfig(state.accountName);
+    const pin = $('#quick-unlock-new-pin').value.trim();
+    const confirmation = $('#quick-unlock-confirm-pin').value.trim();
+    if (enableQuickUnlock && (!currentConfig || pin || confirmation)) {
+      if (!/^\d{6}$/.test(pin)) throw new Error('快速解锁 PIN 必须是 6 位数字');
+      if (pin !== confirmation) throw new Error('两次输入的 PIN 不一致');
+      const salt = generateSalt();
+      const hash = await deriveQuickUnlockHash(pin, salt, state.accountName, QUICK_UNLOCK_ITERATIONS);
+      saveQuickUnlockConfig(state.accountName, { salt, hash, iterations: QUICK_UNLOCK_ITERATIONS });
+    } else if (!enableQuickUnlock) {
+      removeQuickUnlockConfig(state.accountName);
+      discardQuickUnlock();
+    }
+    state.settings = saveSettings({
+      ...state.settings,
+      theme: $('#theme-select').value,
+      sortMode: $('#sort-select').value,
+      autoLockMinutes: $('#auto-lock-minutes').value,
+      lockOnHidden: $('#lock-on-hidden').checked,
+      clipboardAutoClear: $('#clipboard-clear').checked,
+      vibrateOnCopy: $('#vibrate-on-copy').checked,
+      trashRetentionDays: $('#trash-retention-days').value,
+    });
+    applyTheme(state.settings.theme);
+    resetAutoLockTimer();
+    pruneTrash();
+    renderAll();
+    closeModal('settings-modal');
+    showToast('设置已保存');
+  } catch (error) {
+    showError('#settings-error', error.message);
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 async function changeMasterPassword(event) {
@@ -1535,6 +1784,7 @@ function setupEvents() {
       const password = $('#login-password').value;
       if (!password) throw new Error('请输入主密码');
       await unlockWithPassword(password, $('#login-account').value);
+      discardQuickUnlock();
       $('#login-password').value = '';
       showMainApp();
     } catch (error) {
@@ -1556,6 +1806,7 @@ function setupEvents() {
       if (!validation.valid) throw new Error(validation.error);
       if (password !== $('#confirm-password').value) throw new Error('两次输入的密码不一致');
       await setupAccount(password, $('#setup-account').value);
+      discardQuickUnlock();
       $('#setup-form').reset();
       showMainApp();
       showToast('加密保险库已创建');
@@ -1570,6 +1821,7 @@ function setupEvents() {
   $('#session-buttons').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-resume-account]');
     if (!button) return;
+    discardQuickUnlock();
     clearSensitiveState();
     if (!await restoreSession(button.dataset.resumeAccount)) showError('#login-error', '会话已失效，请重新输入密码');
   });
@@ -1586,6 +1838,38 @@ function setupEvents() {
     if (!await restoreSession(target)) showAuthScreen(target);
   });
 
+  $('#quick-unlock-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideError('#quick-unlock-error');
+    const button = $('#quick-unlock-submit');
+    setBusy(button, true, '正在解锁…');
+    try {
+      const pin = $('#quick-unlock-pin').value.trim();
+      if (!/^\d{6}$/.test(pin)) throw new Error('请输入 6 位数字 PIN');
+      await unlockWithPin(pin);
+      $('#quick-unlock-pin').value = '';
+      showMainApp();
+      showToast('已快速解锁');
+    } catch (error) {
+      clearSensitiveState();
+      showError('#quick-unlock-error', error.message || '快速解锁失败');
+      if (!quickUnlockCache) {
+        renderQuickUnlockEntry('');
+        showError('#login-error', error.message || '快速解锁失败，请使用主密码');
+      }
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $('#quick-unlock-password').addEventListener('click', () => {
+    const account = quickUnlockCache?.accountName || '';
+    discardQuickUnlock();
+    $('#login-account').value = account;
+    setHidden('#quick-unlock-form', true);
+    setHidden('#login-form', false);
+    $('#login-password').focus();
+  });
+
   $('#theme-quick').addEventListener('click', () => {
     state.settings.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     state.settings = saveSettings(state.settings);
@@ -1593,6 +1877,7 @@ function setupEvents() {
   });
   $('#settings-open').addEventListener('click', () => { fillSettingsForm(); openModal('settings-modal', '#theme-select'); });
   $('#settings-form').addEventListener('submit', saveSettingsFromForm);
+  $('#quick-unlock-enabled').addEventListener('change', renderQuickUnlockSettings);
   $('#sort-quick').addEventListener('change', (event) => applySortMode(event.target.value, true));
   $('#columns-quick').addEventListener('change', (event) => {
     state.settings = saveSettings({ ...state.settings, columnsPerRow: event.target.value });
@@ -1600,7 +1885,7 @@ function setupEvents() {
   });
   $('#lock-current').addEventListener('click', () => { closeModal('settings-modal'); lockCurrent(); });
   $('#lock-all').addEventListener('click', () => { closeModal('settings-modal'); lockAll('全部会话已锁定'); });
-  $('#login-other').addEventListener('click', () => { closeModal('settings-modal'); clearSensitiveState(); showAuthScreen(); });
+  $('#login-other').addEventListener('click', () => { closeModal('settings-modal'); discardQuickUnlock(); clearSensitiveState(); showAuthScreen(); });
 
   $('#add-open').addEventListener('click', () => { resetAddForm(); openModal('add-modal', '#add-name'); });
   $('[data-action="open-add"]').addEventListener('click', () => { resetAddForm(); openModal('add-modal', '#add-name'); });
@@ -1692,10 +1977,45 @@ function setupEvents() {
   $('#bulk-export').addEventListener('click', () => openExportDialog([...state.selectedKeyIds]));
   $('#bulk-delete').addEventListener('click', bulkDeleteSelected);
   $('#bulk-cancel').addEventListener('click', () => setMultiSelectMode(false));
+  document.addEventListener('compositionstart', () => { isComposing = true; });
+  document.addEventListener('compositionend', () => { isComposing = false; });
   document.addEventListener('keydown', (event) => {
-    if (event.defaultPrevented || event.key !== 'Escape' || !state.multiSelectMode || document.querySelector('.modal-overlay:not(.hidden)')) return;
-    event.preventDefault();
-    setMultiSelectMode(false);
+    if (event.defaultPrevented || isComposing || event.isComposing || $('#main-app').classList.contains('hidden')) return;
+    if (document.querySelector('.modal-overlay:not(.hidden)')) return;
+    const inputTarget = event.target instanceof Element && event.target.matches('input, textarea, select');
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (state.multiSelectMode) {
+        setMultiSelectMode(false);
+        return;
+      }
+      if (inputTarget && event.target instanceof HTMLInputElement && event.target.value) {
+        event.target.value = '';
+        event.target.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+      state.search = '';
+      $('#search-input').value = '';
+      renderKeys();
+      $('#token-list').focus();
+      return;
+    }
+    if (inputTarget) return;
+    if (event.key === '/' || ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k')) {
+      event.preventDefault();
+      $('#search-input').focus();
+      $('#search-input').select();
+    } else if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLocaleLowerCase() === 'n') {
+      event.preventDefault();
+      resetAddForm();
+      openModal('add-modal', '#add-name');
+    }
+  });
+  $('#duplicate-key').addEventListener('click', duplicateEditedKey);
+  $('#show-qr').addEventListener('click', showEditedQr);
+  $('#hide-qr').addEventListener('click', () => {
+    setHidden('#edit-qr-panel', true);
+    $('#show-qr').focus();
   });
   $('#clear-filters').addEventListener('click', () => {
     state.search = '';
@@ -1745,6 +2065,12 @@ function setupEvents() {
     setHidden('#export-warning', encrypted);
   });
   $('#export-form').addEventListener('submit', exportKeysFromForm);
+  $('#backup-reminder-export').addEventListener('click', () => openExportDialog());
+  $('#backup-reminder-dismiss').addEventListener('click', () => {
+    saveAccountTimestamp(BACKUP_DISMISSED_KEY);
+    renderBackupReminder();
+  });
+  $('#install-app').addEventListener('click', installApp);
 
   $('#change-password-open').addEventListener('click', () => {
     closeModal('settings-modal', false);
@@ -1795,7 +2121,7 @@ function setupEvents() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) return;
     qrScanner?.stop();
-    if (state.masterKey && state.settings.lockOnHidden) lockAll('页面进入后台，保险库已锁定');
+    if (state.masterKey && state.settings.lockOnHidden) lockAll('页面进入后台，保险库已锁定', true);
   });
   window.addEventListener('beforeunload', () => qrScanner?.stop());
 }
@@ -1826,11 +2152,58 @@ function registerServiceWorker() {
   });
 }
 
+function isStandaloneApp() {
+  return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+
+function isIosDevice() {
+  const ipadDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  return (/iphone|ipad|ipod/i.test(navigator.userAgent) || ipadDesktopMode) && !window.MSStream;
+}
+
+function updateInstallButton() {
+  const button = $('#install-app');
+  if (!button) return;
+  const showIosHelp = isIosDevice() && !isStandaloneApp();
+  setHidden(button, isStandaloneApp() || (!deferredInstallPrompt && !showIosHelp));
+  button.textContent = showIosHelp ? '添加到主屏幕' : '安装到主屏幕/桌面';
+}
+
+async function installApp() {
+  if (isIosDevice() && !deferredInstallPrompt) {
+    showToast('请在 Safari 分享菜单中选择“添加到主屏幕”', { duration: 4_000 });
+    return;
+  }
+  if (!deferredInstallPrompt) return;
+  const promptEvent = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  const showInstallPrompt = promptEvent['prompt'].bind(promptEvent);
+  await showInstallPrompt();
+  const choice = await promptEvent.userChoice;
+  updateInstallButton();
+  showToast(choice.outcome === 'accepted' ? '已开始安装' : '已取消安装');
+}
+
+function setupInstallPrompt() {
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    updateInstallButton();
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    updateInstallButton();
+    showToast('安装成功');
+  });
+  updateInstallButton();
+}
+
 async function init() {
   applyTheme(state.settings.theme);
   watchSystemTheme(() => state.settings.theme);
   setupQrScanner();
   setupEvents();
+  setupInstallPrompt();
   registerServiceWorker();
   try { await offline.init(); } catch (error) { console.warn('Offline cache unavailable:', error); }
   offline.setupNetworkListeners(

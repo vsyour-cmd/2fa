@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, OfflineManager, loadSettings, saveSettings } from '../src/js/storage.js';
+import { DEFAULT_SETTINGS, OfflineManager, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -38,6 +38,12 @@ describe('settings migration', () => {
     vi.stubGlobal('localStorage', memoryStorage());
     expect(saveSettings({ ...DEFAULT_SETTINGS, sortMode: 'stale' }).sortMode).toBe('stale');
   });
+
+  it('defaults copy vibration on and preserves an explicit opt-out', () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    expect(loadSettings().vibrateOnCopy).toBe(true);
+    expect(saveSettings({ ...DEFAULT_SETTINGS, vibrateOnCopy: false }).vibrateOnCopy).toBe(false);
+  });
 });
 
 describe('offline conflict detection', () => {
@@ -54,5 +60,18 @@ describe('offline conflict detection', () => {
   it('treats an old cache without a cloud base conservatively', () => {
     expect(manager.detectConflict({ locallyModified: true }, 200)).toBe(true);
     expect(manager.detectConflict({ locallyModified: false }, 200)).toBe(false);
+  });
+});
+
+describe('quick unlock configuration', () => {
+  it('stores PIN verification metadata per account without storing the PIN', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveQuickUnlockConfig('个人', { salt: 'salt', hash: 'hash', iterations: 200_000 });
+    expect(getQuickUnlockConfig('个人')).toEqual({ salt: 'salt', hash: 'hash', iterations: 200_000 });
+    expect(getQuickUnlockConfig('工作')).toBeNull();
+    expect(storage.getItem('2fa_quick_unlock_v1')).not.toContain('123456');
+    removeQuickUnlockConfig('个人');
+    expect(getQuickUnlockConfig('个人')).toBeNull();
   });
 });

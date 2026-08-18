@@ -243,5 +243,11 @@ export function getKeyIcon(key) {
   const haystack = `${key.issuer || ''} ${key.name || ''}`;
   const match = ICON_MAP.find(([pattern]) => pattern.test(haystack));
   if (match) return { value: match[1], matched: true };
-  return { value: String(key.name || '?').trim().charAt(0).toUpperCase() || '?', matched: false };
+  const name = String(key.name || '?').trim() || '?';
+  let hash = 2166136261;
+  for (const character of name) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return { value: name.charAt(0).toUpperCase() || '?', matched: false, tone: Math.abs(hash) % 8 };
 }

@@ -70,7 +70,9 @@ describe('static application shell', () => {
   });
 
   it('moves keys to a recoverable trash before permanent deletion', () => {
-    expect(html).toContain('30 天内可以随时恢复');
+    expect(html).toContain('id="trash-retention-label"');
+    expect(html).toContain('id="trash-retention-days"');
+    expect(app).toContain('${retentionDays} 天内可以随时恢复');
     expect(app).toContain('data-action="delete">移入回收站</button>');
     expect(app).toContain('state.deletedItems.unshift({ ...removed, deletedAt: Date.now() })');
     expect(app).toContain('data-trash-action="restore">恢复</button>');
@@ -120,8 +122,44 @@ describe('static application shell', () => {
     expect(app).toContain("if (state.multiSelectMode) {");
     expect(app).toContain("state.deletedItems.unshift(...keys.map((key) => ({ ...key, deletedAt })))");
     expect(app).toContain("state.multiSelectMode || state.settings.sortMode !== 'custom'");
-    expect(app).toContain("event.defaultPrevented || event.key !== 'Escape' || !state.multiSelectMode");
+    expect(app).toContain("if (event.key === 'Escape')");
+    expect(app).toContain('if (state.multiSelectMode)');
     expect(app).toContain('await saveVault();');
+  });
+
+  it('adds global shortcuts, install guidance, dynamic retention, and account titles', () => {
+    expect(html).toContain('快捷键：<kbd>/</kbd> 搜索');
+    expect(html).toContain('id="install-app"');
+    expect(html).toContain('id="trash-retention-days"');
+    expect(html).toContain('id="vault-eyebrow"');
+    expect(app).toContain("document.addEventListener('compositionstart'");
+    expect(app).toContain("event.key.toLocaleLowerCase() === 'n'");
+    expect(app).toContain("window.addEventListener('beforeinstallprompt'");
+    expect(app).toContain('trashRetentionDays:');
+    expect(app).toContain('document.title = `${state.accountName} · 2FA Authenticator`');
+  });
+
+  it('adds copy feedback, cloning, backup reminders, and deterministic avatar tones', () => {
+    expect(html).toContain('id="vibrate-on-copy"');
+    expect(html).toContain('id="duplicate-key"');
+    expect(html).toContain('id="backup-reminder"');
+    expect(app).toContain("if (!document.hidden) showToast('剪贴板已自动清空')");
+    expect(app).toContain('navigator.vibrate?.(10)');
+    expect(app).toContain('uniqueName(');
+    expect(app).toContain("const LAST_EXPORT_KEY = '2fa_last_export_v1'");
+    expect(app).toContain('state.keys.length >= 10');
+    expect(app).toContain('avatar-tone-');
+  });
+
+  it('shows offline migration QR codes and limits quick PIN unlock to a short in-tab cache', () => {
+    expect(html).toContain('id="show-qr"');
+    expect(html).toContain('id="edit-qr-canvas"');
+    expect(html).toContain('id="quick-unlock-form"');
+    expect(html).toContain('id="quick-unlock-enabled"');
+    expect(app).toContain('drawQrToCanvas');
+    expect(app).toContain('expiresAt: Date.now() + 5 * 60_000');
+    expect(app).toContain('cache.attempts >= 3');
+    expect(app).toContain('deriveQuickUnlockHash');
   });
 
   it('uses accessible application dialogs instead of native prompt and confirm calls', () => {

@@ -5,6 +5,7 @@ import {
   decryptJson,
   deriveKey,
   deriveKeyHash,
+  deriveQuickUnlockHash,
   encryptBackup,
   encryptJson,
   generateSalt,
@@ -43,5 +44,13 @@ describe('vault cryptography', () => {
     expect(backup.format).toBe('2fa-encrypted-backup');
     await expect(decryptBackup(backup, 'export password 123')).resolves.toEqual(payload);
     await expect(decryptBackup(backup, 'wrong password 123')).rejects.toThrow();
+  });
+
+  it('derives salted, account-scoped hashes for quick unlock PINs', async () => {
+    const salt = generateSalt();
+    const first = await deriveQuickUnlockHash('123456', salt, '个人', 1_000);
+    expect(first).toMatch(/^[a-f0-9]{64}$/);
+    await expect(deriveQuickUnlockHash('123456', salt, '个人', 1_000)).resolves.toBe(first);
+    await expect(deriveQuickUnlockHash('123456', salt, '工作', 1_000)).resolves.not.toBe(first);
   });
 });

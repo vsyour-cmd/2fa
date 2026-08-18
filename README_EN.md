@@ -10,14 +10,14 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **Cloud Sync**: Data stored in Cloudflare KV, accessible across devices
 - **End-to-End Encryption**: AES-256-GCM encryption, server only stores ciphertext
 - **Multiple Vaults**: Account name and master password identify a vault, with fast local switching
-- **PWA Support**: Install to desktop/home screen for native app experience
+- **PWA Support**: Install from Settings to desktop/home screen and start offline after the first online visit
 - **Light and Dark Themes**: Supports light, dark, and system-following modes, with a quick toggle in the header
 - **Offline Access**: After the first online visit, the app can start without a network connection; encrypted vaults are cached in IndexedDB and synchronized with explicit conflict handling
-- **QR Code Scanning**: Support camera scanning, image upload, and clipboard paste to recognize QR codes
-- **Complete Management**: Search, groups, notes, favorites, smart frequently-used ordering, custom ordering, editing, and a 30-day trash bin
+- **QR Migration**: Scan from camera, images, or clipboard, and display an offline migration QR from the edit screen
+- **Complete Management**: Search, groups, notes, favorites, smart ordering, custom ordering, bulk actions, cloning, and configurable trash retention
 - **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
-- **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports
-- **Security Controls**: Auto-lock, background lock, clipboard clearing, password strength, and safe re-encryption
+- **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports with gentle periodic backup reminders
+- **Security Controls**: Auto-lock, background lock, clipboard clearing, copy vibration, password strength, safe re-encryption, and optional five-minute PIN quick unlock
 
 ## Architecture
 
@@ -150,8 +150,9 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 ### Theme and Settings
 
 - Click the moon icon in the top right to switch quickly between light and dark themes; open the gear menu to select "Follow system"
-- Settings also control sorting, inactivity auto-lock, immediate background lock, and automatic clipboard clearing after copying
-- "Manage Groups" and "Change Master Password" are available in Settings; the trash entry is at the bottom of the page and keeps deleted keys for 30 days
+- Settings also control sorting, inactivity auto-lock, immediate background lock, automatic clipboard clearing, copy vibration, and trash retention
+- The optional six-digit PIN only restores the current tab for five minutes after locking; refreshes, other tabs, and expiry still require the master password
+- "Manage Groups," "Change Master Password," and PWA installation are available in Settings; shortcuts are `/` for search, `N` for add, and `Esc` to clear or exit multi-select
 
 ### Add 2FA Key
 
@@ -175,11 +176,12 @@ Click the "+" button in the top right, three methods available:
 ### Use Verification Code
 
 - Click the code to copy to clipboard
-- The ring on the right shows remaining valid time (30-second cycle)
+- Each card shows the previous, current, and next code; the ring shows the current code's remaining time
+- During the final second, the app waits for and copies the next code
 
 ### Logout
 
-Click the logout button in the top left to clear current session and return to login page.
+Use "Lock Current Vault" in Settings to return to login; when PIN quick unlock is enabled, it remains available for five minutes. "Lock All Sessions" clears the quick-unlock cache.
 
 ### Import/Export
 

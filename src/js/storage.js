@@ -4,6 +4,7 @@ const SESSION_KEY = '2fa_sessions_v3';
 const ACTIVE_ACCOUNT_KEY = '2fa_active_account_v3';
 const KNOWN_ACCOUNTS_KEY = '2fa_known_accounts_v3';
 const SETTINGS_KEY = '2fa_settings_v3';
+const QUICK_UNLOCK_KEY = '2fa_quick_unlock_v1';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system',
@@ -12,6 +13,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   autoLockMinutes: 15,
   lockOnHidden: false,
   clipboardAutoClear: true,
+  vibrateOnCopy: true,
   trashRetentionDays: 30,
   settingsVersion: 3,
 });
@@ -240,11 +242,38 @@ export function saveSettings(settings) {
     autoLockMinutes: Math.max(0, Math.min(240, Number(settings.autoLockMinutes) || 0)),
     lockOnHidden: Boolean(settings.lockOnHidden),
     clipboardAutoClear: Boolean(settings.clipboardAutoClear),
+    vibrateOnCopy: settings.vibrateOnCopy !== false,
     trashRetentionDays: Math.max(1, Math.min(365, Number(settings.trashRetentionDays) || 30)),
     settingsVersion: 3,
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(safe));
   return safe;
+}
+
+function quickUnlockId(accountName) {
+  return normalizeAccountName(accountName).normalize('NFKC').toLocaleLowerCase('en-US');
+}
+
+export function getQuickUnlockConfig(accountName) {
+  const configs = parseJsonStorage(localStorage, QUICK_UNLOCK_KEY, {});
+  const config = configs && typeof configs === 'object' ? configs[quickUnlockId(accountName)] : null;
+  if (!config || typeof config.salt !== 'string' || typeof config.hash !== 'string') return null;
+  const iterations = Number(config.iterations);
+  return { salt: config.salt, hash: config.hash, iterations: Number.isInteger(iterations) && iterations >= 100_000 && iterations <= 1_000_000 ? iterations : 200_000 };
+}
+
+export function saveQuickUnlockConfig(accountName, config) {
+  const configs = parseJsonStorage(localStorage, QUICK_UNLOCK_KEY, {});
+  const safeConfigs = configs && typeof configs === 'object' && !Array.isArray(configs) ? configs : {};
+  safeConfigs[quickUnlockId(accountName)] = { salt: String(config.salt), hash: String(config.hash), iterations: Number(config.iterations || 200_000) };
+  localStorage.setItem(QUICK_UNLOCK_KEY, JSON.stringify(safeConfigs));
+}
+
+export function removeQuickUnlockConfig(accountName) {
+  const configs = parseJsonStorage(localStorage, QUICK_UNLOCK_KEY, {});
+  if (!configs || typeof configs !== 'object' || Array.isArray(configs)) return;
+  delete configs[quickUnlockId(accountName)];
+  localStorage.setItem(QUICK_UNLOCK_KEY, JSON.stringify(configs));
 }
 
 export function parseStoredCloudRecord(result) {
