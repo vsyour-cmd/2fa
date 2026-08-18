@@ -91,9 +91,9 @@
 
       <section id="logs-panel" class="panel hidden" role="tabpanel" aria-labelledby="logs-tab">
         <div class="panel-header">
-          <div><h2>操作日志</h2><p id="logs-result-summary">日志保留 90 天，不记录密码和验证码内容。</p></div>
+          <div><h2>操作日志</h2><p id="logs-result-summary">日志保留 90 天并记录来源 IP，不记录密码和验证码内容。</p></div>
           <form id="log-filters" class="filter-bar" role="search">
-            <label class="search-field"><span class="sr-only">搜索日志</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.2-3.2"></path></svg><input id="log-query" type="search" maxlength="100" placeholder="搜索用户、操作或来源标识"></label>
+            <label class="search-field"><span class="sr-only">搜索日志</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.2-3.2"></path></svg><input id="log-query" type="search" maxlength="100" placeholder="搜索用户、操作、IP 或来源标识"></label>
             <label><span class="sr-only">操作类型</span><select id="log-action"><option value="">全部操作</option><option value="admin.login">管理员登录</option><option value="admin.logout">管理员退出</option><option value="admin.user.update">更新用户</option><option value="admin.user.delete">删除用户</option><option value="admin.vault.reset">重置保险库</option><option value="admin.vault.restore">恢复保险库</option><option value="vault.read">读取保险库</option><option value="vault.save">保存保险库</option><option value="vault.delete">删除旧保险库</option><option value="vault.access_blocked">阻止访问</option><option value="vault.save_blocked">阻止同步</option></select></label>
             <label><span class="sr-only">操作结果</span><select id="log-result"><option value="">全部结果</option><option value="success">成功</option><option value="failure">失败</option><option value="blocked">已阻止</option></select></label>
           </form>
@@ -101,7 +101,7 @@
         <div id="logs-loading" class="loading-state hidden" aria-live="polite">正在读取操作日志…</div>
         <div class="table-wrap">
           <table class="logs-table">
-            <thead><tr><th>时间</th><th>操作</th><th>用户 / 对象</th><th>执行者</th><th>结果</th><th>详情</th></tr></thead>
+            <thead><tr><th>时间</th><th>操作</th><th>用户 / 对象</th><th>执行者</th><th>IP 地址</th><th>结果</th><th>详情</th></tr></thead>
             <tbody id="logs-table-body"></tbody>
           </table>
         </div>

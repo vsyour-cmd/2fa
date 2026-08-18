@@ -157,6 +157,8 @@ describe('Cloudflare Worker API', () => {
 
     const logs = await worker.fetch(request('/api/admin/logs?action=admin.user.delete', { headers: adminHeaders }), env);
     expect(logs.status).toBe(200);
-    expect((await logs.json()).logs[0]).toMatchObject({ action: 'admin.user.delete', result: 'success', targetKey: key });
+    expect((await logs.json()).logs[0]).toMatchObject({
+      action: 'admin.user.delete', result: 'success', targetKey: key, ipAddress: '203.0.113.10',
+    });
   });
 });

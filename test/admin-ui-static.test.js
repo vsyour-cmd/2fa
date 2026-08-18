@@ -16,9 +16,12 @@ describe('admin console static shell', () => {
     expect(html).toContain('输入“删除用户”确认');
     expect(html).toContain('id="delete-user"');
     expect(html).toContain('option value="admin.user.delete"');
+    expect(html).toContain('<th>IP 地址</th>');
+    expect(html).toContain('日志保留 90 天并记录来源 IP');
     expect(html).toContain('管理员无法查看主密码、验证码密钥或解密保险库');
     expect(script).toContain("method: 'DELETE', body: { confirmation: '删除用户' }");
     expect(script).toContain("'admin.user.delete': '删除用户'");
+    expect(script).toContain("text: entry.ipAddress || '—'");
     expect(script).toContain("addEventListener('pointerdown'");
     expect(script).toContain("addEventListener('pointerup'");
     expect(script).not.toContain("$('#user-dialog').addEventListener('click'");

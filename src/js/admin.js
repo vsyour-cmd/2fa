@@ -400,6 +400,10 @@ function renderLogs(payload) {
     actorCell.dataset.label = '执行者';
     row.append(actorCell);
 
+    const ipCell = createElement('td', { className: 'audit-ip muted', text: entry.ipAddress || '—', title: entry.ipAddress || '' });
+    ipCell.dataset.label = 'IP 地址';
+    row.append(ipCell);
+
     const resultCell = createElement('td');
     resultCell.dataset.label = '结果';
     resultCell.append(createBadge(resultLabels[entry.result] || entry.result, `badge-${entry.result}`));

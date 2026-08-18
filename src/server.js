@@ -86,7 +86,8 @@ db.exec(`
     target_label TEXT NOT NULL DEFAULT '',
     result TEXT NOT NULL,
     details TEXT NOT NULL DEFAULT '',
-    source TEXT NOT NULL DEFAULT ''
+    source TEXT NOT NULL DEFAULT '',
+    ip_address TEXT NOT NULL DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS vault_archives (
@@ -102,6 +103,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_user_profiles_status ON user_profiles(status);
   CREATE INDEX IF NOT EXISTS idx_vault_archives_expiry ON vault_archives(expires_at);
 `);
+
+const auditLogColumns = new Set(db.prepare('PRAGMA table_info(audit_logs)').all().map((column) => column.name));
+if (!auditLogColumns.has('ip_address')) {
+  db.exec("ALTER TABLE audit_logs ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''");
+}
 
 const incrementRateLimit = db.prepare(`
   INSERT INTO rate_limits (bucket, count, reset_at)
@@ -174,7 +180,12 @@ function safeEqual(left, right) {
 }
 
 function requestSource(req) {
-  return hashText(req.ip || 'unknown').slice(0, 12);
+  return hashText(requestIp(req) || 'unknown').slice(0, 12);
+}
+
+function requestIp(req) {
+  const value = cleanSingleLine(req.ip || req.socket?.remoteAddress || '', 80);
+  return value.startsWith('::ffff:') ? value.slice(7) : value;
 }
 
 function cleanupExpired() {
@@ -187,8 +198,8 @@ function cleanupExpired() {
 function writeAudit(req, event) {
   try {
     db.prepare(`
-      INSERT INTO audit_logs (id, timestamp, actor, action, target_key, target_label, result, details, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO audit_logs (id, timestamp, actor, action, target_key, target_label, result, details, source, ip_address)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       randomUUID(),
       Date.now(),
@@ -199,6 +210,7 @@ function writeAudit(req, event) {
       cleanSingleLine(event.result || 'success', 30),
       cleanNote(event.details || '', 300),
       requestSource(req),
+      requestIp(req),
     );
   } catch (error) {
     console.error(JSON.stringify({ event: 'audit_write_error', action: cleanSingleLine(event?.action, 80), message: error.message }));
@@ -608,10 +620,11 @@ app.get('/api/admin/logs', (req, res) => {
     result: row.result,
     details: row.details,
     source: row.source,
+    ipAddress: row.ip_address || '',
   }));
   const filtered = logs
     .filter((entry) => (!action || entry.action === action) && (!result || entry.result === result))
-    .filter((entry) => !query || [entry.actor, entry.action, entry.targetLabel, entry.targetKey, entry.details, entry.source]
+    .filter((entry) => !query || [entry.actor, entry.action, entry.targetLabel, entry.targetKey, entry.details, entry.ipAddress, entry.source]
       .some((value) => String(value || '').toLocaleLowerCase().includes(query)));
   return res.json({ logs: filtered.slice(0, limit), total: filtered.length, limit, scanned: logs.length });
 });

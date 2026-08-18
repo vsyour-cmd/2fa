@@ -427,7 +427,7 @@ async function handleAdminLogs(url, env) {
   }
   const filtered = logs
     .filter((entry) => (!action || entry.action === action) && (!result || entry.result === result))
-    .filter((entry) => !query || [entry.actor, entry.action, entry.targetLabel, entry.targetKey, entry.details, entry.source]
+    .filter((entry) => !query || [entry.actor, entry.action, entry.targetLabel, entry.targetKey, entry.details, entry.ipAddress, entry.source]
       .some((value) => String(value || '').toLocaleLowerCase().includes(query)))
     .sort((left, right) => Number(right.timestamp || 0) - Number(left.timestamp || 0));
   return jsonResponse({ logs: filtered.slice(0, limit), total: filtered.length, limit, scanned: logs.length }, 200);
@@ -558,6 +558,7 @@ async function persistAudit(env, request, event) {
     targetLabel: cleanSingleLine(event.targetLabel, 80),
     result: cleanSingleLine(event.result || 'success', 30),
     details: cleanNote(event.details || '', 300),
+    ipAddress: requestIp(request),
     source: await requestSource(request),
   };
   const reverseTimestamp = String(9_999_999_999_999 - timestamp).padStart(13, '0');
@@ -566,8 +567,12 @@ async function persistAudit(env, request, event) {
 }
 
 async function requestSource(request) {
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const ip = requestIp(request) || 'unknown';
   return (await sha256Hex(ip)).slice(0, 12);
+}
+
+function requestIp(request) {
+  return cleanSingleLine(request.headers.get('CF-Connecting-IP') || '', 80);
 }
 
 async function secureEqual(left, right) {

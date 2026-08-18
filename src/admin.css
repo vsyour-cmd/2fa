@@ -248,11 +248,12 @@ th { color: var(--text-muted); background: var(--surface-subtle); font-size: 0.7
 td { font-size: 0.845rem; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: rgba(241, 245, 249, 0.7); }
-.logs-table { min-width: 1120px; }
+.logs-table { min-width: 1240px; }
 
 .user-cell { min-width: 220px; }
 .user-name { display: block; max-width: 260px; overflow: hidden; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .user-subtitle { display: block; max-width: 260px; margin-top: 3px; overflow: hidden; color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.audit-ip { max-width: 230px; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .muted { color: var(--text-muted); }
 .note-preview { display: block; max-width: 270px; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
 
@@ -335,7 +336,7 @@ tbody tr:hover { background: rgba(241, 245, 249, 0.7); }
   #logs-table-body td:nth-child(3), #logs-table-body td:last-child { grid-column: 1 / -1; }
   #users-table-body td:last-child { display: flex; justify-content: flex-end; padding-top: 4px; }
   #users-table-body td:last-child::before { display: none; }
-  .user-name, .user-subtitle, .note-preview { max-width: 100%; }
+  .user-name, .user-subtitle, .note-preview, .audit-ip { max-width: 100%; }
   .form-grid { grid-template-columns: 1fr; }
   .field-help { min-height: auto; }
   .confirmation-row { grid-template-columns: 1fr; }

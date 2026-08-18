@@ -4,6 +4,7 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import Database from 'better-sqlite3';
 
 const key = 'd'.repeat(64);
 const data = 'encrypted-admin-test-payload-longer-than-sixteen-characters';
@@ -24,6 +25,21 @@ beforeAll(async () => {
   vi.stubEnv('DB_PATH', dbPath);
   vi.stubEnv('ADMIN_USERNAME', 'admin');
   vi.stubEnv('ADMIN_PASSWORD', 'strong-admin-password');
+  const legacyDb = new Database(dbPath);
+  legacyDb.exec(`
+    CREATE TABLE audit_logs (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      actor TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_key TEXT NOT NULL DEFAULT '',
+      target_label TEXT NOT NULL DEFAULT '',
+      result TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT ''
+    )
+  `);
+  legacyDb.close();
   const imported = await import('../src/server.js');
   const exported = imported.default || imported;
   db = exported.db;
@@ -44,6 +60,7 @@ afterAll(async () => {
 
 describe('Express admin API', () => {
   it('authenticates separately and manages a recoverable user vault reset', async () => {
+    expect(db.prepare('PRAGMA table_info(audit_logs)').all().map((column) => column.name)).toContain('ip_address');
     const stored = await request('/api/data', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -123,7 +140,9 @@ describe('Express admin API', () => {
 
     const logs = await request('/api/admin/logs?action=admin.user.delete', { headers });
     expect(logs.response.status).toBe(200);
-    expect(logs.body.logs[0]).toMatchObject({ action: 'admin.user.delete', result: 'success', targetKey: key });
+    expect(logs.body.logs[0]).toMatchObject({
+      action: 'admin.user.delete', result: 'success', targetKey: key, ipAddress: '127.0.0.1',
+    });
   });
 
   it('rejects missing or invalid admin sessions', async () => {
