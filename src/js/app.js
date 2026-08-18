@@ -43,6 +43,7 @@ import {
   buildOtpauthUri,
   formatCode,
   generateTOTP,
+  generateTOTPWindow,
   getCounter,
   getNextPeriodDelay,
   getRemainingSeconds,
@@ -645,9 +646,10 @@ async function renderKeys() {
       .map((key) => key.id)
     : []);
   const cards = await Promise.all(visible.map(async (key) => {
-    let code = '——————';
-    try { code = await generateTOTP(key.secret, Date.now(), key); } catch { /* invalid legacy item */ }
-    const ring = ringValues(key);
+    const cardNow = Date.now();
+    let codes = { previous: '——————', current: '——————', next: '——————' };
+    try { codes = await generateTOTPWindow(key.secret, cardNow, key); } catch { /* invalid legacy item */ }
+    const ring = ringValues(key, cardNow);
     const icon = getKeyIcon(key);
     const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account].filter(Boolean).join(' · ') || 'TOTP';
     const lastUsed = Number(key.lastUsed || 0) > 0 ? formatDateTime(key.lastUsed) : '从未使用';
@@ -662,7 +664,7 @@ async function renderKeys() {
     const selected = state.selectedKeyIds.has(key.id);
     const selectControl = state.multiSelectMode ? `<label class="token-select"><input class="token-select-input" type="checkbox" aria-label="选择 ${escapeHtml(key.name)}"${selected ? ' checked' : ''}><span aria-hidden="true"></span></label>` : '';
     return `
-      <article class="token-item${frequent ? ' frequent' : ''}${state.multiSelectMode ? ' selectable' : ''}${selected ? ' selected' : ''}" draggable="${draggable}" data-key-id="${escapeHtml(key.id)}" data-counter="${getCounter(key)}">
+      <article class="token-item${frequent ? ' frequent' : ''}${state.multiSelectMode ? ' selectable' : ''}${selected ? ' selected' : ''}" draggable="${draggable}" data-key-id="${escapeHtml(key.id)}" data-counter="${getCounter(key, cardNow)}">
         <div class="token-top">
           ${selectControl}
           <div class="token-icon${icon.matched ? '' : ' initial'}" aria-hidden="true">${escapeHtml(icon.value)}</div>
@@ -671,12 +673,16 @@ async function renderKeys() {
         </div>
         ${note}
         <div class="token-code-row">
-          <button class="token-code" type="button" data-action="copy-code" aria-label="${state.multiSelectMode ? `选择 ${escapeHtml(key.name)}` : `复制 ${escapeHtml(key.name)} 的验证码`}"${state.multiSelectMode ? ' aria-disabled="true" tabindex="-1"' : ''}><span class="token-code-value">${escapeHtml(formatCode(code))}</span>${state.multiSelectMode ? '' : '<span class="copy-affordance" aria-hidden="true">点击复制</span>'}</button>
+          <button class="token-code" type="button" data-action="copy-code" aria-label="${state.multiSelectMode ? `选择 ${escapeHtml(key.name)}` : `复制 ${escapeHtml(key.name)} 的当前验证码`}"${state.multiSelectMode ? ' aria-disabled="true" tabindex="-1"' : ''}><span class="token-code-label">当前</span><span class="token-code-value">${escapeHtml(formatCode(codes.current))}</span>${state.multiSelectMode ? '' : '<span class="copy-affordance" aria-hidden="true">点击复制</span>'}</button>
           <svg class="progress-ring ${ring.status}" viewBox="0 0 36 36" aria-label="剩余 ${ring.remaining} 秒" role="img">
             <circle class="ring-bg" cx="18" cy="18" r="15"></circle>
             <circle class="ring-value" cx="18" cy="18" r="15" stroke-dasharray="${ring.circumference}" stroke-dashoffset="${ring.offset}"></circle>
             <text x="18" y="18">${ring.remaining}</text>
           </svg>
+        </div>
+        <div class="token-code-neighbors" role="group" aria-label="${escapeHtml(key.name)} 的相邻周期验证码">
+          <div class="token-neighbor-code"><span>上一期</span><code class="token-code-previous">${escapeHtml(formatCode(codes.previous))}</code></div>
+          <div class="token-neighbor-code"><span>下一期</span><code class="token-code-next">${escapeHtml(formatCode(codes.next))}</code></div>
         </div>
         <div class="token-footer">
           <button class="group-label${key.group ? '' : ' empty'}" type="button" data-action="quick-group" aria-label="${key.group ? `更改 ${escapeHtml(key.name)} 的分组` : `为 ${escapeHtml(key.name)} 添加分组`}" title="${key.group ? '点击更改分组' : '点击添加分组'}">
@@ -707,11 +713,15 @@ async function updateDisplay() {
     const counter = getCounter(key, now);
     if (String(counter) !== card.dataset.counter) {
       try {
-        const code = await generateTOTP(key.secret, now, key);
-        $('.token-code-value', card).textContent = formatCode(code);
+        const codes = await generateTOTPWindow(key.secret, now, key);
+        $('.token-code-previous', card).textContent = formatCode(codes.previous);
+        $('.token-code-value', card).textContent = formatCode(codes.current);
+        $('.token-code-next', card).textContent = formatCode(codes.next);
         card.dataset.counter = String(counter);
       } catch {
+        $('.token-code-previous', card).textContent = '——————';
         $('.token-code-value', card).textContent = '——————';
+        $('.token-code-next', card).textContent = '——————';
       }
     }
     const ring = ringValues(key, now);

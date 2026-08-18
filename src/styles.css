@@ -234,8 +234,15 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .token-code-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 14px; }
 .token-code { display: inline-flex; min-width: 0; min-height: 52px; flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 8px 0 0; color: var(--text); background: transparent; border: 0; border-radius: 9px; touch-action: manipulation; }
 .token-code:hover .token-code-value { color: var(--primary); }
+.token-code-label { margin-bottom: 1px; color: var(--primary); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; }
 .token-code-value { max-width: 100%; overflow: hidden; font-family: var(--font-mono); font-size: clamp(1.35rem, 4vw, 1.7rem); font-weight: 780; letter-spacing: 0.08em; text-overflow: ellipsis; white-space: nowrap; transition: color 150ms ease; }
 .copy-affordance { margin-top: 2px; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0; }
+.token-code-neighbors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: -3px 0 14px; }
+.token-neighbor-code { display: grid; min-width: 0; gap: 2px; padding: 8px 10px; color: var(--text-muted); background: var(--surface-muted); border: 1px solid var(--border); border-radius: 10px; }
+.token-neighbor-code span { font-size: 0.65rem; font-weight: 760; }
+.token-neighbor-code code { overflow: hidden; color: var(--text-soft); font-family: var(--font-mono); font-size: clamp(0.82rem, 2.8vw, 0.95rem); font-weight: 760; letter-spacing: 0.04em; text-overflow: ellipsis; white-space: nowrap; }
+.token-grid[data-columns="4"] .token-code-value { font-size: 1.45rem; letter-spacing: 0.04em; }
+.token-grid[data-columns="4"] .token-neighbor-code code { font-size: 0.8rem; letter-spacing: 0.01em; }
 .progress-ring { width: 44px; height: 44px; flex: 0 0 44px; transform: rotate(-90deg); }
 .progress-ring circle { fill: none; stroke-width: 3; }
 .progress-ring .ring-bg { stroke: var(--border); }

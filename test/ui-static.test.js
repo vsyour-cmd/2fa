@@ -60,6 +60,15 @@ describe('static application shell', () => {
     expect(app).toContain("['smart', 'recent', 'stale']");
   });
 
+  it('shows the previous, current, and next verification codes together', () => {
+    expect(app).toContain('generateTOTPWindow(key.secret, cardNow, key)');
+    expect(app).toContain('class="token-code-label">当前</span>');
+    expect(app).toContain('class="token-code-previous"');
+    expect(app).toContain('class="token-code-next"');
+    expect(app).toContain('上一期');
+    expect(app).toContain('下一期');
+  });
+
   it('moves keys to a recoverable trash before permanent deletion', () => {
     expect(html).toContain('30 天内可以随时恢复');
     expect(app).toContain('data-action="delete">移入回收站</button>');
