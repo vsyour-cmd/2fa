@@ -53,6 +53,19 @@ describe('static application shell', () => {
     expect(app).toContain('${key.note}');
   });
 
+  it('lets touch and keyboard users expand long notes without cluttering short notes', () => {
+    expect(app).toContain('class="token-note-wrap"');
+    expect(app).toContain('data-action="toggle-note"');
+    expect(app).toContain('aria-expanded="false"');
+    expect(app).toContain('updateTokenNoteControls()');
+    expect(app).toContain('note.scrollHeight > lineHeight * 2 + 1');
+    expect(app).toContain('noteResizeFrame = requestAnimationFrame(updateTokenNoteControls)');
+    expect(app).toContain("replace(/^收起 /, '展开 ')");
+    expect(app).toContain("button.setAttribute('aria-expanded', String(expanded))");
+    expect(styles).toContain('.token-note-toggle { display: inline-flex; min-width: 88px; min-height: 44px;');
+    expect(styles).toContain('.token-item.selectable .token-note-toggle { display: none; }');
+  });
+
   it('explains key identity fields in both add and edit forms', () => {
     for (const prefix of ['add', 'edit']) {
       for (const field of ['name', 'issuer', 'account', 'group', 'secret', 'icon']) {

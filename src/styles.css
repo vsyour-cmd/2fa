@@ -241,6 +241,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .token-item.selectable:hover { border-color: var(--primary); }
 .token-item.selectable.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 58%, var(--surface-solid)); box-shadow: 0 0 0 3px var(--ring), var(--shadow-small); }
 .token-item.selectable .favorite-btn, .token-item.selectable .token-footer { display: none; }
+.token-item.selectable .token-note-toggle { display: none; }
 .token-item.selectable .token-code { cursor: pointer; }
 .token-item.selectable .token-code:hover .token-code-value { color: var(--text); }
 .token-top { display: flex; align-items: flex-start; gap: 10px; }
@@ -262,7 +263,13 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .token-badges { display: inline-flex; max-width: 100%; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: 4px; }
 .token-subtitle { overflow: hidden; color: var(--text-muted); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
 .token-last-used { overflow: hidden; margin-top: 4px; color: var(--text-soft); font-size: 0.72rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.token-note { display: -webkit-box; overflow: hidden; margin: 11px 0 -4px; color: var(--text-soft); font-size: 0.78rem; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.token-note-wrap { margin: 11px 0 -4px; }
+.token-note { display: -webkit-box; overflow: hidden; margin: 0; color: var(--text-soft); font-size: 0.78rem; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.token-note-wrap.expanded .token-note { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.token-note-toggle { display: inline-flex; min-width: 88px; min-height: 44px; align-items: center; gap: 5px; margin: 1px 0 -9px -8px; padding: 7px 8px; color: var(--primary); background: transparent; border: 0; border-radius: 8px; font-size: 0.72rem; font-weight: 780; touch-action: manipulation; }
+.token-note-toggle:hover, .token-note-toggle:focus-visible { background: var(--primary-soft); }
+.token-note-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms ease; }
+.token-note-wrap.expanded .token-note-toggle svg { transform: rotate(180deg); }
 .usage-badge { flex: 0 0 auto; padding: 2px 7px; color: var(--primary-hover); background: var(--primary-soft); border-radius: 999px; font-size: 0.7rem; font-weight: 820; }
 .usage-badge.recent { color: var(--success); background: var(--success-soft); }
 .favorite-btn { width: 40px; height: 40px; flex: 0 0 40px; padding: 0; color: var(--text-muted); background: transparent; border: 0; border-radius: 10px; font-size: 1.05rem; touch-action: manipulation; }

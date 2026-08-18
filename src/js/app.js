@@ -124,6 +124,7 @@ const state = {
 let qrScanner;
 let deferredInstallPrompt = null;
 let isComposing = false;
+let noteResizeFrame = 0;
 let quickUnlockCache = null;
 let quickUnlockTimer = null;
 
@@ -776,7 +777,8 @@ async function renderKeys() {
     const lastUsedAt = Number(key.lastUsed || 0);
     const lastUsed = lastUsedAt > 0 ? formatDateTime(lastUsedAt) : '从未使用';
     const recentlyUsed = lastUsedAt > 0 && cardNow - lastUsedAt <= RECENT_USAGE_WINDOW_MS;
-    const note = key.note ? `<p class="token-note" title="${escapeHtml(key.note)}">${escapeHtml(key.note)}</p>` : '';
+    const noteId = `token-note-${key.id}`;
+    const note = key.note ? `<div class="token-note-wrap"><p id="${escapeHtml(noteId)}" class="token-note">${escapeHtml(key.note)}</p><button class="token-note-toggle hidden" type="button" data-action="toggle-note" aria-controls="${escapeHtml(noteId)}" aria-expanded="false" aria-label="展开 ${escapeHtml(key.name)} 的备注"><span>展开备注</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button></div>` : '';
     const draggable = state.settings.sortMode === 'custom' && !state.multiSelectMode ? 'true' : 'false';
     const frequent = frequentIds.has(key.id);
     const customPeers = state.settings.sortMode === 'custom' ? visible.filter((item) => item.favorite === key.favorite) : [];
@@ -820,6 +822,23 @@ async function renderKeys() {
   }));
   if (version !== state.renderVersion) return;
   $('#token-list').innerHTML = cards.join('');
+  updateTokenNoteControls();
+}
+
+function updateTokenNoteControls() {
+  for (const wrap of $$('.token-note-wrap')) {
+    const note = $('.token-note', wrap);
+    const button = $('.token-note-toggle', wrap);
+    const lineHeight = Number.parseFloat(getComputedStyle(note).lineHeight) || 0;
+    const overflows = note.scrollHeight > lineHeight * 2 + 1;
+    setHidden(button, !overflows);
+    if (!overflows) {
+      wrap.classList.remove('expanded');
+      button.setAttribute('aria-expanded', 'false');
+      button.setAttribute('aria-label', button.getAttribute('aria-label').replace(/^收起 /, '展开 '));
+      $('span', button).textContent = '展开备注';
+    }
+  }
 }
 
 function renderAll() {
@@ -1774,6 +1793,11 @@ function concealSensitiveFields(root = document) {
 function setupEvents() {
   setupModalAccessibility();
 
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(noteResizeFrame);
+    noteResizeFrame = requestAnimationFrame(updateTokenNoteControls);
+  });
+
   for (const modal of $$('.modal-overlay')) {
     modal.addEventListener('modal:close', () => concealSensitiveFields(modal));
   }
@@ -1939,7 +1963,15 @@ function setupEvents() {
       toggleKeySelection(key.id);
       return;
     }
-    if (event.target.closest('[data-action="favorite"]')) {
+    if (event.target.closest('[data-action="toggle-note"]')) {
+      const button = event.target.closest('[data-action="toggle-note"]');
+      const wrap = button.closest('.token-note-wrap');
+      const expanded = button.getAttribute('aria-expanded') !== 'true';
+      wrap.classList.toggle('expanded', expanded);
+      button.setAttribute('aria-expanded', String(expanded));
+      button.setAttribute('aria-label', `${expanded ? '收起' : '展开'} ${key.name} 的备注`);
+      $('span', button).textContent = expanded ? '收起备注' : '展开备注';
+    } else if (event.target.closest('[data-action="favorite"]')) {
       key.favorite = !key.favorite;
       await saveVault({ silent: true });
       renderKeys();
