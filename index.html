@@ -309,17 +309,18 @@
       </div>
     </div>
 
-    <div id="import-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-title">
+    <div id="import-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-title" aria-describedby="import-description">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">迁移工具</p><h2 id="import-title">导入密钥</h2></div><button class="icon-btn" type="button" data-close-modal="import-modal" aria-label="关闭">×</button></div>
         <form id="import-form">
+          <p id="import-description" class="dialog-message import-intro">先解析预览，再确认写入。预览会逐条标出新增、覆盖、跳过和无效条目。</p>
           <div class="form-group"><label for="import-file">备份文件</label><input id="import-file" type="file" accept=".json,.txt,.2fas,application/json,text/plain"></div>
-          <div class="form-group"><label for="import-text">或粘贴 otpauth:// / otpauth-migration:// 链接</label><textarea id="import-text" rows="4"></textarea></div>
+          <div class="form-group"><label for="import-text">或粘贴 otpauth:// / otpauth-migration:// 链接</label><textarea id="import-text" rows="4" autocomplete="off" spellcheck="false"></textarea></div>
           <div class="form-group"><label for="import-password">导入密码（仅 Aegis/加密备份需要）</label><input id="import-password" type="password" autocomplete="off"></div>
           <div class="form-group"><label for="import-strategy">同名条目</label><select id="import-strategy"><option value="skip">跳过重名</option><option value="overwrite">覆盖已有</option><option value="all">全部导入（自动重命名）</option></select></div>
           <div id="import-error" class="error hidden" role="alert"></div>
-          <div id="import-preview" class="import-preview hidden" role="status"></div>
-          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="import-modal">取消</button><button id="import-submit" class="btn btn-primary" type="submit">解析并导入</button></div>
+          <div id="import-preview" class="import-preview hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="import-modal">取消</button><button id="import-submit" class="btn btn-primary" type="submit">预览导入</button></div>
         </form>
       </div>
     </div>

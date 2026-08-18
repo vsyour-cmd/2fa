@@ -1,7 +1,13 @@
 import { scrypt } from 'scrypt-js';
 import { decryptBackup, decryptAesGcmBytes, base64ToBytes, hexToBytes } from './crypto.js';
 import { base32Decode, parseOtpauthUri } from './totp.js';
-import { bytesToBase32, normalizeAlgorithm, normalizeKey } from './utils.js';
+import {
+  bytesToBase32,
+  generateId,
+  normalizeAlgorithm,
+  normalizeKey,
+  uniqueName,
+} from './utils.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -249,15 +255,110 @@ export async function parseImportContent(content, password = '') {
 
 export async function validateImportedItems(items, generateTOTP) {
   const valid = [];
-  let skipped = 0;
+  const invalid = [];
   for (const [index, item] of items.entries()) {
+    const normalized = normalizeKey(item, index);
     try {
-      base32Decode(item.secret);
-      await generateTOTP(item.secret, Date.now(), item);
-      valid.push(normalizeKey(item, index));
+      base32Decode(normalized.secret);
+      await generateTOTP(normalized.secret, Date.now(), normalized);
+      valid.push(normalized);
     } catch {
-      skipped += 1;
+      invalid.push({ item: normalized, reason: '密钥格式无效' });
     }
   }
-  return { valid, skipped };
+  return { valid, invalid, skipped: invalid.length };
+}
+
+function importName(value) {
+  return String(value || '').toLocaleLowerCase();
+}
+
+export function createImportPlan(valid, existingKeys = [], strategy = 'skip', invalid = []) {
+  if (!['skip', 'overwrite', 'all'].includes(strategy)) throw importError('不支持的同名处理方式');
+
+  const occupiedNames = new Set(existingKeys.map((key) => importName(key.name)));
+  const targetsByName = new Map(existingKeys.map((key) => [importName(key.name), {
+    kind: 'existing',
+    id: key.id,
+    name: key.name,
+  }]));
+  const items = [];
+
+  for (const [index, rawCandidate] of valid.entries()) {
+    const original = normalizeKey(rawCandidate, index);
+    const nameKey = importName(original.name);
+    const target = targetsByName.get(nameKey);
+
+    if (target && strategy === 'skip') {
+      items.push({ action: 'skip', candidate: original, target });
+      continue;
+    }
+    if (target && strategy === 'overwrite') {
+      items.push({ action: 'overwrite', candidate: original, target });
+      continue;
+    }
+
+    const finalName = strategy === 'all' ? uniqueName(original.name, occupiedNames) : original.name;
+    const resultRef = `import-${index}`;
+    const candidate = { ...original, name: finalName };
+    items.push({
+      action: 'add',
+      candidate,
+      originalName: finalName === original.name ? '' : original.name,
+      resultRef,
+    });
+    occupiedNames.add(importName(finalName));
+    if (strategy !== 'all') {
+      targetsByName.set(importName(finalName), { kind: 'planned', ref: resultRef, name: finalName });
+    }
+  }
+
+  for (const entry of invalid) {
+    items.push({
+      action: 'invalid',
+      candidate: normalizeKey(entry?.item || entry),
+      reason: entry?.reason || '密钥格式无效',
+    });
+  }
+
+  const stats = {
+    add: items.filter((item) => item.action === 'add').length,
+    overwrite: items.filter((item) => item.action === 'overwrite').length,
+    skip: items.filter((item) => item.action === 'skip').length,
+    invalid: items.filter((item) => item.action === 'invalid').length,
+  };
+  stats.actionable = stats.add + stats.overwrite;
+  return { strategy, items, stats };
+}
+
+export function applyImportPlan(plan, existingKeys = [], createId = generateId) {
+  const keys = existingKeys.map((key) => ({ ...key }));
+  const createdIds = new Map();
+  let nextOrder = Math.max(-1, ...keys.map((key) => Number(key.order || 0))) + 1;
+
+  for (const item of plan?.items || []) {
+    if (item.action === 'add') {
+      const added = { ...item.candidate, id: createId(), order: nextOrder };
+      nextOrder += 1;
+      keys.push(added);
+      createdIds.set(item.resultRef, added.id);
+      continue;
+    }
+    if (item.action !== 'overwrite') continue;
+
+    const targetId = item.target.kind === 'planned' ? createdIds.get(item.target.ref) : item.target.id;
+    const existingIndex = keys.findIndex((key) => key.id === targetId);
+    if (existingIndex < 0) throw importError('导入目标已变化，请重新预览后再确认', 'STALE_IMPORT');
+    const previous = keys[existingIndex];
+    keys[existingIndex] = {
+      ...item.candidate,
+      id: previous.id,
+      order: previous.order,
+      favorite: item.candidate.favorite || previous.favorite,
+      lastUsed: previous.lastUsed,
+      useCount: previous.useCount,
+    };
+  }
+
+  return { keys, stats: { ...plan.stats } };
 }

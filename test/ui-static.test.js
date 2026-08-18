@@ -59,6 +59,19 @@ describe('static application shell', () => {
     expect(app).toContain('getNextPeriodDelay(key, startedAt)');
   });
 
+  it('previews every import action before applying the frozen plan', () => {
+    expect(html).toContain('先解析预览，再确认写入');
+    expect(html).toContain('id="import-preview"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('>预览导入</button>');
+    expect(app).toContain('createImportPlan(valid, state.keys');
+    expect(app).toContain('applyImportPlan(pending.plan, state.keys');
+    expect(app).toContain('确认导入 ${count} 条');
+    expect(app).toContain("input.addEventListener(input.matches('select, input[type=\"file\"]') ? 'change' : 'input'");
+    expect(app).toContain("$('#import-modal').addEventListener('modal:close'");
+    expect(app).not.toContain('解析并导入');
+  });
+
   it('uses accessible application dialogs instead of native prompt and confirm calls', () => {
     expect(app).not.toMatch(/\bprompt\s*\(/);
     expect(app).not.toMatch(/\bconfirm\s*\(/);
