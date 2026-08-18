@@ -90,7 +90,9 @@ import {
   normalizeSecret,
   normalizeVaultData,
   normalizeWorkflowNote,
+  syncWorkflowLinksForKey,
   uniqueName,
+  workflowLinkSnapshot,
 } from './utils.js';
 
 const offline = new OfflineManager();
@@ -126,6 +128,8 @@ const state = {
   exportKeyIds: null,
   vaultView: 'tokens',
   editingWorkflowLinks: [],
+  editingTokenWorkflowKeyId: '',
+  editingTokenWorkflowNoteIds: new Set(),
 };
 
 let qrScanner;
@@ -173,6 +177,8 @@ function clearSensitiveState() {
   state.exportKeyIds = null;
   state.vaultView = 'tokens';
   state.editingWorkflowLinks = [];
+  state.editingTokenWorkflowKeyId = '';
+  state.editingTokenWorkflowNoteIds.clear();
   document.body.classList.remove('bulk-mode');
   clearTimeout(state.saveTimer);
   clearTimeout(state.clipboardTimer);
@@ -795,6 +801,10 @@ async function renderKeys() {
       .slice(0, 3)
       .map((key) => key.id)
     : []);
+  const workflowLinkCounts = new Map();
+  for (const workflowNote of state.workflowNotes) {
+    for (const link of workflowNote.linkedKeys) workflowLinkCounts.set(link.keyId, (workflowLinkCounts.get(link.keyId) || 0) + 1);
+  }
   const cards = await Promise.all(visible.map(async (key) => {
     const cardNow = Date.now();
     let codes = { previous: '——————', current: '——————', next: '——————' };
@@ -807,6 +817,7 @@ async function renderKeys() {
     const recentlyUsed = lastUsedAt > 0 && cardNow - lastUsedAt <= RECENT_USAGE_WINDOW_MS;
     const noteId = `token-note-${key.id}`;
     const note = key.note ? `<div class="token-note-wrap"><p id="${escapeHtml(noteId)}" class="token-note">${escapeHtml(key.note)}</p><button class="token-note-toggle hidden" type="button" data-action="toggle-note" aria-controls="${escapeHtml(noteId)}" aria-expanded="false" aria-label="展开 ${escapeHtml(key.name)} 的备注"><span>展开备注</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button></div>` : '';
+    const linkedWorkflowCount = workflowLinkCounts.get(key.id) || 0;
     const draggable = state.settings.sortMode === 'custom' && !state.multiSelectMode ? 'true' : 'false';
     const frequent = frequentIds.has(key.id);
     const customPeers = state.settings.sortMode === 'custom' ? visible.filter((item) => item.favorite === key.favorite) : [];
@@ -844,7 +855,7 @@ async function renderKeys() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11Z"></path><path d="M12 11v5M9.5 13.5h5"></path></svg>
             <span class="group-label-text">${escapeHtml(key.group || '未分组')}</span>${key.group ? '' : '<span class="group-label-add">设置</span>'}
           </button>
-          <div class="token-actions">${reorderControls}<button class="small-btn" type="button" data-action="edit">编辑</button><button class="small-btn delete" type="button" data-action="delete">移入回收站</button></div>
+          <div class="token-actions">${reorderControls}<button class="small-btn token-workflow-button" type="button" data-action="link-workflows" aria-label="为 ${escapeHtml(key.name)} 关联操作笔记，当前 ${linkedWorkflowCount} 条">关联笔记${linkedWorkflowCount ? `<span class="badge">${linkedWorkflowCount}</span>` : ''}</button><button class="small-btn" type="button" data-action="edit">编辑</button><button class="small-btn delete" type="button" data-action="delete">移入回收站</button></div>
         </div>
       </article>`;
   }));
@@ -867,10 +878,6 @@ function updateTokenNoteControls() {
       $('span', button).textContent = '展开备注';
     }
   }
-}
-
-function workflowLinkSnapshot(key) {
-  return { keyId: key.id, name: key.name, issuer: key.issuer, account: key.account };
 }
 
 function resolveWorkflowLink(link) {
@@ -920,6 +927,67 @@ function renderWorkflowNotes() {
         <div class="workflow-note-actions"><button class="btn btn-primary" type="button" data-workflow-action="run">开始操作</button><div class="workflow-note-secondary-actions"><button class="small-btn" type="button" data-workflow-action="edit">编辑</button><button class="small-btn delete" type="button" data-workflow-action="delete">移入回收站</button></div></div>
       </article>`;
   }).join('');
+}
+
+function updateTokenWorkflowSelectionCount() {
+  $('#token-workflow-selection-count').textContent = `已选 ${state.editingTokenWorkflowNoteIds.size} 条`;
+}
+
+function renderTokenWorkflowPicker() {
+  const notes = [...state.workflowNotes].sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  setHidden('#token-workflow-empty', notes.length !== 0);
+  setHidden('#token-workflow-list', notes.length === 0);
+  $('#token-workflow-submit').disabled = notes.length === 0;
+  $('#token-workflow-list').innerHTML = notes.map((note) => {
+    const selected = state.editingTokenWorkflowNoteIds.has(note.id);
+    return `<label class="token-workflow-option${selected ? ' selected' : ''}" data-token-workflow-note-id="${escapeHtml(note.id)}"><input type="checkbox"${selected ? ' checked' : ''}><span><strong>${escapeHtml(note.title)}</strong><small>${note.content.length} 个字符 · ${note.linkedKeys.length} 个验证码</small></span></label>`;
+  }).join('');
+  updateTokenWorkflowSelectionCount();
+}
+
+function openTokenWorkflowModal(keyId) {
+  const key = state.keys.find((item) => item.id === keyId);
+  if (!key) return;
+  hideError('#token-workflow-error');
+  state.editingTokenWorkflowKeyId = key.id;
+  state.editingTokenWorkflowNoteIds = new Set(state.workflowNotes
+    .filter((note) => note.linkedKeys.some((link) => link.keyId === key.id))
+    .map((note) => note.id));
+  $('#token-workflow-key-name').textContent = `为“${key.name}”选择操作笔记`;
+  renderTokenWorkflowPicker();
+  openModal('token-workflow-modal', state.workflowNotes.length ? '#token-workflow-list input' : '#token-workflow-create');
+}
+
+async function saveTokenWorkflowLinks(event) {
+  event.preventDefault();
+  hideError('#token-workflow-error');
+  const button = $('#token-workflow-submit');
+  setBusy(button, true, '正在保存…');
+  try {
+    const key = state.keys.find((item) => item.id === state.editingTokenWorkflowKeyId);
+    if (!key) throw new Error('验证码条目已不存在');
+    const previousNotes = state.workflowNotes;
+    const nextNotes = syncWorkflowLinksForKey(state.workflowNotes, key, state.editingTokenWorkflowNoteIds);
+    const changed = nextNotes.some((note, index) => note !== state.workflowNotes[index]);
+    if (changed) {
+      state.workflowNotes = nextNotes;
+      try {
+        await saveVault();
+      } catch (error) {
+        state.workflowNotes = previousNotes;
+        throw error;
+      }
+    }
+    closeModal('token-workflow-modal');
+    state.editingTokenWorkflowKeyId = '';
+    state.editingTokenWorkflowNoteIds.clear();
+    renderAll();
+    showToast(changed ? `已关联 ${nextNotes.filter((note) => note.linkedKeys.some((link) => link.keyId === key.id)).length} 条笔记` : '关联未更改');
+  } catch (error) {
+    showError('#token-workflow-error', error.message || '关联保存失败');
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 function renderWorkflowMarkdownPreview() {
@@ -2338,6 +2406,25 @@ function setupEvents() {
       button.disabled = false;
     }
   });
+  $('#token-workflow-form').addEventListener('submit', saveTokenWorkflowLinks);
+  $('#token-workflow-modal').addEventListener('modal:close', () => {
+    state.editingTokenWorkflowKeyId = '';
+    state.editingTokenWorkflowNoteIds.clear();
+  });
+  $('#token-workflow-list').addEventListener('change', (event) => {
+    const option = event.target.closest('[data-token-workflow-note-id]');
+    if (!option || event.target.type !== 'checkbox') return;
+    const noteId = option.dataset.tokenWorkflowNoteId;
+    if (event.target.checked) state.editingTokenWorkflowNoteIds.add(noteId);
+    else state.editingTokenWorkflowNoteIds.delete(noteId);
+    option.classList.toggle('selected', event.target.checked);
+    updateTokenWorkflowSelectionCount();
+  });
+  $('#token-workflow-create').addEventListener('click', () => {
+    closeModal('token-workflow-modal');
+    setVaultView('workflow');
+    openWorkflowEditor();
+  });
   for (const button of $$('[data-add-tab]')) button.addEventListener('click', () => switchAddTab(button.dataset.addTab));
   $('#add-form').addEventListener('submit', addKeyFromForm);
   $('#edit-form').addEventListener('submit', saveEditedKey);
@@ -2379,6 +2466,7 @@ function setupEvents() {
     } else if (event.target.closest('[data-action="move-up"]')) await moveKeyInCustomOrder(key.id, -1);
     else if (event.target.closest('[data-action="move-down"]')) await moveKeyInCustomOrder(key.id, 1);
     else if (event.target.closest('[data-action="quick-group"]')) openQuickGroupModal(key.id);
+    else if (event.target.closest('[data-action="link-workflows"]')) openTokenWorkflowModal(key.id);
     else if (event.target.closest('[data-action="edit"]')) openEditModal(key.id);
     else if (event.target.closest('[data-action="delete"]')) await deleteKey(key.id);
     else if (event.target.closest('[data-action="copy-code"]')) await copyKeyCode(key, card);

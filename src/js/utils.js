@@ -112,6 +112,34 @@ export function matchesKeyFilter(key = {}, query = '') {
   return terms.every((term) => searchableText.includes(term));
 }
 
+export function workflowLinkSnapshot(key = {}) {
+  return {
+    keyId: String(key.id || ''),
+    name: String(key.name || '').trim().slice(0, 100),
+    issuer: String(key.issuer || '').trim().slice(0, 100),
+    account: String(key.account || '').trim().slice(0, 160),
+  };
+}
+
+export function syncWorkflowLinksForKey(notes = [], key = {}, selectedNoteIds = [], updatedAt = Date.now()) {
+  const selected = new Set([...selectedNoteIds].map(String));
+  const snapshot = workflowLinkSnapshot(key);
+  if (!snapshot.keyId) return [...notes];
+  return notes.map((note) => {
+    const links = Array.isArray(note.linkedKeys) ? note.linkedKeys : [];
+    const index = links.findIndex((link) => link.keyId === snapshot.keyId);
+    const shouldLink = selected.has(String(note.id));
+    if (!shouldLink && index < 0) return note;
+    if (!shouldLink) return { ...note, linkedKeys: links.filter((link) => link.keyId !== snapshot.keyId), updatedAt };
+    if (index < 0) return { ...note, linkedKeys: [...links, snapshot], updatedAt };
+    const current = links[index];
+    if (current.name === snapshot.name && current.issuer === snapshot.issuer && current.account === snapshot.account) return note;
+    const nextLinks = [...links];
+    nextLinks[index] = snapshot;
+    return { ...note, linkedKeys: nextLinks, updatedAt };
+  });
+}
+
 export function normalizeVaultData(raw) {
   if (Array.isArray(raw)) {
     return { version: 3, keys: raw.map(normalizeKey), deletedItems: [], workflowNotes: [], deletedWorkflowNotes: [] };

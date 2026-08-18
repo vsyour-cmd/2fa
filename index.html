@@ -344,6 +344,24 @@
       </div>
     </div>
 
+    <div id="token-workflow-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="token-workflow-title">
+      <div class="modal">
+        <div class="modal-header"><div><p class="eyebrow">双向关联</p><h2 id="token-workflow-title">关联操作笔记</h2></div><button class="icon-btn" type="button" data-close-modal="token-workflow-modal" aria-label="关闭">×</button></div>
+        <form id="token-workflow-form">
+          <p id="token-workflow-key-name" class="quick-group-key"></p>
+          <div class="token-workflow-heading"><p>勾选使用这个验证码的笔记</p><span id="token-workflow-selection-count" aria-live="polite">已选 0 条</span></div>
+          <div id="token-workflow-list" class="token-workflow-list" role="group" aria-label="可关联的操作笔记"></div>
+          <div id="token-workflow-empty" class="token-workflow-empty hidden">
+            <strong>还没有操作笔记</strong>
+            <span>先创建一条笔记，再回来关联这个验证码。</span>
+            <button id="token-workflow-create" class="btn btn-secondary" type="button">新建操作笔记</button>
+          </div>
+          <div id="token-workflow-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="token-workflow-modal">取消</button><button id="token-workflow-submit" class="btn btn-primary" type="submit">保存关联</button></div>
+        </form>
+      </div>
+    </div>
+
     <div id="workflow-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-edit-title">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">加密操作笔记</p><h2 id="workflow-edit-title">新建操作笔记</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-edit-modal" aria-label="关闭">×</button></div>

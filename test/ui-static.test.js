@@ -21,7 +21,7 @@ describe('static application shell', () => {
   });
 
   it('contains the core accessible views and dialogs', () => {
-    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'workflow-edit-modal', 'workflow-run-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
+    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'token-workflow-modal', 'workflow-edit-modal', 'workflow-run-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('aria-live="polite"');
@@ -74,6 +74,11 @@ describe('static application shell', () => {
     expect(app).toContain('workflowNotes: state.workflowNotes');
     expect(app).toContain('deletedWorkflowNotes: state.deletedWorkflowNotes');
     expect(app).toContain('state.editingWorkflowLinks.push(workflowLinkSnapshot(key))');
+    expect(html).toContain('id="token-workflow-list"');
+    expect(html).toContain('id="token-workflow-selection-count"');
+    expect(app).toContain('data-action="link-workflows"');
+    expect(app).toContain('syncWorkflowLinksForKey(state.workflowNotes, key, state.editingTokenWorkflowNoteIds)');
+    expect(styles).toContain('.token-workflow-option { display: flex; min-height: 58px;');
     expect(app).toContain('renderWorkflowMarkdownPreview()');
     expect(app).toContain("renderMarkdown(note.content)");
     expect(app).toContain("matchesKeyFilter(key, query)");

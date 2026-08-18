@@ -309,6 +309,8 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .group-label-add { flex: 0 0 auto; color: var(--primary); font-weight: 800; }
 .quick-group-key { margin: -7px 0 18px; padding: 10px 12px; color: var(--text-soft); background: var(--surface-muted); border-radius: 10px; font-size: 0.84rem; font-weight: 720; }
 .token-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.token-workflow-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.token-workflow-button .badge { color: var(--primary-hover); background: var(--primary-soft); }
 .small-btn { min-height: 38px; padding: 6px 11px; color: var(--text-soft); background: var(--surface-muted); border: 1px solid transparent; border-radius: 9px; font-size: 0.72rem; font-weight: 720; touch-action: manipulation; }
 .reorder-btn { width: 38px; padding: 0; }
 .reorder-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -322,7 +324,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   .token-badges { margin-top: 4px; }
   .token-footer { align-items: stretch; flex-direction: column; }
   .group-label { width: 100%; margin-left: 0; }
-  .token-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .token-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .token-actions .small-btn { width: 100%; }
   .token-code-value { font-size: 1.28rem; letter-spacing: 0.03em; }
 }
@@ -349,6 +351,22 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .workflow-note-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
 .workflow-note-secondary-actions { display: flex; gap: 6px; }
 .workflow-note-actions .btn { flex: 1; }
+.token-workflow-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.token-workflow-heading p { margin: 0; color: var(--text-soft); font-size: 0.82rem; font-weight: 720; }
+.token-workflow-heading span { color: var(--primary); font-size: 0.74rem; font-weight: 800; white-space: nowrap; }
+.token-workflow-list { display: grid; max-height: 360px; gap: 8px; overflow-y: auto; }
+.token-workflow-option { display: flex; min-height: 58px; align-items: center; gap: 11px; padding: 10px 12px; color: var(--text-soft); background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.token-workflow-option:hover, .token-workflow-option:focus-within { border-color: var(--primary); }
+.token-workflow-option.selected { background: var(--primary-soft); border-color: var(--primary); }
+.token-workflow-option input { width: 20px; min-height: 20px; flex: 0 0 20px; margin: 0; accent-color: var(--primary); }
+.token-workflow-option span { min-width: 0; }
+.token-workflow-option strong, .token-workflow-option small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.token-workflow-option strong { color: var(--text); font-size: 0.84rem; }
+.token-workflow-option small { margin-top: 2px; color: var(--text-muted); font-size: 0.72rem; }
+.token-workflow-empty { display: grid; justify-items: center; gap: 7px; padding: 28px 18px; color: var(--text-muted); background: var(--surface-muted); border: 1px dashed var(--border-strong); border-radius: 13px; text-align: center; }
+.token-workflow-empty strong { color: var(--text); }
+.token-workflow-empty span { font-size: 0.8rem; }
+.token-workflow-empty .btn { margin-top: 7px; }
 .workflow-editor-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
 .workflow-editor-label-row label { color: var(--text-soft); font-size: 0.84rem; font-weight: 700; }
 .workflow-editor-label-row span { color: var(--text-muted); font-size: 0.72rem; white-space: nowrap; }
