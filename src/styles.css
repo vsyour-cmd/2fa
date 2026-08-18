@@ -162,6 +162,16 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .skip-link { position: fixed; top: 10px; left: 10px; z-index: 2000; padding: 10px 14px; color: white; background: var(--primary); border-radius: 8px; transform: translateY(-150%); }
 .skip-link:focus { transform: translateY(0); }
+.app-boot-screen { position: fixed; z-index: 1; inset: 0; display: none; place-items: center; padding: 24px; }
+.app-booting .app-boot-screen { display: grid; }
+.app-booting .shell { display: none; }
+.app-boot-card { display: grid; width: min(100%, 360px); grid-template-columns: 54px minmax(0, 1fr) 22px; align-items: center; gap: 16px; border: 1px solid var(--border); border-radius: 20px; padding: 20px; background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(18px); }
+.app-boot-card img { display: block; width: 54px; height: 54px; border-radius: 16px; box-shadow: 0 10px 24px var(--ring); }
+.app-boot-card strong, .app-boot-card span { display: block; }
+.app-boot-card strong { font-size: 1rem; }
+.app-boot-card div > span { margin-top: 3px; color: var(--text-muted); font-size: 0.78rem; }
+.app-boot-spinner { width: 22px; height: 22px; border: 2px solid var(--border-strong); border-top-color: var(--primary); border-radius: 50%; animation: app-boot-spin 760ms linear infinite; }
+@keyframes app-boot-spin { to { transform: rotate(360deg); } }
 .shell { position: relative; z-index: 1; width: min(100% - 32px, 1040px); margin: 0 auto; padding: 44px 0 max(84px, env(safe-area-inset-bottom)); }
 
 h1, h2, p { margin-top: 0; }

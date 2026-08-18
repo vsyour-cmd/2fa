@@ -20,6 +20,17 @@ describe('static application shell', () => {
     expect(themeBoot).toBeLessThan(stylesheet);
   });
 
+  it('keeps the login view hidden until session restoration chooses the initial screen', () => {
+    expect(html).toContain('<html lang="zh-CN" data-theme="light" class="app-booting">');
+    expect(html).toContain('id="app-boot-screen"');
+    expect(html).toContain('正在检查本机加密会话');
+    expect(styles).toContain('.app-booting .app-boot-screen { display: grid; }');
+    expect(styles).toContain('.app-booting .shell { display: none; }');
+    expect(app).toContain("document.documentElement.classList.remove('app-booting')");
+    expect(app).toMatch(/function showAuthScreen[\s\S]*?finishInitialBoot\(\);\n}/);
+    expect(app).toMatch(/function showMainApp[\s\S]*?finishInitialBoot\(\);\n}/);
+  });
+
   it('uses a responsive 3D gradient background with an accessible static fallback', () => {
     expect(styles).toContain('body::before, body::after');
     expect(styles).toContain('@keyframes ambient-orbit');

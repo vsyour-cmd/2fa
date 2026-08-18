@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="light" class="app-booting">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -17,6 +17,14 @@
   <body>
     <a class="skip-link" href="#main-content">跳到主内容</a>
     <div id="offline-banner" class="offline-banner hidden" role="status">当前处于离线模式，更改将先保存在本机</div>
+
+    <div id="app-boot-screen" class="app-boot-screen" role="status" aria-live="polite" aria-label="正在安全启动">
+      <div class="app-boot-card">
+        <img src="/icons/icon.svg" alt="" width="54" height="54">
+        <div><strong>正在安全启动…</strong><span>正在检查本机加密会话</span></div>
+        <span class="app-boot-spinner" aria-hidden="true"></span>
+      </div>
+    </div>
 
     <main id="main-content" class="shell" tabindex="-1">
       <section id="unlock-screen" class="auth-shell" aria-labelledby="auth-title">

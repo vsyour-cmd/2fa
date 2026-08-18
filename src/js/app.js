@@ -484,6 +484,7 @@ function showAuthScreen(accountName = '') {
   renderKnownAccounts();
   renderSessionResume();
   if (!renderQuickUnlockEntry(accountName)) requestAnimationFrame(() => $('#login-account').focus());
+  finishInitialBoot();
 }
 
 function showMainApp() {
@@ -496,6 +497,11 @@ function showMainApp() {
   renderAll();
   startUpdateTimer();
   resetAutoLockTimer();
+  finishInitialBoot();
+}
+
+function finishInitialBoot() {
+  document.documentElement.classList.remove('app-booting');
 }
 
 async function lockCurrent(message = '') {
