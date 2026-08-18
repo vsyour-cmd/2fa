@@ -1786,6 +1786,7 @@ function renderImportPreview(source, plan, workflowNoteCount = 0) {
   const rows = plan.items.map((item) => {
     const meta = actionMeta[item.action];
     const candidate = item.candidate;
+    const icon = getKeyIcon(candidate);
     const identity = [candidate.issuer && candidate.issuer !== candidate.name ? candidate.issuer : '', candidate.account].filter(Boolean).join(' · ');
     const otp = `${candidate.algorithm} · ${candidate.digits} 位 · ${candidate.period} 秒`;
     let detail = meta.detail;
@@ -1795,11 +1796,14 @@ function renderImportPreview(source, plan, workflowNoteCount = 0) {
     if (item.action === 'invalid') detail = item.reason;
     return `
       <li class="import-preview-row" data-import-action="${item.action}">
-        <div class="import-preview-main">
-          <strong>${escapeHtml(candidate.name)}</strong>
-          ${identity ? `<span>${escapeHtml(identity)}</span>` : ''}
-          <span>${escapeHtml(otp)} · ${escapeHtml(importSecretHint(candidate.secret))}</span>
-          <small>${escapeHtml(detail)}</small>
+        <div class="import-preview-entry">
+          <div class="token-icon import-preview-icon${icon.matched ? '' : ` initial avatar-tone-${icon.tone}`}" aria-hidden="true">${escapeHtml(icon.value)}</div>
+          <div class="import-preview-main">
+            <strong>${escapeHtml(candidate.name)}</strong>
+            ${identity ? `<span>${escapeHtml(identity)}</span>` : ''}
+            <span>${escapeHtml(otp)} · ${escapeHtml(importSecretHint(candidate.secret))}</span>
+            <small>${escapeHtml(detail)}</small>
+          </div>
         </div>
         <span class="import-action-badge ${item.action}">${meta.label}</span>
       </li>`;
