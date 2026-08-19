@@ -235,6 +235,15 @@ describe('static application shell', () => {
     expect(styles).toContain('.trash-filter-bar { display: flex;');
   });
 
+  it('opens the shared recycle bin directly from usage scenarios', () => {
+    expect(html).toContain('id="workflow-trash-open"');
+    expect(html.match(/class="[^"]*trash-open/g)).toHaveLength(2);
+    expect(html.match(/class="[^"]*trash-count/g)).toHaveLength(2);
+    expect(app).toContain("for (const badge of $$('.trash-count')) badge.textContent = trashCount");
+    expect(app).toContain("for (const button of $$('.trash-open')) button.addEventListener('click', openTrashModal)");
+    expect(styles).toContain('.workflow-heading-buttons { display: flex;');
+  });
+
   it('waits for a fresh verification code during the final second', () => {
     expect(app).toContain('验证码即将过期，正在复制新码');
     expect(app).toContain('验证码即将过期，注意尽快粘贴');

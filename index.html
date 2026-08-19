@@ -193,7 +193,7 @@
           <div id="standard-actions" class="standard-actions">
             <button id="import-open" class="btn btn-secondary" type="button">导入</button>
             <button id="export-open" class="btn btn-secondary" type="button">导出</button>
-            <button id="trash-open" class="btn btn-ghost" type="button">回收站 <span id="trash-count" class="badge">0</span></button>
+            <button id="trash-open" class="btn btn-ghost trash-open" type="button">回收站 <span id="trash-count" class="badge trash-count">0</span></button>
           </div>
           <div id="bulk-actions" class="bulk-actions card hidden" role="region" aria-label="批量操作">
             <div class="bulk-primary-actions">
@@ -224,7 +224,10 @@
             </div>
             <div class="workflow-heading-actions">
               <label for="workflow-sort"><span>场景排序</span><select id="workflow-sort"><option value="smart">智能 · 常用优先</option><option value="recent">最近使用</option><option value="stale">最久未使用</option><option value="name">按名称</option></select></label>
-              <button id="workflow-add-open" class="btn btn-primary" type="button">新建场景</button>
+              <div class="workflow-heading-buttons">
+                <button id="workflow-trash-open" class="btn btn-secondary trash-open" type="button">回收站 <span id="workflow-trash-count" class="badge trash-count">0</span></button>
+                <button id="workflow-add-open" class="btn btn-primary" type="button">新建场景</button>
+              </div>
             </div>
           </div>
           <div class="workflow-filter-bar card-subtle">

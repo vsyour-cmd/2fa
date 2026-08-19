@@ -1243,7 +1243,8 @@ async function openWorkflowRun(id) {
 function renderAll() {
   renderGroupFilters();
   updateGroupOptions();
-  $('#trash-count').textContent = String(state.deletedItems.length + state.deletedWorkflowNotes.length);
+  const trashCount = String(state.deletedItems.length + state.deletedWorkflowNotes.length);
+  for (const badge of $$('.trash-count')) badge.textContent = trashCount;
   renderKeys();
   renderWorkflowNotes();
   renderBackupReminder();
@@ -1683,6 +1684,13 @@ function renderTrash() {
       <div class="manage-actions"><button class="small-btn" type="button" data-trash-action="restore">恢复</button><button class="small-btn delete" type="button" data-trash-action="purge">彻底删除</button></div>
     </div>`).join('');
   list.innerHTML = keyRows + noteRows;
+}
+
+function openTrashModal() {
+  $('#trash-search').value = '';
+  renderTrash();
+  const hasDeletedContent = state.deletedItems.length + state.deletedWorkflowNotes.length > 0;
+  openModal('trash-modal', hasDeletedContent ? '#trash-search' : '[data-close-modal="trash-modal"]');
 }
 
 async function restoreTrashItem(id) {
@@ -2763,12 +2771,7 @@ function setupEvents() {
     else deleteGroup(row.dataset.groupName);
   });
 
-  $('#trash-open').addEventListener('click', () => {
-    $('#trash-search').value = '';
-    renderTrash();
-    const hasDeletedContent = state.deletedItems.length + state.deletedWorkflowNotes.length > 0;
-    openModal('trash-modal', hasDeletedContent ? '#trash-search' : '[data-close-modal="trash-modal"]');
-  });
+  for (const button of $$('.trash-open')) button.addEventListener('click', openTrashModal);
   $('#trash-search').addEventListener('input', renderTrash);
   $('#trash-list').addEventListener('click', (event) => {
     const action = event.target.closest('[data-trash-action]')?.dataset.trashAction;
