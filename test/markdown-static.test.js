@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { marked } from 'marked';
 
 const markdown = await readFile(new URL('../src/js/markdown.js', import.meta.url), 'utf8');
 
@@ -14,7 +15,7 @@ describe('safe Markdown rendering', () => {
     expect(markdown).toContain("import DOMPurify from 'dompurify'");
     expect(markdown).toContain('ALLOWED_TAGS');
     expect(markdown).toContain('ALLOWED_ATTR');
-    expect(markdown).toContain('ALLOW_DATA_ATTR: false');
+    expect(markdown).toContain('ALLOW_DATA_ATTR: true');
     expect(markdown).toContain('SANITIZE_NAMED_PROPS: true');
     expect(markdown).not.toContain("'img'");
     expect(markdown).not.toContain("'script'");
@@ -29,5 +30,16 @@ describe('safe Markdown rendering', () => {
     expect(markdown).toContain("node.tagName === 'INPUT'");
     expect(markdown).toContain("node.setAttribute('type', 'checkbox')");
     expect(markdown).toContain("node.setAttribute('disabled', '')");
+  });
+
+  it('keeps secret mask tokens inert through the GFM parse so masked values and copy buttons are injected', () => {
+    const prefix = markdown.match(/SECRET_MASK_TOKEN_PREFIX\s*=\s*'([^']+)'/)?.[1];
+    expect(prefix).toBeTruthy();
+    const token = `${prefix}0`;
+    for (const context of [`- 密码：${token}`, `密码：${token} 结束`, `密码 ${token}`, `(${token})`]) {
+      const rendered = marked.parse(context, { async: false, breaks: true, gfm: true });
+      expect(rendered).toContain(token);
+      expect(rendered).not.toContain('<strong>');
+    }
   });
 });

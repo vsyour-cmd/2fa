@@ -9,7 +9,10 @@ const ALLOWED_TAGS = [
 
 const ALLOWED_ATTR = ['href', 'title', 'class', 'type', 'checked', 'disabled', 'align', 'target', 'rel'];
 const SECRET_PATTERN = /\{\{\s*(?:secret|pwd)\s*:\s*([^\r\n{}]+?)\s*\}\}/gi;
-const SECRET_MASK_TOKEN_PREFIX = '__WF_SECRET_TOKEN_';
+// The mask token must survive the GFM parse as literal text. It is plain
+// alphanumerics on purpose: the previous "__...__" token was interpreted as
+// strong emphasis, which broke the post-parse replacement and leaked the token.
+const SECRET_MASK_TOKEN_PREFIX = 'WFSECRETTOKEN';
 
 function sanitizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -26,7 +29,7 @@ function embedSecretTokens(source) {
     const raw = sanitizeText(password);
     const index = values.length;
     values.push(raw);
-    return `${SECRET_MASK_TOKEN_PREFIX}${index}__`;
+    return `${SECRET_MASK_TOKEN_PREFIX}${index}`;
   });
   return { replaced, values };
 }
@@ -35,7 +38,7 @@ function injectSecretRevealMarkup(html, values) {
   if (!values.length) return html;
   let rendered = html;
   for (let index = 0; index < values.length; index += 1) {
-    const token = `${SECRET_MASK_TOKEN_PREFIX}${index}__`;
+    const token = `${SECRET_MASK_TOKEN_PREFIX}${index}`;
     const raw = values[index];
     const masked = secretMask(raw.length);
     const encoded = encodeURIComponent(raw);
