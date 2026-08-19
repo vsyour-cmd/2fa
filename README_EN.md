@@ -121,13 +121,14 @@ npx wrangler secret put ADMIN_PASSWORD
 
 For Cloudflare Builds, you can instead add an encrypted `ADMIN_PASSWORD` Secret under **Settings → Variables and Secrets**. The default admin username is `admin`.
 
-#### Step 3: Configure Cloudflare Access (required)
+#### Step 3: Configure Cloudflare Access (optional)
 
-Every `/api/*` endpoint requires a Cloudflare Access-verified identity (`wrangler dev` simulates it automatically via the `access.dev` block in `wrangler.jsonc`, so no extra setup is needed locally). Production deployments must enable it for real, otherwise all API requests return 403 and the login page reports "Cloudflare Access 身份验证失败" (Cloudflare Access identity verification failed):
+No Access setup is required by default: `/api/*` endpoints run without any Access identity check. To add a Cloudflare Access login wall in front of the API:
 
 1. In the Cloudflare dashboard, turn on the one-click **Cloudflare Access** protection for the Worker and create the Access application;
 2. Put the Access application's **AUD tag** into `vars.ACCESS_AUD` in `wrangler.jsonc` (the committed value is a placeholder), or override `ACCESS_AUD` under the Worker's **Settings → Variables** after deployment;
-3. When Access is disabled or the AUD does not match, login fails with an explicit "Cloudflare Access 身份验证失败" message — revisit this step to fix it.
+3. Set the Worker environment variable `REQUIRE_ACCESS=true` to enforce the check;
+4. Once enforced, every device must visit through the **same Access identity**, otherwise login/sync fails with "Cloudflare Access 身份验证失败" or "此保险库属于另一个 Cloudflare Access 用户". Local `wrangler dev` simulates the identity via `access.dev`; add `REQUIRE_ACCESS=true` to `.dev.vars` to exercise the enforced mode locally.
 
 #### Step 4: Test and build
 
@@ -154,7 +155,7 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 - The `main` branch is used for production deployments and other branches create previews.
 - The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`2fa`).
 - Keep the `ADMIN_PASSWORD` Secret configured in the Worker environment; GitHub deployments do not overwrite it.
-- The production API requires Cloudflare Access: enable Access protection in the dashboard and put the real AUD into `vars.ACCESS_AUD` (or a Worker environment variable), otherwise login fails with "Cloudflare Access 身份验证失败".
+- The Cloudflare Access login wall is optional: to enforce it, enable Access protection in the dashboard, put the real AUD into `vars.ACCESS_AUD` (or a Worker environment variable), and set the `REQUIRE_ACCESS=true` environment variable. It is off by default and needs no configuration.
 
 ## Usage Guide
 

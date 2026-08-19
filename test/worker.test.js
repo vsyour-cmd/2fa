@@ -46,23 +46,28 @@ describe('Cloudflare Worker API', () => {
     });
   });
 
-  it('requires the configured Cloudflare Access audience and exposes the verified email', async () => {
+  it('keeps Access enforcement opt-in and exposes the verified email only when required', async () => {
     const env = { DATA_KV: new FakeKv(), ACCESS_AUD };
-    const missing = await worker.fetch(request('/api/access/me'), env, {});
+    const anonymous = await worker.fetch(request('/api/access/me'), env, {});
+    expect(anonymous.status).toBe(200);
+    expect(await anonymous.json()).toEqual({ authenticated: false, email: '' });
+
+    const enforcedEnv = { ...env, REQUIRE_ACCESS: 'true' };
+    const missing = await worker.fetch(request('/api/access/me'), enforcedEnv, {});
     expect(missing.status).toBe(403);
     expect(await missing.json()).toMatchObject({ code: 'ACCESS_DENIED' });
 
-    const wrongAudience = await worker.fetch(request('/api/access/me'), env, accessContext('owner@example.com', 'owner-1', 'wrong-aud'));
+    const wrongAudience = await worker.fetch(request('/api/access/me'), enforcedEnv, accessContext('owner@example.com', 'owner-1', 'wrong-aud'));
     expect(wrongAudience.status).toBe(403);
     expect(await wrongAudience.json()).toMatchObject({ code: 'ACCESS_DENIED' });
 
-    const verified = await worker.fetch(request('/api/access/me'), env, accessContext('Owner@Example.com', 'owner-1'));
+    const verified = await worker.fetch(request('/api/access/me'), enforcedEnv, accessContext('Owner@Example.com', 'owner-1'));
     expect(verified.status).toBe(200);
     expect(await verified.json()).toEqual({ authenticated: true, email: 'owner@example.com' });
   });
 
   it('binds a legacy vault to its first verified Access user and blocks other Access users', async () => {
-    const env = { DATA_KV: new FakeKv() };
+    const env = { DATA_KV: new FakeKv(), REQUIRE_ACCESS: 'true' };
     const key = 'e'.repeat(64);
     await env.DATA_KV.put(key, JSON.stringify({
       encryptedData: 'legacy-encrypted-payload-long-enough', salt: 'base64-salt-value', version: 3, updatedAt: 123,
@@ -145,7 +150,7 @@ describe('Cloudflare Worker API', () => {
   });
 
   it('manages users, recoverable resets, and audit logs through authenticated admin APIs', async () => {
-    const env = { DATA_KV: new FakeKv(), ADMIN_PASSWORD: 'strong-admin-password', ADMIN_USERNAME: 'admin' };
+    const env = { DATA_KV: new FakeKv(), REQUIRE_ACCESS: 'true', ADMIN_PASSWORD: 'strong-admin-password', ADMIN_USERNAME: 'admin' };
     const key = 'c'.repeat(64);
     const vaultBody = JSON.stringify({
       key,

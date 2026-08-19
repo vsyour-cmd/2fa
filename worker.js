@@ -31,7 +31,7 @@ export default {
       const accessUser = await requireAccessIdentity(env, ctx);
       if (url.pathname === '/api/access/me') {
         if (request.method !== 'GET') return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'GET' });
-        return jsonResponse({ authenticated: true, email: accessUser.email }, 200);
+        return jsonResponse({ authenticated: Boolean(accessUser.email), email: accessUser.email || '' }, 200);
       }
       if (url.pathname === '/api/data') return await handleDataRequest(request, url, env, accessUser);
       if (url.pathname === '/api/admin/login') return await handleAdminLoginRequest(request, env, accessUser);
@@ -193,6 +193,11 @@ function accessAudienceMatches(actual, expected) {
 }
 
 async function requireAccessIdentity(env, ctx) {
+  if (env.REQUIRE_ACCESS !== 'true') {
+    // Access enforcement is opt-in. Without the flag, requests run with an
+    // anonymous identity: no login wall and no per-vault identity binding.
+    return { email: '', ownerId: '' };
+  }
   const expectedAudience = cleanSingleLine(env.ACCESS_AUD, 256);
   if (!expectedAudience) {
     throw httpError('Cloudflare Access 尚未配置', 503, 'ACCESS_NOT_CONFIGURED');
@@ -215,15 +220,19 @@ async function requireAccessIdentity(env, ctx) {
 }
 
 function profileBelongsToAnotherAccessUser(profile, accessUser) {
+  if (!accessUser.ownerId) return false;
   return isValidKey(profile?.accessOwnerId) && profile.accessOwnerId.toLowerCase() !== accessUser.ownerId;
 }
 
 function accessProfileFields(accessUser) {
+  if (!accessUser.ownerId) return {};
   return { accessOwnerId: accessUser.ownerId, accessEmail: accessUser.email };
 }
 
 function adminAuditActor(accessUser, adminName) {
-  return `${cleanSingleLine(adminName, 80) || 'admin'} · ${accessUser.accessEmail || accessUser.email}`;
+  const email = accessUser.accessEmail || accessUser.email || '';
+  const label = cleanSingleLine(adminName, 80) || 'admin';
+  return email ? `${label} · ${email}` : label;
 }
 
 async function accessOwnerDenied(env, request, profile, accessUser, action, keyHash) {
@@ -612,7 +621,7 @@ async function authenticateAdmin(request, env, accessUser) {
       await env.DATA_KV.delete(`${ADMIN_SESSION_PREFIX}${tokenHash}`);
       return null;
     }
-    if (!isValidKey(session.accessOwnerId) || session.accessOwnerId.toLowerCase() !== accessUser.ownerId) return null;
+    if (accessUser.ownerId && (!isValidKey(session.accessOwnerId) || session.accessOwnerId.toLowerCase() !== accessUser.ownerId)) return null;
     return { ...session, tokenHash };
   } catch { return null; }
 }

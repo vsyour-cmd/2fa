@@ -121,13 +121,14 @@ npx wrangler secret put ADMIN_PASSWORD
 
 使用 Cloudflare Builds 时，也可以在 Worker 的 **Settings → Variables and Secrets** 中添加加密 Secret `ADMIN_PASSWORD`。管理员用户名默认为 `admin`。
 
-#### 步骤 3：配置 Cloudflare Access（必需）
+#### 步骤 3：配置 Cloudflare Access（可选）
 
-Worker 的全部 `/api/*` 接口都要求请求携带通过 Cloudflare Access 验证的身份（本地 `wrangler dev` 由 `wrangler.jsonc` 的 `access.dev` 自动模拟，无需额外操作）。生产部署必须真实启用，否则所有接口返回 403，登录页会提示「Cloudflare Access 身份验证失败」：
+默认**无需任何 Access 配置**即可部署使用，全部 `/api/*` 接口不做 Access 身份校验。如需为接口增加 Cloudflare Access 登录墙：
 
 1. 在 Cloudflare 控制台为 Worker 开启「Cloudflare Access」一键保护并创建 Access 应用；
 2. 将 Access 应用的 **AUD 标签**填入 `wrangler.jsonc` 的 `vars.ACCESS_AUD`（仓库内为占位值），或部署后在 Worker 的 **Settings → Variables** 中覆盖 `ACCESS_AUD`；
-3. AUD 不匹配或未启用 Access 时登录会失败并明确提示「Cloudflare Access 身份验证失败」，按本步骤检查即可。
+3. 在 Worker 环境变量中设置 `REQUIRE_ACCESS=true` 开启强制校验；
+4. 开启后所有设备必须使用**同一个 Access 身份**访问，否则登录/同步会提示「Cloudflare Access 身份验证失败」或「此保险库属于另一个 Cloudflare Access 用户」。本地 `wrangler dev` 由 `access.dev` 自动模拟身份，如需本地验证强制模式，把 `REQUIRE_ACCESS=true` 写入 `.dev.vars` 即可。
 
 #### 步骤 4：测试和构建
 
@@ -154,7 +155,7 @@ npx wrangler deploy
 - `main` 分支用于生产部署，其他分支用于预览版本。
 - Cloudflare 中的 Worker 名称必须与 `wrangler.jsonc` 的 `name`（`2fa`）一致。
 - 自动部署前需在 Worker 环境中保留 `ADMIN_PASSWORD` Secret；GitHub 同步不会覆盖 Secret。
-- 生产 API 需要 Cloudflare Access：请先在控制台开启 Access 保护，并把真实 AUD 写入 `vars.ACCESS_AUD`（或 Worker 环境变量），否则登录会失败并提示「Cloudflare Access 身份验证失败」。
+- Cloudflare Access 登录墙为可选项：如需启用，在控制台开启 Access、把真实 AUD 写入 `vars.ACCESS_AUD`（或 Worker 环境变量），并设置环境变量 `REQUIRE_ACCESS=true`；默认关闭、无需任何配置。
 
 ## 使用说明
 
