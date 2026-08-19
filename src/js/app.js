@@ -395,7 +395,10 @@ async function unlockWithPassword(password, accountName) {
         const cloud = await loadCloudRecord(candidate.hash, normalizedAccount);
         if (cloud.exists) record = cloud;
       } catch (error) {
-        if (!(error instanceof ApiError) || error.status === 423) throw error;
+        // Surface access/security rejections (403 Access denied, 423 account disabled,
+        // 429 rate limited) instead of masking them as a wrong password. Transient
+        // server errors are tolerated so the offline cache can still rescue the login.
+        if (!(error instanceof ApiError) || error.status === 403 || error.status === 423 || error.status === 429) throw error;
       }
     }
     if (!record) {
