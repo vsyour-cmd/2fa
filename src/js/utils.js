@@ -70,6 +70,7 @@ export function normalizeWorkflowNote(raw = {}) {
   return {
     id: String(raw.id || generateId()),
     title: String(raw.title || '未命名场景').trim().slice(0, 100) || '未命名场景',
+    group: String(raw.group || '').trim().slice(0, 100),
     content: String(raw.content || raw.steps || '').trim().slice(0, 5000),
     linkedKeys,
     favorite: Boolean(raw.favorite),
@@ -136,7 +137,7 @@ export function matchesWorkflowNoteFilter(note = {}, query = '') {
   if (terms.length === 0) return true;
   const linkedText = (Array.isArray(note.linkedKeys) ? note.linkedKeys : [])
     .flatMap((link) => [link?.name, link?.issuer, link?.account]);
-  const searchableText = [note.title, note.content, ...linkedText]
+  const searchableText = [note.title, note.group, note.content, ...linkedText]
     .filter(Boolean)
     .join(' ')
     .toLocaleLowerCase();

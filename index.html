@@ -239,10 +239,14 @@
             <div class="search-box">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
               <label class="sr-only" for="workflow-search">搜索使用场景</label>
-              <input id="workflow-search" type="search" placeholder="搜索场景名称、内容或关联验证码…" autocomplete="off">
+              <input id="workflow-search" type="search" placeholder="搜索场景名称、分组、内容或关联验证码…" autocomplete="off">
+            </div>
+            <div class="workflow-group-filter-wrap">
+              <label class="sr-only" for="workflow-group-filter">按场景分组筛选</label>
+              <select id="workflow-group-filter" data-searchable-filter data-searchable-class="align-start" data-filter-label="场景分组" data-search-placeholder="筛选场景分组…" data-options-label="可用分组" data-searchable-default="__all"></select>
             </div>
             <span id="workflow-list-summary" aria-live="polite">0 个使用场景</span>
-            <button id="workflow-filter-reset" class="active-filter-reset hidden" type="button"><span aria-hidden="true">×</span><span>清除搜索</span></button>
+            <button id="workflow-filter-reset" class="active-filter-reset hidden" type="button"><span aria-hidden="true">×</span><span id="workflow-filter-reset-label">清除筛选</span></button>
           </div>
           <div id="workflow-note-list" class="workflow-note-grid" tabindex="-1" aria-live="polite"></div>
           <div id="workflow-empty" class="empty-state compact hidden">
@@ -253,8 +257,8 @@
           </div>
           <div id="workflow-no-results" class="empty-state compact hidden">
             <h2>没有匹配的使用场景</h2>
-            <p>试试场景名称、操作内容或关联的验证码名称。</p>
-            <button id="workflow-clear-search" class="btn btn-secondary" type="button">清除搜索</button>
+            <p>试试场景名称、分组、操作内容或关联的验证码名称。</p>
+            <button id="workflow-clear-search" class="btn btn-secondary" type="button">清除筛选</button>
           </div>
         </section>
       </section>
@@ -414,6 +418,7 @@
         <form id="workflow-form" novalidate>
           <input id="workflow-id" type="hidden">
           <div class="form-group"><label for="workflow-title">场景名称</label><input id="workflow-title" type="text" maxlength="100" aria-describedby="workflow-title-hint" placeholder="例如：发布网站" required><p id="workflow-title-hint" class="field-hint">用一句话说明这个场景要完成什么。</p></div>
+          <div class="form-group"><label for="workflow-group">分组（可选）</label><input id="workflow-group" type="text" list="workflow-group-options" maxlength="100" aria-describedby="workflow-group-hint" placeholder="未分组"><datalist id="workflow-group-options"></datalist><p id="workflow-group-hint" class="field-hint">用于筛选和整理使用场景，例如“运维”“财务”；可以留空。</p></div>
           <div class="form-group">
             <div class="workflow-editor-label-row"><label for="workflow-content">操作流程（Markdown）</label><span id="workflow-character-count">0 / 5000</span></div>
             <div class="workflow-markdown-editor">

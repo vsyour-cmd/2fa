@@ -31,12 +31,13 @@ describe('workflow 2FA association filter', () => {
 describe('workflow note list filter', () => {
   const note = {
     title: '发布网站',
+    group: '运维流程',
     content: '登录控制台并执行部署检查',
     linkedKeys: [{ name: 'Cloudflare Admin', issuer: 'Cloudflare', account: 'ops@example.com' }],
   };
 
-  it('matches titles, Markdown content, and linked 2FA metadata', () => {
-    for (const query of ['发布', '部署检查', 'cloudflare', 'OPS@EXAMPLE.COM']) {
+  it('matches titles, groups, Markdown content, and linked 2FA metadata', () => {
+    for (const query of ['发布', '运维流程', '部署检查', 'cloudflare', 'OPS@EXAMPLE.COM']) {
       expect(matchesWorkflowNoteFilter(note, query)).toBe(true);
     }
   });

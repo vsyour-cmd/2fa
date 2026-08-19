@@ -132,6 +132,7 @@ const state = {
   exportKeyIds: null,
   vaultView: 'tokens',
   workflowSearch: '',
+  workflowGroupFilter: '__all',
   editingWorkflowLinks: [],
   editingTokenWorkflowKeyId: '',
   editingTokenWorkflowNoteIds: new Set(),
@@ -182,6 +183,7 @@ function clearSensitiveState() {
   state.exportKeyIds = null;
   state.vaultView = 'tokens';
   state.workflowSearch = '';
+  state.workflowGroupFilter = '__all';
   state.editingWorkflowLinks = [];
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
@@ -910,6 +912,29 @@ function resolveWorkflowLink(link) {
   return { key: null, status: 'unavailable', label: link.name || '已删除的条目' };
 }
 
+function getWorkflowGroups() {
+  return [...new Set(state.workflowNotes.map((note) => note.group || '').filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, 'zh-CN'));
+}
+
+function renderWorkflowGroupFilters() {
+  const groups = getWorkflowGroups();
+  if (!['__all', '__ungrouped', ...groups].includes(state.workflowGroupFilter)) state.workflowGroupFilter = '__all';
+  const filters = [
+    { value: '__all', label: '全部', count: state.workflowNotes.length },
+    ...groups.map((group) => ({ value: group, label: group, count: state.workflowNotes.filter((note) => note.group === group).length })),
+    { value: '__ungrouped', label: '未分组', count: state.workflowNotes.filter((note) => !note.group).length },
+  ];
+  const select = $('#workflow-group-filter');
+  select.innerHTML = filters.map((filter) => {
+    const triggerLabel = filter.value === '__all' ? '全部场景分组' : filter.value === '__ungrouped' ? '未分组' : `分组：${filter.label}`;
+    return `<option value="${escapeHtml(filter.value)}" data-count="${filter.count}" data-description="${filter.count} 个使用场景" data-trigger-label="${escapeHtml(triggerLabel)}">${escapeHtml(filter.label)}</option>`;
+  }).join('');
+  select.value = state.workflowGroupFilter;
+  $('#workflow-group-options').innerHTML = groups.map((group) => `<option value="${escapeHtml(group)}"></option>`).join('');
+  refreshSearchableSelect(select);
+}
+
 function setVaultView(view, focus = false) {
   state.vaultView = view === 'workflow' ? 'workflow' : 'tokens';
   const workflowActive = state.vaultView === 'workflow';
@@ -933,11 +958,17 @@ function renderWorkflowNotes() {
   $('#tokens-tab-count').textContent = String(state.keys.length);
   $('#workflow-tab-count').textContent = String(state.workflowNotes.length);
   $('#workflow-sort').value = state.settings.workflowSortMode;
+  renderWorkflowGroupFilters();
   const total = state.workflowNotes.length;
-  const filtered = Boolean(state.workflowSearch);
+  const activeFilterCount = Number(Boolean(state.workflowSearch)) + Number(state.workflowGroupFilter !== '__all');
+  const filtered = activeFilterCount > 0;
   const notes = getVisibleWorkflowNotes();
   $('#workflow-list-summary').textContent = filtered ? `显示 ${notes.length} / ${total} 个使用场景` : `${total} 个使用场景`;
-  setHidden('#workflow-filter-reset', !filtered);
+  const resetButton = $('#workflow-filter-reset');
+  setHidden(resetButton, !filtered);
+  $('#workflow-filter-reset-label').textContent = activeFilterCount > 1 ? `清除 ${activeFilterCount} 项筛选` : state.workflowSearch ? '清除关键词' : '清除分组';
+  const filterDetails = [state.workflowSearch ? `关键词“${state.workflowSearch}”` : '', state.workflowGroupFilter !== '__all' ? '场景分组' : ''].filter(Boolean).join('、');
+  resetButton.setAttribute('aria-label', filterDetails ? `清除筛选：${filterDetails}` : '清除筛选');
   setHidden('#workflow-empty', total !== 0);
   setHidden('#workflow-no-results', !filtered || notes.length !== 0 || total === 0);
   setHidden('#workflow-note-list', notes.length === 0);
@@ -958,6 +989,9 @@ function renderWorkflowNotes() {
     const lastUsed = lastUsedAt > 0 ? formatDateTime(lastUsedAt) : '从未使用';
     const recentlyUsed = lastUsedAt > 0 && now - lastUsedAt <= RECENT_USAGE_WINDOW_MS;
     const frequent = frequentIds.has(note.id);
+    const groupValue = note.group || '__ungrouped';
+    const groupLabel = note.group || '未分组';
+    const groupTag = `<button class="workflow-group-tag${note.group ? '' : ' empty'}" type="button" data-workflow-group-filter="${escapeHtml(groupValue)}" title="仅显示“${escapeHtml(groupLabel)}”场景"><span># ${escapeHtml(groupLabel)}</span></button>`;
     return `
       <article class="workflow-note-card${frequent ? ' frequent' : ''}" data-workflow-id="${escapeHtml(note.id)}">
         <div class="workflow-note-header">
@@ -965,7 +999,7 @@ function renderWorkflowNotes() {
           <button class="favorite-btn${note.favorite ? ' active' : ''}" type="button" data-workflow-action="favorite" aria-label="${note.favorite ? '取消收藏' : '收藏'} ${escapeHtml(note.title)}" aria-pressed="${note.favorite}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"></path></svg></button>
         </div>
         <div class="workflow-note-preview markdown-body">${preview || '<p class="markdown-empty">尚未记录操作内容</p>'}</div>
-        <div class="workflow-note-links">${previewLinks || '<span class="workflow-link-chip"><span>未关联验证码</span></span>'}${hiddenLinks > 0 ? `<span class="workflow-link-chip"><span>另有 ${hiddenLinks} 个</span></span>` : ''}</div>
+        <div class="workflow-note-links">${groupTag}${previewLinks || '<span class="workflow-link-chip"><span>未关联验证码</span></span>'}${hiddenLinks > 0 ? `<span class="workflow-link-chip"><span>另有 ${hiddenLinks} 个</span></span>` : ''}</div>
         <div class="workflow-note-actions"><button class="btn btn-primary" type="button" data-workflow-action="run">开始操作</button><div class="workflow-note-secondary-actions"><button class="small-btn" type="button" data-workflow-action="edit">编辑</button><button class="small-btn delete" type="button" data-workflow-action="delete">移入回收站</button></div></div>
       </article>`;
   }).join('');
@@ -980,8 +1014,9 @@ function clearTokenFilters() {
   $('#search-input').focus();
 }
 
-function clearWorkflowSearch() {
+function clearWorkflowFilters() {
   state.workflowSearch = '';
+  state.workflowGroupFilter = '__all';
   $('#workflow-search').value = '';
   renderWorkflowNotes();
   $('#workflow-search').focus();
@@ -999,7 +1034,11 @@ function getSortedWorkflowNotes() {
 }
 
 function getVisibleWorkflowNotes() {
-  return getSortedWorkflowNotes().filter((note) => matchesWorkflowNoteFilter(note, state.workflowSearch));
+  return getSortedWorkflowNotes().filter((note) => {
+    const groupMatches = state.workflowGroupFilter === '__all'
+      || (state.workflowGroupFilter === '__ungrouped' ? !note.group : note.group === state.workflowGroupFilter);
+    return groupMatches && matchesWorkflowNoteFilter(note, state.workflowSearch);
+  });
 }
 
 function updateTokenWorkflowSelectionCount() {
@@ -1022,7 +1061,7 @@ function renderTokenWorkflowPicker() {
     : `${allNotes.length} 个场景`;
   $('#token-workflow-list').innerHTML = notes.map((note) => {
     const selected = state.editingTokenWorkflowNoteIds.has(note.id);
-    return `<label class="token-workflow-option${selected ? ' selected' : ''}" data-token-workflow-note-id="${escapeHtml(note.id)}"><input type="checkbox"${selected ? ' checked' : ''}><span><strong>${escapeHtml(note.title)}</strong><small>${note.content.length} 个字符 · ${note.linkedKeys.length} 个验证码</small></span></label>`;
+    return `<label class="token-workflow-option${selected ? ' selected' : ''}" data-token-workflow-note-id="${escapeHtml(note.id)}"><input type="checkbox"${selected ? ' checked' : ''}><span><strong>${escapeHtml(note.title)}</strong><small>${escapeHtml(note.group || '未分组')} · ${note.content.length} 个字符 · ${note.linkedKeys.length} 个验证码</small></span></label>`;
   }).join('');
   updateTokenWorkflowSelectionCount();
 }
@@ -1144,6 +1183,7 @@ function openWorkflowEditor(id = '') {
   hideError('#workflow-error');
   $('#workflow-id').value = note?.id || '';
   $('#workflow-title').value = note?.title || '';
+  $('#workflow-group').value = note?.group || '';
   $('#workflow-content').value = note?.content || '';
   $('#workflow-edit-title').textContent = note ? '编辑使用场景' : '新建使用场景';
   state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
@@ -1168,6 +1208,7 @@ async function saveWorkflowNote(event) {
     const note = normalizeWorkflowNote({
       id: previous?.id || generateId(),
       title,
+      group: $('#workflow-group').value,
       content,
       linkedKeys: state.editingWorkflowLinks.map((link) => {
         const current = state.keys.find((key) => key.id === link.keyId) || state.deletedItems.find((key) => key.id === link.keyId);
@@ -2566,6 +2607,13 @@ function setupEvents() {
     renderWorkflowKeyPicker();
   });
   $('#workflow-note-list').addEventListener('click', async (event) => {
+    const groupTag = event.target.closest('[data-workflow-group-filter]');
+    if (groupTag) {
+      state.workflowGroupFilter = groupTag.dataset.workflowGroupFilter;
+      renderWorkflowNotes();
+      $('#workflow-group-filter').closest('.searchable-select')?.querySelector('.searchable-select-trigger')?.focus({ preventScroll: true });
+      return;
+    }
     const card = event.target.closest('[data-workflow-id]');
     const action = event.target.closest('[data-workflow-action]')?.dataset.workflowAction;
     if (!card || !action) return;
@@ -2699,7 +2747,8 @@ function setupEvents() {
 
   $('#search-input').addEventListener('input', (event) => { state.search = event.target.value.trim(); renderKeys(); });
   $('#workflow-search').addEventListener('input', (event) => { state.workflowSearch = event.target.value.trim(); renderWorkflowNotes(); });
-  for (const button of $$('#workflow-clear-search, #workflow-filter-reset')) button.addEventListener('click', clearWorkflowSearch);
+  $('#workflow-group-filter').addEventListener('change', (event) => { state.workflowGroupFilter = event.target.value; renderWorkflowNotes(); });
+  for (const button of $$('#workflow-clear-search, #workflow-filter-reset')) button.addEventListener('click', clearWorkflowFilters);
   $('#multi-select-toggle').addEventListener('click', () => setMultiSelectMode(!state.multiSelectMode));
   $('#select-visible').addEventListener('change', (event) => {
     const visibleIds = getVisibleKeys().map((key) => key.id);
@@ -2741,6 +2790,7 @@ function setupEvents() {
         $('#token-list').focus();
       } else {
         state.workflowSearch = '';
+        state.workflowGroupFilter = '__all';
         $('#workflow-search').value = '';
         renderWorkflowNotes();
         $('#workflow-note-list').focus();

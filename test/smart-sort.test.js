@@ -38,7 +38,11 @@ describe('smart token ordering', () => {
 
 describe('smart workflow ordering', () => {
   it('keeps legacy workflow records compatible with zero usage', () => {
-    expect(normalizeWorkflowNote({ title: 'Legacy', content: 'Step' })).toMatchObject({ favorite: false, useCount: 0, lastUsed: 0 });
+    expect(normalizeWorkflowNote({ title: 'Legacy', content: 'Step' })).toMatchObject({ group: '', favorite: false, useCount: 0, lastUsed: 0 });
+  });
+
+  it('normalizes and limits workflow groups', () => {
+    expect(normalizeWorkflowNote({ title: 'Grouped', group: `  ${'运'.repeat(110)}  ` }).group).toBe('运'.repeat(100));
   });
 
   it('orders favorites first, then commonly and recently used workflows', () => {

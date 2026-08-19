@@ -87,7 +87,7 @@ describe('backward compatibility', () => {
       deletedWorkflowNotes: [{ id: 'note-2', title: '旧流程', content: '停用', linkedKeys: [{ keyId: 'legacy', name: 'Legacy' }], deletedAt: 123 }],
     });
     expect(vault.workflowNotes[0]).toMatchObject({
-      id: 'note-1', title: '发布流程', content: '登录\n确认', linkedKeys: [{ keyId: 'github' }, { keyId: 'cloudflare' }], favorite: false, lastUsed: 0, useCount: 0,
+      id: 'note-1', title: '发布流程', group: '', content: '登录\n确认', linkedKeys: [{ keyId: 'github' }, { keyId: 'cloudflare' }], favorite: false, lastUsed: 0, useCount: 0,
     });
     expect(vault.deletedWorkflowNotes[0]).toMatchObject({ id: 'note-2', deletedAt: 123 });
   });
@@ -146,10 +146,10 @@ describe('backward compatibility', () => {
     const parsed = await parseImportContent(JSON.stringify({
       format: '2fa-authenticator-backup',
       keys: [{ id: 'github', name: 'GitHub', secret: 'JBSWY3DPEHPK3PXP' }],
-      workflowNotes: [{ id: 'note-1', title: '发布', content: '登录', linkedKeys: [{ keyId: 'github', name: 'GitHub' }] }],
+      workflowNotes: [{ id: 'note-1', title: '发布', group: '运维', content: '登录', linkedKeys: [{ keyId: 'github', name: 'GitHub' }] }],
     }));
     expect(parsed.workflowNotes).toHaveLength(1);
-    expect(parsed.workflowNotes[0]).toMatchObject({ title: '发布', linkedKeys: [{ keyId: 'github', name: 'GitHub' }] });
+    expect(parsed.workflowNotes[0]).toMatchObject({ title: '发布', group: '运维', linkedKeys: [{ keyId: 'github', name: 'GitHub' }] });
   });
 
   it('uses the frozen plan for duplicate entries in the same import batch', () => {

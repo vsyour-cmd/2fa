@@ -103,7 +103,7 @@ describe('static application shell', () => {
   });
 
   it('stores encrypted workflow notes with ordered 2FA links and a guided run view', () => {
-    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-character-count', 'workflow-content-preview', 'workflow-key-combobox', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-key-dropdown', 'workflow-key-options', 'workflow-selected-keys', 'workflow-run-content', 'workflow-run-keys']) {
+    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-group', 'workflow-group-options', 'workflow-group-filter', 'workflow-content', 'workflow-character-count', 'workflow-content-preview', 'workflow-key-combobox', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-key-dropdown', 'workflow-key-options', 'workflow-selected-keys', 'workflow-run-content', 'workflow-run-keys']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('data-vault-view="workflow"');
@@ -123,6 +123,9 @@ describe('static application shell', () => {
     expect(styles).toContain('.token-workflow-option { display: flex; min-height: 58px;');
     expect(app).toContain('renderWorkflowMarkdownPreview()');
     expect(app).toContain("renderMarkdown(note.content)");
+    expect(app).toContain('data-workflow-group-filter=');
+    expect(app).toContain("group: $('#workflow-group').value");
+    expect(app).toContain('function renderWorkflowGroupFilters()');
     expect(app).toContain("matchesKeyFilter(key, query)");
     expect(app).toContain("$('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker)");
     expect(app).toContain("$('#workflow-key-options').addEventListener('click'");
@@ -248,9 +251,9 @@ describe('static application shell', () => {
   });
 
   it('keeps active token and workflow filters visible and easy to reset', () => {
-    for (const id of ['token-filter-reset', 'token-filter-reset-label', 'workflow-filter-reset']) expect(html).toContain(`id="${id}"`);
+    for (const id of ['token-filter-reset', 'token-filter-reset-label', 'workflow-filter-reset', 'workflow-filter-reset-label']) expect(html).toContain(`id="${id}"`);
     expect(app).toContain('function clearTokenFilters()');
-    expect(app).toContain('function clearWorkflowSearch()');
+    expect(app).toContain('function clearWorkflowFilters()');
     expect(app).toContain("$$('#clear-filters, #token-filter-reset')");
     expect(app).toContain("$$('#workflow-clear-search, #workflow-filter-reset')");
     expect(app).toContain("`清除 ${activeFilterCount} 项筛选`");
