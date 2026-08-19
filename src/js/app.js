@@ -980,10 +980,19 @@ function updateTokenWorkflowSelectionCount() {
 }
 
 function renderTokenWorkflowPicker() {
-  const notes = getSortedWorkflowNotes();
-  setHidden('#token-workflow-empty', notes.length !== 0);
-  setHidden('#token-workflow-list', notes.length === 0);
-  $('#token-workflow-submit').disabled = notes.length === 0;
+  const allNotes = getSortedWorkflowNotes();
+  const query = $('#token-workflow-filter').value.trim();
+  const notes = allNotes.filter((note) => matchesWorkflowNoteFilter(note, query));
+  const hasNotes = allNotes.length > 0;
+  const hasMatches = notes.length > 0;
+  setHidden('#token-workflow-filter-bar', !hasNotes);
+  setHidden('#token-workflow-empty', hasNotes);
+  setHidden('#token-workflow-no-results', !hasNotes || hasMatches || !query);
+  setHidden('#token-workflow-list', !hasMatches);
+  $('#token-workflow-submit').disabled = !hasNotes;
+  $('#token-workflow-filter-summary').textContent = query
+    ? `显示 ${notes.length} / ${allNotes.length} 个场景`
+    : `${allNotes.length} 个场景`;
   $('#token-workflow-list').innerHTML = notes.map((note) => {
     const selected = state.editingTokenWorkflowNoteIds.has(note.id);
     return `<label class="token-workflow-option${selected ? ' selected' : ''}" data-token-workflow-note-id="${escapeHtml(note.id)}"><input type="checkbox"${selected ? ' checked' : ''}><span><strong>${escapeHtml(note.title)}</strong><small>${note.content.length} 个字符 · ${note.linkedKeys.length} 个验证码</small></span></label>`;
@@ -1000,8 +1009,9 @@ function openTokenWorkflowModal(keyId) {
     .filter((note) => note.linkedKeys.some((link) => link.keyId === key.id))
     .map((note) => note.id));
   $('#token-workflow-key-name').textContent = `为“${key.name}”选择使用场景`;
+  $('#token-workflow-filter').value = '';
   renderTokenWorkflowPicker();
-  openModal('token-workflow-modal', state.workflowNotes.length ? '#token-workflow-list input' : '#token-workflow-create');
+  openModal('token-workflow-modal', state.workflowNotes.length ? '#token-workflow-filter' : '#token-workflow-create');
 }
 
 async function saveTokenWorkflowLinks(event) {
@@ -2485,6 +2495,13 @@ function setupEvents() {
   $('#token-workflow-modal').addEventListener('modal:close', () => {
     state.editingTokenWorkflowKeyId = '';
     state.editingTokenWorkflowNoteIds.clear();
+    $('#token-workflow-filter').value = '';
+  });
+  $('#token-workflow-filter').addEventListener('input', renderTokenWorkflowPicker);
+  $('#token-workflow-clear-filter').addEventListener('click', () => {
+    $('#token-workflow-filter').value = '';
+    renderTokenWorkflowPicker();
+    $('#token-workflow-filter').focus();
   });
   $('#token-workflow-list').addEventListener('change', (event) => {
     const option = event.target.closest('[data-token-workflow-note-id]');

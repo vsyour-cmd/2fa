@@ -374,11 +374,24 @@
         <form id="token-workflow-form">
           <p id="token-workflow-key-name" class="quick-group-key"></p>
           <div class="token-workflow-heading"><p>勾选需要这个验证码的场景</p><span id="token-workflow-selection-count" aria-live="polite">已选 0 个</span></div>
+          <div id="token-workflow-filter-bar" class="token-workflow-filter-bar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              <label class="sr-only" for="token-workflow-filter">筛选可关联的使用场景</label>
+              <input id="token-workflow-filter" type="search" placeholder="筛选场景名称、内容或关联验证码…" autocomplete="off" aria-controls="token-workflow-list">
+            </div>
+            <span id="token-workflow-filter-summary" aria-live="polite">0 个场景</span>
+          </div>
           <div id="token-workflow-list" class="token-workflow-list" role="group" aria-label="可关联的使用场景"></div>
           <div id="token-workflow-empty" class="token-workflow-empty hidden">
             <strong>还没有使用场景</strong>
             <span>先创建一个场景，再回来关联这个验证码。</span>
             <button id="token-workflow-create" class="btn btn-secondary" type="button">新建使用场景</button>
+          </div>
+          <div id="token-workflow-no-results" class="token-workflow-empty hidden">
+            <strong>没有匹配的使用场景</strong>
+            <span>试试场景名称、操作内容或关联的验证码名称。</span>
+            <button id="token-workflow-clear-filter" class="btn btn-secondary" type="button">清除筛选</button>
           </div>
           <div id="token-workflow-error" class="error hidden" role="alert"></div>
           <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="token-workflow-modal">取消</button><button id="token-workflow-submit" class="btn btn-primary" type="submit">保存关联</button></div>

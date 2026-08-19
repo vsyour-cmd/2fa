@@ -103,8 +103,12 @@ describe('static application shell', () => {
     expect(app).toContain('state.editingWorkflowLinks.push(workflowLinkSnapshot(key))');
     expect(html).toContain('id="token-workflow-list"');
     expect(html).toContain('id="token-workflow-selection-count"');
+    expect(html).toContain('id="token-workflow-filter"');
+    expect(html).toContain('id="token-workflow-no-results"');
     expect(app).toContain('data-action="link-workflows"');
     expect(app).toContain('syncWorkflowLinksForKey(state.workflowNotes, key, state.editingTokenWorkflowNoteIds)');
+    expect(app).toContain("$('#token-workflow-filter').addEventListener('input', renderTokenWorkflowPicker)");
+    expect(app).toContain('matchesWorkflowNoteFilter(note, query)');
     expect(styles).toContain('.token-workflow-option { display: flex; min-height: 58px;');
     expect(app).toContain('renderWorkflowMarkdownPreview()');
     expect(app).toContain("renderMarkdown(note.content)");
