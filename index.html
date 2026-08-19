@@ -227,12 +227,25 @@
               <button id="workflow-add-open" class="btn btn-primary" type="button">新建场景</button>
             </div>
           </div>
-          <div id="workflow-note-list" class="workflow-note-grid" aria-live="polite"></div>
+          <div class="workflow-filter-bar card-subtle">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              <label class="sr-only" for="workflow-search">搜索使用场景</label>
+              <input id="workflow-search" type="search" placeholder="搜索场景名称、内容或关联验证码…" autocomplete="off">
+            </div>
+            <span id="workflow-list-summary" aria-live="polite">0 个使用场景</span>
+          </div>
+          <div id="workflow-note-list" class="workflow-note-grid" tabindex="-1" aria-live="polite"></div>
           <div id="workflow-empty" class="empty-state compact hidden">
             <div aria-hidden="true">✦</div>
             <h2>还没有使用场景</h2>
             <p>把重复操作的步骤和所需验证码记录下来，下次照着做即可。</p>
             <button class="btn btn-primary" type="button" data-action="open-workflow-add">创建第一个场景</button>
+          </div>
+          <div id="workflow-no-results" class="empty-state compact hidden">
+            <h2>没有匹配的使用场景</h2>
+            <p>试试场景名称、操作内容或关联的验证码名称。</p>
+            <button id="workflow-clear-search" class="btn btn-secondary" type="button">清除搜索</button>
           </div>
         </section>
       </section>

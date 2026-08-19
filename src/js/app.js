@@ -87,6 +87,7 @@ import {
   formatDateTime,
   generateId,
   matchesKeyFilter,
+  matchesWorkflowNoteFilter,
   normalizeAccountName,
   normalizeKey,
   normalizeSecret,
@@ -129,6 +130,7 @@ const state = {
   selectedKeyIds: new Set(),
   exportKeyIds: null,
   vaultView: 'tokens',
+  workflowSearch: '',
   editingWorkflowLinks: [],
   editingTokenWorkflowKeyId: '',
   editingTokenWorkflowNoteIds: new Set(),
@@ -178,6 +180,7 @@ function clearSensitiveState() {
   state.selectedKeyIds.clear();
   state.exportKeyIds = null;
   state.vaultView = 'tokens';
+  state.workflowSearch = '';
   state.editingWorkflowLinks = [];
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
@@ -491,6 +494,7 @@ function showMainApp() {
   setHidden('#unlock-screen', true);
   setHidden('#main-app', false);
   $('#search-input').value = state.search;
+  $('#workflow-search').value = state.workflowSearch;
   renderAccountSwitch();
   updateVaultTitle();
   pruneTrash();
@@ -919,8 +923,13 @@ function renderWorkflowNotes() {
   $('#tokens-tab-count').textContent = String(state.keys.length);
   $('#workflow-tab-count').textContent = String(state.workflowNotes.length);
   $('#workflow-sort').value = state.settings.workflowSortMode;
-  setHidden('#workflow-empty', state.workflowNotes.length !== 0);
-  const notes = getSortedWorkflowNotes();
+  const total = state.workflowNotes.length;
+  const filtered = Boolean(state.workflowSearch);
+  const notes = getVisibleWorkflowNotes();
+  $('#workflow-list-summary').textContent = filtered ? `显示 ${notes.length} / ${total} 个使用场景` : `${total} 个使用场景`;
+  setHidden('#workflow-empty', total !== 0);
+  setHidden('#workflow-no-results', !filtered || notes.length !== 0 || total === 0);
+  setHidden('#workflow-note-list', notes.length === 0);
   const now = Date.now();
   const frequentIds = new Set(state.settings.workflowSortMode === 'smart'
     ? [...state.workflowNotes]
@@ -960,6 +969,10 @@ function getSortedWorkflowNotes() {
     if (state.settings.workflowSortMode === 'name') return left.title.localeCompare(right.title, 'zh-CN');
     return Number(right.lastUsed || 0) - Number(left.lastUsed || 0) || left.title.localeCompare(right.title, 'zh-CN');
   });
+}
+
+function getVisibleWorkflowNotes() {
+  return getSortedWorkflowNotes().filter((note) => matchesWorkflowNoteFilter(note, state.workflowSearch));
 }
 
 function updateTokenWorkflowSelectionCount() {
@@ -2567,6 +2580,13 @@ function setupEvents() {
   });
 
   $('#search-input').addEventListener('input', (event) => { state.search = event.target.value.trim(); renderKeys(); });
+  $('#workflow-search').addEventListener('input', (event) => { state.workflowSearch = event.target.value.trim(); renderWorkflowNotes(); });
+  $('#workflow-clear-search').addEventListener('click', () => {
+    state.workflowSearch = '';
+    $('#workflow-search').value = '';
+    renderWorkflowNotes();
+    $('#workflow-search').focus();
+  });
   $('#multi-select-toggle').addEventListener('click', () => setMultiSelectMode(!state.multiSelectMode));
   $('#select-visible').addEventListener('change', (event) => {
     const visibleIds = getVisibleKeys().map((key) => key.id);
@@ -2606,14 +2626,20 @@ function setupEvents() {
         $('#search-input').value = '';
         renderKeys();
         $('#token-list').focus();
+      } else {
+        state.workflowSearch = '';
+        $('#workflow-search').value = '';
+        renderWorkflowNotes();
+        $('#workflow-note-list').focus();
       }
       return;
     }
     if (inputTarget) return;
-    if (state.vaultView === 'tokens' && (event.key === '/' || ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k'))) {
+    if (event.key === '/' || ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k')) {
       event.preventDefault();
-      $('#search-input').focus();
-      $('#search-input').select();
+      const searchInput = $(state.vaultView === 'workflow' ? '#workflow-search' : '#search-input');
+      searchInput.focus();
+      searchInput.select();
     } else if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLocaleLowerCase() === 'n') {
       event.preventDefault();
       if (state.vaultView === 'workflow') openWorkflowEditor();

@@ -270,11 +270,14 @@ describe('static application shell', () => {
 
   it('adds global shortcuts, install guidance, dynamic retention, and account titles', () => {
     expect(html).toContain('快捷键：<kbd>/</kbd> 搜索');
+    expect(html).toContain('id="workflow-search"');
+    expect(html).toContain('id="workflow-no-results"');
     expect(html).toContain('id="install-app"');
     expect(html).toContain('id="trash-retention-days"');
     expect(html).toContain('id="vault-eyebrow"');
     expect(app).toContain("document.addEventListener('compositionstart'");
     expect(app).toContain("event.key.toLocaleLowerCase() === 'n'");
+    expect(app).toContain("state.vaultView === 'workflow' ? '#workflow-search' : '#search-input'");
     expect(app).toContain("window.addEventListener('beforeinstallprompt'");
     expect(app).toContain('trashRetentionDays:');
     expect(app).toContain('document.title = `${state.accountName} · 2FA Authenticator`');

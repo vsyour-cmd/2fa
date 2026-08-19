@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesKeyFilter } from '../src/js/utils.js';
+import { matchesKeyFilter, matchesWorkflowNoteFilter } from '../src/js/utils.js';
 
 const key = {
   name: 'GitHub Admin',
@@ -25,5 +25,25 @@ describe('workflow 2FA association filter', () => {
   it('does not search secret values and treats a blank filter as all items', () => {
     expect(matchesKeyFilter(key, 'SHOULD-NOT-BE-SEARCHABLE')).toBe(false);
     expect(matchesKeyFilter(key, '   ')).toBe(true);
+  });
+});
+
+describe('workflow note list filter', () => {
+  const note = {
+    title: '发布网站',
+    content: '登录控制台并执行部署检查',
+    linkedKeys: [{ name: 'Cloudflare Admin', issuer: 'Cloudflare', account: 'ops@example.com' }],
+  };
+
+  it('matches titles, Markdown content, and linked 2FA metadata', () => {
+    for (const query of ['发布', '部署检查', 'cloudflare', 'OPS@EXAMPLE.COM']) {
+      expect(matchesWorkflowNoteFilter(note, query)).toBe(true);
+    }
+  });
+
+  it('supports multiple terms and treats blank input as all notes', () => {
+    expect(matchesWorkflowNoteFilter(note, '发布 cloudflare')).toBe(true);
+    expect(matchesWorkflowNoteFilter(note, '发布 github')).toBe(false);
+    expect(matchesWorkflowNoteFilter(note, '   ')).toBe(true);
   });
 });

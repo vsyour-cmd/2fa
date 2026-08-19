@@ -131,6 +131,18 @@ export function matchesKeyFilter(key = {}, query = '') {
   return terms.every((term) => searchableText.includes(term));
 }
 
+export function matchesWorkflowNoteFilter(note = {}, query = '') {
+  const terms = String(query).trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const linkedText = (Array.isArray(note.linkedKeys) ? note.linkedKeys : [])
+    .flatMap((link) => [link?.name, link?.issuer, link?.account]);
+  const searchableText = [note.title, note.content, ...linkedText]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase();
+  return terms.every((term) => searchableText.includes(term));
+}
+
 export function workflowLinkSnapshot(key = {}) {
   return {
     keyId: String(key.id || ''),
