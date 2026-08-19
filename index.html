@@ -417,14 +417,22 @@
             <p id="workflow-content-hint" class="field-hint">支持标题、列表、勾选项、粗体、链接和代码块；换行不再自动变成步骤。内容会随保险库加密保存，最多 5000 个字符。</p>
           </div>
           <div class="form-group">
-            <label for="workflow-key-filter">关联 2FA 条目（可选）</label>
-            <div class="search-box workflow-key-filter-box">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-              <input id="workflow-key-filter" type="search" maxlength="100" autocomplete="off" aria-controls="workflow-key-select" aria-describedby="workflow-key-filter-status" placeholder="筛选名称、账号、发行方、分组或备注…">
+            <label for="workflow-key-select">关联 2FA 条目（可选）</label>
+            <div id="workflow-key-combobox" class="workflow-key-combobox">
+              <button id="workflow-key-select" class="workflow-key-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="workflow-key-dropdown" aria-describedby="workflow-key-hint">
+                <span id="workflow-key-select-label">选择要关联的 2FA 条目…</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+              </button>
+              <div id="workflow-key-dropdown" class="workflow-key-dropdown hidden">
+                <div class="search-box workflow-key-filter-box">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+                  <label class="sr-only" for="workflow-key-filter">筛选可关联的 2FA 条目</label>
+                  <input id="workflow-key-filter" type="search" maxlength="100" autocomplete="off" aria-controls="workflow-key-options" aria-describedby="workflow-key-filter-status" placeholder="筛选名称、账号、发行方、分组或备注…">
+                </div>
+                <p id="workflow-key-filter-status" class="field-hint workflow-key-filter-status" aria-live="polite"></p>
+                <div id="workflow-key-options" class="workflow-key-options" role="listbox" aria-label="可关联的 2FA 条目"></div>
+              </div>
             </div>
-            <p id="workflow-key-filter-status" class="field-hint workflow-key-filter-status" aria-live="polite"></p>
-            <label class="sr-only" for="workflow-key-select">选择要关联的 2FA 条目</label>
-            <div class="workflow-key-add-row"><select id="workflow-key-select" aria-describedby="workflow-key-hint"></select><button id="workflow-key-add" class="btn btn-secondary" type="button">添加</button></div>
             <p id="workflow-key-hint" class="field-hint">使用场景时会按下方顺序显示当前验证码；可用箭头调整顺序。</p>
             <ol id="workflow-selected-keys" class="workflow-selected-keys" aria-label="已关联的 2FA 条目"></ol>
           </div>

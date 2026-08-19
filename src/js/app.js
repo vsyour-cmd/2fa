@@ -1053,20 +1053,46 @@ function renderWorkflowMarkdownPreview() {
     || '<p class="markdown-empty">开始输入后，这里会显示 Markdown 预览。</p>';
 }
 
+function closeWorkflowKeyDropdown({ restoreFocus = false } = {}) {
+  const trigger = $('#workflow-key-select');
+  setHidden('#workflow-key-dropdown', true);
+  trigger.setAttribute('aria-expanded', 'false');
+  $('#workflow-key-combobox').classList.remove('open');
+  if (restoreFocus && !trigger.disabled) trigger.focus();
+}
+
+function openWorkflowKeyDropdown() {
+  const trigger = $('#workflow-key-select');
+  if (trigger.disabled) return;
+  $('#workflow-key-filter').value = '';
+  trigger.setAttribute('aria-expanded', 'true');
+  $('#workflow-key-combobox').classList.add('open');
+  setHidden('#workflow-key-dropdown', false);
+  renderWorkflowKeyPicker();
+  requestAnimationFrame(() => $('#workflow-key-filter').focus());
+}
+
 function renderWorkflowKeyPicker() {
   const selectedIds = new Set(state.editingWorkflowLinks.map((link) => link.keyId));
   const unselected = state.keys.filter((key) => !selectedIds.has(key.id));
   const query = $('#workflow-key-filter').value.trim();
   const available = unselected.filter((key) => matchesKeyFilter(key, query));
-  const select = $('#workflow-key-select');
-  select.innerHTML = available.length === 0
-    ? `<option value="">${unselected.length === 0 ? '没有其他可关联条目' : '未找到匹配的 2FA 条目'}</option>`
-    : '<option value="">选择一个 2FA 条目…</option>' + available.map((key) => `<option value="${escapeHtml(key.id)}">${escapeHtml(key.name)}${key.account ? ` · ${escapeHtml(key.account)}` : ''}</option>`).join('');
-  select.disabled = available.length === 0;
-  $('#workflow-key-add').disabled = available.length === 0;
+  const trigger = $('#workflow-key-select');
+  trigger.disabled = unselected.length === 0;
+  $('#workflow-key-select-label').textContent = unselected.length === 0
+    ? '所有 2FA 条目均已关联'
+    : state.editingWorkflowLinks.length > 0 ? '继续关联 2FA 条目…' : '选择要关联的 2FA 条目…';
+  if (unselected.length === 0) closeWorkflowKeyDropdown();
   $('#workflow-key-filter-status').textContent = query
-    ? (available.length > 0 ? `找到 ${available.length} 个可关联条目` : '没有匹配的可关联条目，请尝试其他关键词。')
-    : (unselected.length > 0 ? `可关联 ${unselected.length} 个条目` : '所有 2FA 条目均已关联');
+    ? `显示 ${available.length} / ${unselected.length} 个条目`
+    : `${unselected.length} 个可关联条目`;
+  $('#workflow-key-options').innerHTML = available.length > 0
+    ? available.map((key) => {
+      const icon = getKeyIcon(key);
+      const subtitle = [key.issuer && key.issuer !== key.name ? key.issuer : '', key.account, key.group].filter(Boolean).join(' · ') || 'TOTP';
+      return `<button class="workflow-key-option" type="button" role="option" aria-selected="false" data-workflow-key-id="${escapeHtml(key.id)}"><span class="workflow-key-option-icon${icon.matched ? '' : ` initial avatar-tone-${icon.tone}`}" aria-hidden="true">${escapeHtml(icon.value)}</span><span class="workflow-key-option-main"><strong>${escapeHtml(key.name)}</strong><small>${escapeHtml(subtitle)}</small></span><span class="workflow-key-option-action">关联</span></button>`;
+    }).join('')
+    : `<div class="workflow-key-no-results" role="status"><strong>${unselected.length === 0 ? '所有条目均已关联' : '没有匹配的 2FA 条目'}</strong><span>${unselected.length === 0 ? '可在下方移除已关联条目后重新选择。' : '尝试输入名称、账号、发行方、分组或备注。'}</span></div>`;
   $('#workflow-selected-keys').innerHTML = state.editingWorkflowLinks.map((link, index) => {
     const resolved = resolveWorkflowLink(link);
     const key = resolved.key || link;
@@ -1087,6 +1113,7 @@ function renderWorkflowKeyPicker() {
 function openWorkflowEditor(id = '') {
   const note = state.workflowNotes.find((item) => item.id === id);
   $('#workflow-form').reset();
+  closeWorkflowKeyDropdown();
   hideError('#workflow-error');
   $('#workflow-id').value = note?.id || '';
   $('#workflow-title').value = note?.title || '';
@@ -2301,6 +2328,7 @@ function setupEvents() {
     if (toggle) {
       setSensitiveVisibility(toggle, document.getElementById(toggle.dataset.togglePassword)?.type === 'password');
     }
+    if (!event.composedPath().includes($('#workflow-key-combobox'))) closeWorkflowKeyDropdown();
   });
 
   document.addEventListener('reset', (event) => {
@@ -2440,14 +2468,38 @@ function setupEvents() {
   $('[data-action="open-workflow-add"]').addEventListener('click', () => openWorkflowEditor());
   $('#workflow-sort').addEventListener('change', (event) => applyWorkflowSortMode(event.target.value, true));
   $('#workflow-form').addEventListener('submit', saveWorkflowNote);
-  $('#workflow-edit-modal').addEventListener('modal:close', () => { state.editingWorkflowLinks = []; });
+  $('#workflow-edit-modal').addEventListener('modal:close', () => {
+    state.editingWorkflowLinks = [];
+    $('#workflow-key-filter').value = '';
+    closeWorkflowKeyDropdown();
+  });
   $('#workflow-content').addEventListener('input', renderWorkflowMarkdownPreview);
   $('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker);
-  $('#workflow-key-add').addEventListener('click', () => {
-    const key = state.keys.find((item) => item.id === $('#workflow-key-select').value);
+  $('#workflow-key-select').addEventListener('click', () => {
+    if ($('#workflow-key-select').getAttribute('aria-expanded') === 'true') closeWorkflowKeyDropdown({ restoreFocus: true });
+    else openWorkflowKeyDropdown();
+  });
+  $('#workflow-key-options').addEventListener('click', (event) => {
+    const option = event.target.closest('[data-workflow-key-id]');
+    const key = state.keys.find((item) => item.id === option?.dataset.workflowKeyId);
     if (!key || state.editingWorkflowLinks.some((link) => link.keyId === key.id)) return;
     state.editingWorkflowLinks.push(workflowLinkSnapshot(key));
+    $('#workflow-key-filter').value = '';
     renderWorkflowKeyPicker();
+    if (!$('#workflow-key-select').disabled) requestAnimationFrame(() => $('#workflow-key-filter').focus());
+  });
+  $('#workflow-key-combobox').addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && $('#workflow-key-select').getAttribute('aria-expanded') === 'true') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeWorkflowKeyDropdown({ restoreFocus: true });
+    } else if (event.key === 'ArrowDown' && event.target === $('#workflow-key-filter')) {
+      const firstOption = $('#workflow-key-options [data-workflow-key-id]');
+      if (firstOption) {
+        event.preventDefault();
+        firstOption.focus();
+      }
+    }
   });
   $('#workflow-selected-keys').addEventListener('click', (event) => {
     const button = event.target.closest('[data-workflow-link-action]');

@@ -92,7 +92,7 @@ describe('static application shell', () => {
   });
 
   it('stores encrypted workflow notes with ordered 2FA links and a guided run view', () => {
-    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-character-count', 'workflow-content-preview', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-selected-keys', 'workflow-run-content', 'workflow-run-keys']) {
+    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-content', 'workflow-character-count', 'workflow-content-preview', 'workflow-key-combobox', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-key-dropdown', 'workflow-key-options', 'workflow-selected-keys', 'workflow-run-content', 'workflow-run-keys']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('data-vault-view="workflow"');
@@ -114,7 +114,10 @@ describe('static application shell', () => {
     expect(app).toContain("renderMarkdown(note.content)");
     expect(app).toContain("matchesKeyFilter(key, query)");
     expect(app).toContain("$('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker)");
-    expect(app).toContain('没有匹配的可关联条目，请尝试其他关键词。');
+    expect(app).toContain("$('#workflow-key-options').addEventListener('click'");
+    expect(app).toContain('openWorkflowKeyDropdown()');
+    expect(app).toContain('没有匹配的 2FA 条目');
+    expect(styles).toContain('.workflow-key-dropdown { padding: 10px;');
     expect(app).toContain('data-workflow-link-action="up"');
     expect(app).toContain('data-workflow-run-key-id=');
     expect(app).toContain('await copyKeyCode(key, null)');
