@@ -323,6 +323,11 @@ function requireAdmin(req, res, next) {
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
 app.use('/api/data', createRateLimiter({ limit: RATE_LIMIT, windowMs: RATE_WINDOW_MS, namespace: 'data' }));
 
+app.get('/api/access/me', (req, res) => {
+  const email = cleanSingleLine(process.env.ACCESS_DEV_EMAIL || '', 254).toLocaleLowerCase('en-US');
+  return res.json({ authenticated: Boolean(email), email });
+});
+
 app.get('/api/data', (req, res) => {
   try {
     const key = req.query.key;

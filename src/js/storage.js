@@ -54,6 +54,15 @@ export async function apiGet(keyHash, accountName = '') {
   return parseApiResponse(response);
 }
 
+export async function apiGetAccessIdentity() {
+  const response = await fetch('/api/access/me', {
+    headers: { Accept: 'application/json' },
+  });
+  const result = await parseApiResponse(response);
+  if (!result.authenticated || typeof result.email !== 'string' || !result.email.trim()) return null;
+  return { email: result.email.trim() };
+}
+
 function encodeUtf8Base64Url(value) {
   const bytes = new TextEncoder().encode(String(value));
   let binary = '';

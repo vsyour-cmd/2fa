@@ -13,7 +13,7 @@ const ARCHIVE_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 const encoder = new TextEncoder();
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) {
       if (url.pathname === '/admin') return Response.redirect(`${url.origin}/admin.html`, 302);
@@ -28,31 +28,36 @@ export default {
     }
 
     try {
-      if (url.pathname === '/api/data') return handleDataRequest(request, url, env);
-      if (url.pathname === '/api/admin/login') return handleAdminLoginRequest(request, env);
-      if (url.pathname.startsWith('/api/admin/')) return handleAdminRequest(request, url, env);
+      const accessUser = await requireAccessIdentity(env, ctx);
+      if (url.pathname === '/api/access/me') {
+        if (request.method !== 'GET') return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'GET' });
+        return jsonResponse({ authenticated: true, email: accessUser.email }, 200);
+      }
+      if (url.pathname === '/api/data') return await handleDataRequest(request, url, env, accessUser);
+      if (url.pathname === '/api/admin/login') return await handleAdminLoginRequest(request, env, accessUser);
+      if (url.pathname.startsWith('/api/admin/')) return await handleAdminRequest(request, url, env, accessUser);
       return jsonResponse({ error: 'Not found' }, 404);
     } catch (error) {
-      if (error?.status) return jsonResponse({ error: error.message }, error.status);
+      if (error?.status) return jsonResponse({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
       console.error(JSON.stringify({ event: 'api_error', method: request.method, path: url.pathname, message: error.message }));
       return jsonResponse({ error: 'Internal error' }, 500);
     }
   },
 };
 
-async function handleDataRequest(request, url, env) {
+async function handleDataRequest(request, url, env, accessUser) {
   const limited = await checkRateLimit(request, env.DATA_KV, {
     limit: DATA_RATE_LIMIT, windowMs: 60_000, namespace: 'data',
   });
   if (limited) return limited;
-  if (request.method === 'GET') return handleGet(request, url, env);
-  if (request.method === 'PUT') return handlePut(request, env);
-  if (request.method === 'DELETE') return handleDelete(request, url, env);
+  if (request.method === 'GET') return handleGet(request, url, env, accessUser);
+  if (request.method === 'PUT') return handlePut(request, env, accessUser);
+  if (request.method === 'DELETE') return handleDelete(request, url, env, accessUser);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { Allow: 'GET, PUT, DELETE, OPTIONS' } });
   return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'GET, PUT, DELETE, OPTIONS' });
 }
 
-async function handleAdminLoginRequest(request, env) {
+async function handleAdminLoginRequest(request, env, accessUser) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'POST' });
   const limited = await checkRateLimit(request, env.DATA_KV, {
     limit: ADMIN_LOGIN_RATE_LIMIT, windowMs: 10 * 60_000, namespace: 'admin-login',
@@ -73,7 +78,7 @@ async function handleAdminLoginRequest(request, env) {
   const valid = usernameValid && passwordValid;
   if (!valid) {
     await writeAudit(env, request, {
-      actor: username || 'unknown', action: 'admin.login', result: 'failure', details: '管理员凭据不正确',
+      actor: adminAuditActor(accessUser, username || 'unknown'), action: 'admin.login', result: 'failure', details: '管理员凭据不正确',
     });
     return jsonResponse({ error: '用户名或密码错误' }, 401);
   }
@@ -81,26 +86,32 @@ async function handleAdminLoginRequest(request, env) {
   const token = randomToken();
   const tokenHash = await sha256Hex(token);
   const now = Date.now();
-  const session = { adminName: expectedUsername, createdAt: now, expiresAt: now + ADMIN_SESSION_SECONDS * 1000 };
+  const session = {
+    adminName: expectedUsername,
+    accessOwnerId: accessUser.ownerId,
+    accessEmail: accessUser.email,
+    createdAt: now,
+    expiresAt: now + ADMIN_SESSION_SECONDS * 1000,
+  };
   await env.DATA_KV.put(`${ADMIN_SESSION_PREFIX}${tokenHash}`, JSON.stringify(session), { expirationTtl: ADMIN_SESSION_SECONDS });
   await writeAudit(env, request, {
-    actor: expectedUsername, action: 'admin.login', result: 'success', details: '管理员登录成功',
+    actor: adminAuditActor(accessUser, expectedUsername), action: 'admin.login', result: 'success', details: '管理员登录成功',
   });
-  return jsonResponse({ token, adminName: expectedUsername, expiresAt: session.expiresAt }, 200);
+  return jsonResponse({ token, adminName: expectedUsername, accessEmail: accessUser.email, expiresAt: session.expiresAt }, 200);
 }
 
-async function handleAdminRequest(request, url, env) {
+async function handleAdminRequest(request, url, env, accessUser) {
   const limited = await checkRateLimit(request, env.DATA_KV, {
     limit: ADMIN_RATE_LIMIT, windowMs: 60_000, namespace: 'admin',
   });
   if (limited) return limited;
-  const session = await authenticateAdmin(request, env);
+  const session = await authenticateAdmin(request, env, accessUser);
   if (!session) return jsonResponse({ error: '管理会话已失效，请重新登录' }, 401);
 
   if (url.pathname === '/api/admin/logout' && request.method === 'POST') {
     await env.DATA_KV.delete(`${ADMIN_SESSION_PREFIX}${session.tokenHash}`);
     await writeAudit(env, request, {
-      actor: session.adminName, action: 'admin.logout', result: 'success', details: '管理员退出登录',
+      actor: adminAuditActor(session, session.adminName), action: 'admin.logout', result: 'success', details: '管理员退出登录',
     });
     return jsonResponse({ success: true }, 200);
   }
@@ -175,14 +186,69 @@ function accountNameFromRequest(request, url) {
   return accountNameFrom(url.searchParams.get('account'));
 }
 
-async function handleGet(request, url, env) {
+function accessAudienceMatches(actual, expected) {
+  if (typeof actual === 'string') return actual === expected;
+  if (Array.isArray(actual)) return actual.includes(expected);
+  return false;
+}
+
+async function requireAccessIdentity(env, ctx) {
+  const expectedAudience = cleanSingleLine(env.ACCESS_AUD, 256);
+  if (!expectedAudience) {
+    throw httpError('Cloudflare Access 尚未配置', 503, 'ACCESS_NOT_CONFIGURED');
+  }
+  const access = ctx?.access;
+  if (!access || !accessAudienceMatches(access.aud, expectedAudience) || typeof access.getIdentity !== 'function') {
+    throw httpError('Cloudflare Access 身份验证失败', 403, 'ACCESS_DENIED');
+  }
+
+  let identity;
+  try {
+    identity = await access.getIdentity();
+  } catch {
+    throw httpError('无法读取 Cloudflare Access 身份', 403, 'ACCESS_IDENTITY_UNAVAILABLE');
+  }
+  const email = cleanSingleLine(identity?.email, 254).toLocaleLowerCase('en-US');
+  const subject = cleanSingleLine(identity?.user_uuid || identity?.sub || identity?.id || email, 512);
+  if (!email || !subject) throw httpError('Cloudflare Access 身份信息不完整', 403, 'ACCESS_IDENTITY_INVALID');
+  return { email, ownerId: await sha256Hex(`cloudflare-access:${subject}`) };
+}
+
+function profileBelongsToAnotherAccessUser(profile, accessUser) {
+  return isValidKey(profile?.accessOwnerId) && profile.accessOwnerId.toLowerCase() !== accessUser.ownerId;
+}
+
+function accessProfileFields(accessUser) {
+  return { accessOwnerId: accessUser.ownerId, accessEmail: accessUser.email };
+}
+
+function adminAuditActor(accessUser, adminName) {
+  return `${cleanSingleLine(adminName, 80) || 'admin'} · ${accessUser.accessEmail || accessUser.email}`;
+}
+
+async function accessOwnerDenied(env, request, profile, accessUser, action, keyHash) {
+  await writeAudit(env, request, {
+    actor: accessUser.email,
+    action,
+    targetKey: keyHash,
+    targetLabel: profile?.accountName || profile?.displayName || '',
+    result: 'blocked',
+    details: '当前 Cloudflare Access 用户与保险库绑定身份不一致',
+  });
+  return jsonResponse({ error: '此保险库属于另一个 Cloudflare Access 用户', code: 'ACCESS_OWNER_MISMATCH' }, 403);
+}
+
+async function handleGet(request, url, env, accessUser) {
   const key = url.searchParams.get('key');
   if (!isValidKey(key)) return jsonResponse({ error: 'Invalid key' }, 400);
   const normalizedKey = key.toLowerCase();
   const profile = await getUserProfile(env, normalizedKey);
+  if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
+    return accessOwnerDenied(env, request, profile, accessUser, 'vault.access_denied', normalizedKey);
+  }
   if (profile?.status === 'disabled') {
     await writeAudit(env, request, {
-      actor: profile.accountName || 'vault-user', action: 'vault.access_blocked', targetKey: normalizedKey,
+      actor: accessUser.email, action: 'vault.access_blocked', targetKey: normalizedKey,
       targetLabel: profile.accountName, result: 'blocked', details: '账户已被管理员停用',
     });
     return jsonResponse({ error: '账户已被管理员停用，请联系管理员', code: 'ACCOUNT_DISABLED' }, 423);
@@ -195,15 +261,16 @@ async function handleGet(request, url, env) {
   const accountName = accountNameFromRequest(request, url);
   const nextProfile = await upsertUserProfile(env, normalizedKey, {
     accountName: accountName || profile?.accountName || '', lastSeenAt: Date.now(), updatedAt, hasVault: true,
+    ...accessProfileFields(accessUser),
   });
   await writeAudit(env, request, {
-    actor: nextProfile.accountName || 'vault-user', action: 'vault.read', targetKey: normalizedKey,
+    actor: accessUser.email, action: 'vault.read', targetKey: normalizedKey,
     targetLabel: nextProfile.accountName, result: 'success', details: '读取加密保险库',
   });
   return jsonResponse({ exists: true, data, updatedAt }, 200);
 }
 
-async function handlePut(request, env) {
+async function handlePut(request, env, accessUser) {
   const declaredLength = Number(request.headers.get('Content-Length') || 0);
   if (declaredLength > MAX_BODY_BYTES) return jsonResponse({ error: 'Payload too large' }, 413);
   const body = await readJsonWithLimit(request);
@@ -216,9 +283,12 @@ async function handlePut(request, env) {
     return jsonResponse({ error: 'Invalid account name' }, 400);
   }
   const profile = await getUserProfile(env, normalizedKey);
+  if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
+    return accessOwnerDenied(env, request, profile, accessUser, 'vault.save_denied', normalizedKey);
+  }
   if (profile?.status === 'disabled') {
     await writeAudit(env, request, {
-      actor: profile.accountName || 'vault-user', action: 'vault.save_blocked', targetKey: normalizedKey,
+      actor: accessUser.email, action: 'vault.save_blocked', targetKey: normalizedKey,
       targetLabel: profile.accountName, result: 'blocked', details: '账户已被管理员停用',
     });
     return jsonResponse({ error: '账户已被管理员停用，请联系管理员', code: 'ACCOUNT_DISABLED' }, 423);
@@ -233,9 +303,10 @@ async function handlePut(request, env) {
     updatedAt,
     hasVault: true,
     status: profile?.status === 'reset_required' ? 'active' : (profile?.status || 'active'),
+    ...accessProfileFields(accessUser),
   });
   await writeAudit(env, request, {
-    actor: nextProfile.accountName || 'vault-user', action: 'vault.save', targetKey: normalizedKey,
+    actor: accessUser.email, action: 'vault.save', targetKey: normalizedKey,
     targetLabel: nextProfile.accountName, result: 'success', details: `保存加密保险库 v${Number(version || 1)}`,
   });
   return jsonResponse({ success: true, updatedAt }, 200);
@@ -265,15 +336,18 @@ async function readJsonWithLimit(request, maxBytes = MAX_BODY_BYTES) {
   try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw httpError('Invalid JSON', 400); }
 }
 
-async function handleDelete(request, url, env) {
+async function handleDelete(request, url, env, accessUser) {
   const key = url.searchParams.get('key');
   if (!isValidKey(key)) return jsonResponse({ error: 'Invalid key' }, 400);
   const normalizedKey = key.toLowerCase();
   const profile = await getUserProfile(env, normalizedKey);
+  if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
+    return accessOwnerDenied(env, request, profile, accessUser, 'vault.delete_denied', normalizedKey);
+  }
   await env.DATA_KV.delete(normalizedKey);
   await env.DATA_KV.delete(`${USER_PREFIX}${normalizedKey}`);
   await writeAudit(env, request, {
-    actor: profile?.accountName || 'vault-user', action: 'vault.delete', targetKey: normalizedKey,
+    actor: accessUser.email, action: 'vault.delete', targetKey: normalizedKey,
     targetLabel: profile?.accountName || '', result: 'success', details: '删除旧版加密保险库',
   });
   return jsonResponse({ success: true }, 200);
@@ -303,7 +377,7 @@ async function handleAdminUsers(url, env) {
   const filtered = allUsers.filter((profile) => {
     if (status && profile.status !== status) return false;
     if (!query) return true;
-    return [profile.accountName, profile.displayName, profile.adminNote, profile.keyHash]
+    return [profile.accountName, profile.displayName, profile.accessEmail, profile.adminNote, profile.keyHash]
       .some((value) => String(value || '').toLocaleLowerCase().includes(query));
   });
   const summary = {
@@ -339,7 +413,7 @@ async function handleAdminUserUpdate(request, env, session, keyHash) {
     updatedAt: Date.now(),
   });
   await writeAudit(env, request, {
-    actor: session.adminName, action: 'admin.user.update', targetKey: keyHash,
+    actor: adminAuditActor(session, session.adminName), action: 'admin.user.update', targetKey: keyHash,
     targetLabel: next.accountName || next.displayName, result: 'success', details: `状态：${next.status}；管理信息已更新`,
   });
   return jsonResponse({ success: true, user: next }, 200);
@@ -359,7 +433,7 @@ async function handleAdminUserDelete(request, env, session, keyHash) {
     ...(archiveKey ? [env.DATA_KV.delete(archiveKey)] : []),
   ]);
   await writeAudit(env, request, {
-    actor: session.adminName, action: 'admin.user.delete', targetKey: keyHash,
+    actor: adminAuditActor(session, session.adminName), action: 'admin.user.delete', targetKey: keyHash,
     targetLabel: profile.accountName || profile.displayName, result: 'success',
     details: '永久删除用户、云端保险库及可恢复备份；审计日志保留',
   });
@@ -381,7 +455,7 @@ async function handleAdminVaultReset(request, env, session, keyHash) {
     ...profile, status: 'reset_required', hasVault: false, resetAt: now, archiveKey, archivedUntil, updatedAt: now,
   });
   await writeAudit(env, request, {
-    actor: session.adminName, action: 'admin.vault.reset', targetKey: keyHash,
+    actor: adminAuditActor(session, session.adminName), action: 'admin.vault.reset', targetKey: keyHash,
     targetLabel: next.accountName || next.displayName, result: 'success',
     details: '保险库已重置，旧密文保留 30 天，可由管理员恢复',
   });
@@ -406,7 +480,7 @@ async function handleAdminVaultRestore(request, env, session, keyHash) {
     ...profile, status: 'active', hasVault: true, archiveKey: '', archivedUntil: 0, updatedAt: Date.now(),
   });
   await writeAudit(env, request, {
-    actor: session.adminName, action: 'admin.vault.restore', targetKey: keyHash,
+    actor: adminAuditActor(session, session.adminName), action: 'admin.vault.restore', targetKey: keyHash,
     targetLabel: next.accountName || next.displayName, result: 'success', details: '已恢复重置前的加密保险库',
   });
   return jsonResponse({ success: true, user: next }, 200);
@@ -437,7 +511,7 @@ function defaultProfile(keyHash, overrides = {}) {
   const now = Date.now();
   return {
     keyHash,
-    accountName: '', displayName: '', status: 'active', adminNote: '',
+    accountName: '', displayName: '', status: 'active', adminNote: '', accessOwnerId: '', accessEmail: '',
     createdAt: Number(overrides.createdAt || now), updatedAt: Number(overrides.updatedAt || 0),
     lastSeenAt: Number(overrides.lastSeenAt || 0), hasVault: overrides.hasVault !== false,
     resetAt: Number(overrides.resetAt || 0), archiveKey: String(overrides.archiveKey || ''),
@@ -474,6 +548,8 @@ async function putUserProfile(env, profile) {
     accountName: accountNameFrom(profile.accountName),
     displayName: cleanSingleLine(profile.displayName, 80),
     adminNote: cleanNote(profile.adminNote),
+    accessOwnerId: isValidKey(profile.accessOwnerId) ? profile.accessOwnerId.toLowerCase() : '',
+    accessEmail: cleanSingleLine(profile.accessEmail, 254).toLocaleLowerCase('en-US'),
   });
   await env.DATA_KV.put(`${USER_PREFIX}${normalized.keyHash}`, JSON.stringify(normalized));
   return normalized;
@@ -523,7 +599,7 @@ function clampInteger(value, minimum, maximum, fallback) {
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
-async function authenticateAdmin(request, env) {
+async function authenticateAdmin(request, env, accessUser) {
   const authorization = request.headers.get('Authorization') || '';
   const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{40,128})$/);
   if (!match) return null;
@@ -536,6 +612,7 @@ async function authenticateAdmin(request, env) {
       await env.DATA_KV.delete(`${ADMIN_SESSION_PREFIX}${tokenHash}`);
       return null;
     }
+    if (!isValidKey(session.accessOwnerId) || session.accessOwnerId.toLowerCase() !== accessUser.ownerId) return null;
     return { ...session, tokenHash };
   } catch { return null; }
 }
@@ -552,7 +629,7 @@ async function persistAudit(env, request, event) {
   const timestamp = Date.now();
   const entry = {
     id: crypto.randomUUID(), timestamp,
-    actor: cleanSingleLine(event.actor || 'system', 80) || 'system',
+    actor: cleanSingleLine(event.actor || 'system', 254) || 'system',
     action: cleanSingleLine(event.action, 80),
     targetKey: isValidKey(event.targetKey) ? event.targetKey.toLowerCase() : '',
     targetLabel: cleanSingleLine(event.targetLabel, 80),
@@ -602,9 +679,10 @@ function randomToken() {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function httpError(message, status) {
+function httpError(message, status, code = '') {
   const error = new Error(message);
   error.status = status;
+  error.code = code;
   return error;
 }
 

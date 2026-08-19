@@ -12,6 +12,8 @@ describe('admin console static shell', () => {
     expect(html).toContain('id="users-panel"');
     expect(html).toContain('id="logs-panel"');
     expect(html).toContain('id="user-dialog"');
+    expect(html).toContain('id="dialog-access-email"');
+    expect(script).toContain("user.accessEmail || '尚未绑定");
     expect(html).toContain('输入“重置保险库”确认');
     expect(html).toContain('输入“恢复保险库”确认');
     expect(html).toContain('输入“删除用户”确认');

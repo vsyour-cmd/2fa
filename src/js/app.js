@@ -29,6 +29,7 @@ import {
   ApiError,
   OfflineManager,
   apiDelete,
+  apiGetAccessIdentity,
   apiGet,
   apiSave,
   clearAllSessions,
@@ -136,6 +137,7 @@ const state = {
   editingWorkflowLinks: [],
   editingTokenWorkflowKeyId: '',
   editingTokenWorkflowNoteIds: new Set(),
+  accessIdentity: null,
 };
 
 let qrScanner;
@@ -489,6 +491,7 @@ function showAuthScreen(accountName = '') {
   switchAuthView('login');
   renderKnownAccounts();
   renderSessionResume();
+  renderAccessIdentity();
   if (!renderQuickUnlockEntry(accountName)) requestAnimationFrame(() => $('#login-account').focus());
   finishInitialBoot();
 }
@@ -499,6 +502,7 @@ function showMainApp() {
   $('#search-input').value = state.search;
   $('#workflow-search').value = state.workflowSearch;
   renderAccountSwitch();
+  renderAccessIdentity();
   updateVaultTitle();
   pruneTrash();
   renderAll();
@@ -509,6 +513,30 @@ function showMainApp() {
 
 function finishInitialBoot() {
   document.documentElement.classList.remove('app-booting');
+}
+
+function renderAccessIdentity() {
+  const email = state.accessIdentity?.email || '';
+  for (const element of $$('[data-access-identity]')) {
+    setHidden(element, !email);
+    const emailElement = element.querySelector('[data-access-email]');
+    if (emailElement) emailElement.textContent = email;
+  }
+}
+
+async function loadAccessIdentity() {
+  if (!offline.isOnline) {
+    state.accessIdentity = null;
+    renderAccessIdentity();
+    return;
+  }
+  try {
+    state.accessIdentity = await apiGetAccessIdentity();
+  } catch (error) {
+    state.accessIdentity = null;
+    console.warn('Cloudflare Access identity unavailable:', error);
+  }
+  renderAccessIdentity();
 }
 
 async function lockCurrent(message = '') {
@@ -3012,6 +3040,7 @@ async function init() {
     () => {
       setNetworkStatus(true);
       showToast('网络已恢复');
+      loadAccessIdentity();
       triggerSyncCheck();
     },
     () => {
@@ -3019,6 +3048,7 @@ async function init() {
     },
   );
   setNetworkStatus(offline.isOnline);
+  await loadAccessIdentity();
   renderKnownAccounts();
   renderSessionResume();
 

@@ -39,6 +39,14 @@
         </header>
 
         <div class="card auth-card">
+          <div class="access-identity-card hidden" data-access-identity role="status">
+            <span class="access-identity-icon" aria-hidden="true">✓</span>
+            <div>
+              <span>Cloudflare Access 已验证</span>
+              <strong data-access-email></strong>
+              <small>网站身份已验证；保险库仍需主密码解密。</small>
+            </div>
+          </div>
           <div class="segmented" role="tablist" aria-label="账户操作">
             <button id="login-tab" class="active" type="button" role="tab" aria-selected="true" data-auth-view="login">登录</button>
             <button id="setup-tab" type="button" role="tab" aria-selected="false" data-auth-view="setup">创建账户</button>
@@ -104,6 +112,7 @@
           <div class="app-title">
             <p id="vault-eyebrow" class="eyebrow">当前保险库</p>
             <h1 id="vault-title">2FA Authenticator</h1>
+            <p class="access-identity-inline hidden" data-access-identity title="已通过 Cloudflare Access 验证"><span>Access</span><strong data-access-email></strong></p>
           </div>
           <div class="header-controls">
             <label class="sr-only" for="account-switch">切换账户</label>

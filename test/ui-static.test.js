@@ -33,6 +33,18 @@ describe('static application shell', () => {
     expect(app).toMatch(/function showMainApp[\s\S]*?finishInitialBoot\(\);\n}/);
   });
 
+  it('shows the verified Cloudflare Access identity without replacing the vault master password', () => {
+    expect(html.match(/data-access-identity/g)).toHaveLength(2);
+    expect(html.match(/data-access-email/g)).toHaveLength(2);
+    expect(html).toContain('Cloudflare Access 已验证');
+    expect(html).toContain('保险库仍需主密码解密');
+    expect(app).toContain('apiGetAccessIdentity');
+    expect(app).toContain('function renderAccessIdentity()');
+    expect(app).toContain("$$('[data-access-identity]')");
+    expect(styles).toContain('.access-identity-card { display: flex;');
+    expect(styles).toContain('.access-identity-inline { display: flex;');
+  });
+
   it('uses a responsive 3D gradient background with an accessible static fallback', () => {
     expect(styles).toContain('body::before, body::after');
     expect(styles).toContain('@keyframes ambient-orbit');

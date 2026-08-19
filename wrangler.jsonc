@@ -7,6 +7,18 @@
   "build": {
     "command": "npm run build"
   },
+  "vars": {
+    "ACCESS_AUD": "ec0202c941bf8f8a55c97d07071a01df8de0f57ad288a178e4daab58b4338274"
+  },
+  "access": {
+    "dev": {
+      "aud": "ec0202c941bf8f8a55c97d07071a01df8de0f57ad288a178e4daab58b4338274",
+      "identity": {
+        "email": "developer@example.invalid",
+        "user_uuid": "local-cloudflare-access-user"
+      }
+    }
+  },
   "assets": {
     "directory": "./static",
     "binding": "ASSETS",

@@ -25,6 +25,7 @@ beforeAll(async () => {
   vi.stubEnv('DB_PATH', dbPath);
   vi.stubEnv('ADMIN_USERNAME', 'admin');
   vi.stubEnv('ADMIN_PASSWORD', 'strong-admin-password');
+  vi.stubEnv('ACCESS_DEV_EMAIL', 'developer@example.test');
   const legacyDb = new Database(dbPath);
   legacyDb.exec(`
     CREATE TABLE audit_logs (
@@ -59,6 +60,12 @@ afterAll(async () => {
 });
 
 describe('Express admin API', () => {
+  it('provides an explicit local-development Access identity without changing vault encryption', async () => {
+    const identity = await request('/api/access/me');
+    expect(identity.response.status).toBe(200);
+    expect(identity.body).toEqual({ authenticated: true, email: 'developer@example.test' });
+  });
+
   it('authenticates separately and manages a recoverable user vault reset', async () => {
     expect(db.prepare('PRAGMA table_info(audit_logs)').all().map((column) => column.name)).toContain('ip_address');
     const stored = await request('/api/data', {

@@ -244,6 +244,7 @@ async function loadUsers({ resetOffset = false } = {}) {
 function openUserDialog(user) {
   state.selectedUser = { ...user };
   $('#dialog-account').textContent = user.accountName || '尚未识别（用户下次在线登录后自动补全）';
+  $('#dialog-access-email').textContent = user.accessEmail || '尚未绑定（首次成功访问旧保险库后自动绑定）';
   $('#dialog-key').textContent = shortKey(user.keyHash);
   $('#dialog-key').title = user.keyHash;
   $('#dialog-created').textContent = `创建：${formatDateTime(user.createdAt)}`;

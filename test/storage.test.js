@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, OfflineManager, apiGet, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
+import { DEFAULT_SETTINGS, OfflineManager, apiGet, apiGetAccessIdentity, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -80,6 +80,23 @@ describe('vault account metadata', () => {
     const encoded = options.headers['X-Vault-Account'];
     expect(url).not.toContain(encodeURIComponent('中文账户'));
     expect(Buffer.from(encoded, 'base64url').toString('utf8')).toBe('中文账户');
+  });
+});
+
+describe('Cloudflare Access identity', () => {
+  it('returns only an authenticated email and treats local unauthenticated mode as absent', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, email: ' owner@example.com ' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: false, email: '' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(apiGetAccessIdentity()).resolves.toEqual({ email: 'owner@example.com' });
+    await expect(apiGetAccessIdentity()).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/access/me', { headers: { Accept: 'application/json' } });
   });
 });
 
