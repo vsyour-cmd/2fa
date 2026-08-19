@@ -65,6 +65,15 @@ describe('static application shell', () => {
     expect(styles).toContain('env(safe-area-inset-bottom)');
   });
 
+  it('keeps mobile toast feedback clear of navigation and fixed controls', () => {
+    expect(html).toContain('id="app-toast"');
+    expect(html).toContain('role="status" aria-live="polite"');
+    expect(styles).toContain('.toast { top: auto; bottom: max(18px, calc(env(safe-area-inset-bottom) + 18px));');
+    expect(styles).toContain('.toast-action { min-height: 44px;');
+    expect(styles).toContain('#back-to-top.visible ~ .toast { bottom: max(78px, calc(env(safe-area-inset-bottom) + 78px));');
+    expect(styles).toContain('body.bulk-mode .toast { bottom: max(268px, calc(env(safe-area-inset-bottom) + 268px));');
+  });
+
   it('defines every statically referenced application element', () => {
     const referencedIds = [...app.matchAll(/\$\(\s*['"]#([A-Za-z][\w-]*)['"]\s*\)/g)].map((match) => match[1]);
     for (const id of new Set(referencedIds)) expect(html, `missing #${id}`).toContain(`id="${id}"`);
