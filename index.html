@@ -431,13 +431,13 @@
           <div class="form-group">
             <div class="workflow-editor-label-row"><label for="workflow-content">操作流程（Markdown）</label><span id="workflow-character-count">0 / 5000</span></div>
             <div class="workflow-markdown-editor">
-              <textarea id="workflow-content" rows="12" maxlength="5000" aria-describedby="workflow-content-hint workflow-character-count" placeholder="# 发布网站&#10;&#10;## 登录信息&#10;- 账号：owner@example.com&#10;- 密码：`填写密码`&#10;&#10;## 操作步骤&#10;1. 登录后台&#10;2. 检查内容&#10;3. 确认并发布" required></textarea>
+              <textarea id="workflow-content" rows="12" maxlength="5000" aria-describedby="workflow-content-hint workflow-character-count" placeholder="# 发布网站&#10;&#10;## 登录信息&#10;- 账号：owner@example.com&#10;- 密码：{{secret:myPassword123}}&#10;&#10;## 操作步骤&#10;1. 登录后台&#10;2. 检查内容&#10;3. 确认并发布" required></textarea>
               <section class="workflow-preview-panel" aria-labelledby="workflow-preview-title">
                 <div class="workflow-preview-heading"><h3 id="workflow-preview-title">实时预览</h3><span>安全渲染</span></div>
                 <div id="workflow-content-preview" class="markdown-body workflow-content-preview"><p class="markdown-empty">开始输入后，这里会显示 Markdown 预览。</p></div>
               </section>
             </div>
-            <p id="workflow-content-hint" class="field-hint">支持标题、列表、勾选项、粗体、链接和代码块；换行不再自动变成步骤。内容会随保险库加密保存，最多 5000 个字符。</p>
+            <p id="workflow-content-hint" class="field-hint">支持标题、列表、勾选项、粗体、链接和代码块；换行不再自动变成步骤。密码可用 <code>{{secret:你的密码}}</code> 或 <code>{{pwd:你的密码}}</code> 标记后显示为星号且可复制。内容会随保险库加密保存，最多 5000 个字符。</p>
           </div>
           <div class="form-group">
             <label for="workflow-key-select">关联 2FA 条目（可选）</label>

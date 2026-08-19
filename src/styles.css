@@ -492,6 +492,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .markdown-body th, .markdown-body td { padding: 6px 9px; border: 1px solid var(--border-strong); text-align: left; }
 .markdown-body th { color: var(--text); background: var(--surface-solid); }
 .markdown-body input[type="checkbox"] { width: 17px; min-height: 17px; margin: 0 7px 0 0; vertical-align: -3px; accent-color: var(--primary); }
+.markdown-secret { display: inline-flex; align-items: center; gap: 8px; padding: 2px 0; }
+.markdown-secret-mask { font-family: var(--font-mono); color: var(--text); background: var(--surface-solid); border: 1px solid var(--border); border-radius: 8px; padding: 0 6px; letter-spacing: 0.08em; }
+.markdown-secret-copy { color: var(--primary); text-decoration: none; font-size: 0.74rem; white-space: nowrap; }
+.markdown-secret-copy:hover { text-decoration: underline; }
 .markdown-empty { color: var(--text-muted); font-style: italic; }
 .workflow-key-combobox { position: relative; }
 .workflow-key-select { display: flex; width: 100%; min-height: 46px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px; color: var(--text); background: var(--surface-solid); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-weight: 700; text-align: left; }

@@ -1408,6 +1408,24 @@ async function copyText(value, successMessage = '已复制') {
   }
 }
 
+function decodeMarkdownSecret(value) {
+  try {
+    return decodeURIComponent(String(value || ''));
+  } catch {
+    return '';
+  }
+}
+
+function handleWorkflowSecretCopy(event) {
+  const trigger = event.target.closest('[data-secret-copy]');
+  if (!trigger) return;
+  event.preventDefault();
+  const value = decodeMarkdownSecret(trigger.dataset.secretCopy);
+  if (!value) return;
+  copyText(value, '密码已复制');
+  return true;
+}
+
 function waitForNextCodePeriod(key, startedAt) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -2445,6 +2463,10 @@ function setupEvents() {
     const toggle = event.target.closest('[data-toggle-password]');
     if (toggle) {
       setSensitiveVisibility(toggle, document.getElementById(toggle.dataset.togglePassword)?.type === 'password');
+      return;
+    }
+    if (handleWorkflowSecretCopy(event)) {
+      return;
     }
     if (!event.composedPath().includes($('#workflow-key-combobox'))) closeWorkflowKeyDropdown();
   });
