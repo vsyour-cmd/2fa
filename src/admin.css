@@ -236,7 +236,8 @@ input:focus, select:focus, textarea:focus { border-color: #2563eb; box-shadow: 0
 .panel-header h2 { margin-bottom: 2px; font-size: 1.1rem; }
 .panel-header p { margin-bottom: 0; color: var(--text-muted); font-size: 0.8rem; }
 .filter-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 1; }
-.filter-bar select { width: auto; min-width: 130px; }
+.filter-select-control { width: 150px; }
+.filter-select-control.log-action-filter { width: 180px; }
 .search-field { position: relative; width: min(100%, 340px); }
 .search-field svg { position: absolute; top: 12px; left: 12px; width: 18px; height: 18px; color: var(--text-muted); }
 .search-field input { padding-left: 38px; }
@@ -323,7 +324,7 @@ tbody tr:hover { background: rgba(241, 245, 249, 0.7); }
   .summary-card strong { font-size: 1.65rem; }
   .panel { margin-right: -12px; margin-left: -12px; border-right: 0; border-left: 0; border-radius: 0; }
   .filter-bar { align-items: stretch; flex-direction: column; }
-  .filter-bar select { width: 100%; }
+  .filter-select-control, .filter-select-control.log-action-filter { width: 100%; }
   .table-wrap { overflow-x: visible; }
   table, .logs-table { min-width: 0; }
   thead { display: none; }

@@ -288,11 +288,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .select-visible-row input { width: 20px; min-height: 20px; margin: 0; accent-color: var(--primary); }
 #list-summary { color: var(--text-soft); font-weight: 760; }
 #sort-hint { overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.filter-row { display: flex; gap: 7px; margin-top: 9px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
-.filter-btn { display: inline-flex; flex: 0 0 auto; min-height: 38px; align-items: center; gap: 7px; padding: 6px 11px; color: var(--text-soft); background: transparent; border: 1px solid var(--border); border-radius: 999px; font-size: 0.8rem; font-weight: 720; touch-action: manipulation; }
-.filter-btn.active { color: var(--primary-hover); background: var(--primary-soft); border-color: var(--primary); }
-.filter-count { display: inline-grid; min-width: 19px; height: 19px; padding: 0 5px; place-items: center; color: var(--text-soft); background: var(--surface-muted); border-radius: 999px; font-size: 0.72rem; }
-.filter-btn.active .filter-count { color: var(--primary-hover); background: var(--surface-solid); }
+.toolbar > .searchable-select { width: min(100%, 290px); margin-top: 9px; }
 
 .token-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .token-grid[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
@@ -639,7 +635,7 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .toolbar-main { grid-template-columns: minmax(0, 1fr); }
   .toolbar-controls { grid-template-columns: minmax(0, 1fr) minmax(118px, 0.55fr); }
   .multi-select-tools { align-items: flex-start; flex-direction: column; gap: 0; }
-  .filter-btn, .favorite-btn, .small-btn, .group-label { min-height: 44px; }
+  .favorite-btn, .small-btn, .group-label { min-height: 44px; }
   .favorite-btn { width: 44px; height: 44px; flex-basis: 44px; }
   .token-grid, .token-grid[data-columns="1"] { grid-template-columns: 1fr; }
   .token-grid[data-columns="2"], .token-grid[data-columns="3"], .token-grid[data-columns="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }

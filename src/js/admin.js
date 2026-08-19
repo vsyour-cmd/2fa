@@ -1,3 +1,5 @@
+import { enhanceSearchableSelects } from './searchable-select.js';
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -454,6 +456,8 @@ function switchPanel(panelId) {
 
 let userSearchTimer;
 let logSearchTimer;
+
+enhanceSearchableSelects();
 
 $('#admin-login-form').addEventListener('submit', async (event) => {
   event.preventDefault();

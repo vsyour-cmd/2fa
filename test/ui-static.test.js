@@ -5,6 +5,8 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const app = await readFile(new URL('../src/js/app.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const ui = await readFile(new URL('../src/js/ui.js', import.meta.url), 'utf8');
+const searchableSelect = await readFile(new URL('../src/js/searchable-select.js', import.meta.url), 'utf8');
+const searchableSelectStyles = await readFile(new URL('../src/searchable-select.css', import.meta.url), 'utf8');
 
 describe('static application shell', () => {
   it('uses a strict CSP and contains no inline event handlers', () => {
@@ -231,6 +233,18 @@ describe('static application shell', () => {
     expect(app).toContain('此操作无法撤销');
     expect(app).toContain('state.deletedWorkflowNotes.unshift({ ...note, deletedAt: Date.now() })');
     expect(app).toContain('data-trash-kind="workflow"');
+  });
+
+  it('places group filtering inside an accessible searchable dropdown', () => {
+    expect(html).toContain('id="group-filters" data-searchable-filter');
+    expect(html).toContain('data-search-placeholder="筛选分组…"');
+    expect(app).toContain('refreshSearchableSelect(select)');
+    expect(app).toContain("$('#group-filters').addEventListener('change'");
+    expect(searchableSelect).toContain("search.type = 'search'");
+    expect(searchableSelect).toContain("trigger.setAttribute('aria-expanded', 'true')");
+    expect(searchableSelect).toContain("event.key === 'Escape'");
+    expect(searchableSelectStyles).toContain('.searchable-select-panel { position: absolute;');
+    expect(searchableSelectStyles).toContain('min-height: 44px;');
   });
 
   it('searches deleted keys and usage scenarios inside the recycle bin', () => {

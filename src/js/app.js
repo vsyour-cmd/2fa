@@ -76,6 +76,7 @@ import {
   updatePasswordStrength,
   watchSystemTheme,
 } from './ui.js';
+import { enhanceSearchableSelects, refreshSearchableSelect } from './searchable-select.js';
 import {
   DEFAULT_ACCOUNT,
   compareSmartKeys,
@@ -590,10 +591,13 @@ function renderGroupFilters() {
     ...getGroups().map((group) => ({ value: group, label: group, count: state.keys.filter((key) => key.group === group).length })),
     { value: '__ungrouped', label: '未分组', count: ungroupedCount },
   ];
-  $('#group-filters').innerHTML = filters.map((filter) => {
-    const active = state.groupFilter === filter.value;
-    return `<button class="filter-btn${active ? ' active' : ''}" type="button" data-group-filter="${escapeHtml(filter.value)}" aria-pressed="${active}"><span>${escapeHtml(filter.label)}</span><span class="filter-count">${filter.count}</span></button>`;
+  const select = $('#group-filters');
+  select.innerHTML = filters.map((filter) => {
+    const triggerLabel = filter.value === '__all' ? '全部分组' : filter.value === '__ungrouped' ? '未分组' : `分组：${filter.label}`;
+    return `<option value="${escapeHtml(filter.value)}" data-count="${filter.count}" data-description="${filter.count} 个验证码" data-trigger-label="${escapeHtml(triggerLabel)}">${escapeHtml(filter.label)}</option>`;
   }).join('');
+  select.value = state.groupFilter;
+  refreshSearchableSelect(select);
 }
 
 function getVisibleKeys() {
@@ -2754,11 +2758,8 @@ function setupEvents() {
     renderKeys();
     $('#search-input').focus();
   });
-  $('#group-filters').addEventListener('click', (event) => {
-    const button = event.target.closest('[data-group-filter]');
-    if (!button) return;
-    state.groupFilter = button.dataset.groupFilter;
-    renderGroupFilters();
+  $('#group-filters').addEventListener('change', (event) => {
+    state.groupFilter = event.target.value;
     renderKeys();
   });
 
@@ -2940,6 +2941,7 @@ function setupInstallPrompt() {
 async function init() {
   applyTheme(state.settings.theme);
   watchSystemTheme(() => state.settings.theme);
+  enhanceSearchableSelects();
   setupQrScanner();
   setupEvents();
   setupInstallPrompt();

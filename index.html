@@ -12,6 +12,7 @@
     <title>2FA Authenticator</title>
     <script src="/theme-boot.js"></script>
     <link rel="stylesheet" href="/src/styles.css">
+    <link rel="stylesheet" href="/src/searchable-select.css">
     <script type="module" src="/src/js/app.js"></script>
   </head>
   <body>
@@ -168,7 +169,8 @@
             </label>
             <span class="field-hint">卡片点击只会切换选择，不会复制验证码</span>
           </div>
-          <div id="group-filters" class="filter-row" aria-label="按分组筛选"></div>
+          <label class="sr-only" for="group-filters">按分组筛选</label>
+          <select id="group-filters" data-searchable-filter data-searchable-class="align-start" data-filter-label="分组筛选" data-search-placeholder="筛选分组…" data-options-label="可用分组" data-searchable-default="__all"></select>
         </div>
 
         <aside id="backup-reminder" class="backup-reminder hidden" aria-labelledby="backup-reminder-title">

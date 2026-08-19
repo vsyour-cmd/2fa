@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const html = await readFile(new URL('../admin.html', import.meta.url), 'utf8');
 const script = await readFile(new URL('../src/js/admin.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/admin.css', import.meta.url), 'utf8');
+const searchableSelect = await readFile(new URL('../src/js/searchable-select.js', import.meta.url), 'utf8');
 
 describe('admin console static shell', () => {
   it('provides separate login, user management, recoverable reset, and audit-log views', () => {
@@ -49,5 +50,15 @@ describe('admin console static shell', () => {
     expect(styles).toContain('@keyframes admin-perspective-grid-drift');
     expect(styles).toContain('transform: perspective(620px) rotateX(66deg)');
     expect(styles).toContain('body::before, body::after { animation: none !important; }');
+  });
+
+  it('uses searchable dropdown panels for every categorical filter', () => {
+    expect(html.match(/data-searchable-filter/g)).toHaveLength(3);
+    expect(html).toContain('data-search-placeholder="筛选用户状态…"');
+    expect(html).toContain('data-search-placeholder="筛选操作类型…"');
+    expect(html).toContain('data-search-placeholder="筛选操作结果…"');
+    expect(script).toContain('enhanceSearchableSelects()');
+    expect(searchableSelect).toContain("select.dispatchEvent(new Event('change', { bubbles: true }))");
+    expect(searchableSelect).toContain("list.setAttribute('role', 'listbox')");
   });
 });
