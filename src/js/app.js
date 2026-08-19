@@ -1654,18 +1654,32 @@ function renderTrash() {
   $('#trash-retention-label').textContent = `保留 ${retentionDays} 天`;
   $('#trash-description').textContent = `移除的密钥和使用场景会暂存在这里，${retentionDays} 天内可以随时恢复；只有“彻底删除”会立即永久删除。`;
   const list = $('#trash-list');
-  if (state.deletedItems.length + state.deletedWorkflowNotes.length === 0) {
+  const total = state.deletedItems.length + state.deletedWorkflowNotes.length;
+  const query = $('#trash-search').value.trim();
+  const keys = state.deletedItems.filter((item) => matchesKeyFilter(item, query));
+  const notes = state.deletedWorkflowNotes.filter((note) => matchesWorkflowNoteFilter(note, query));
+  const visible = keys.length + notes.length;
+  setHidden('#trash-filter-bar', total === 0);
+  $('#trash-list-summary').textContent = query ? `显示 ${visible} / ${total} 条` : `${total} 条已删除内容`;
+  if (total === 0) {
     list.innerHTML = '<p class="field-hint center">回收站是空的</p>';
     return;
   }
-  const keyRows = state.deletedItems.map((item) => `
+  if (visible === 0) {
+    list.innerHTML = '<div class="empty-state compact trash-empty"><h2>没有匹配的已删除内容</h2><p>试试名称、发行方、账号、分组、备注或场景内容。</p><button class="btn btn-secondary" type="button" data-trash-action="clear-search">清除搜索</button></div>';
+    return;
+  }
+  const keyRows = keys.map((item) => {
+    const details = [item.issuer, item.account, item.group].filter(Boolean).join(' · ');
+    return `
     <div class="manage-row" data-trash-kind="key" data-trash-id="${escapeHtml(item.id)}">
-      <div class="manage-row-main"><strong>${escapeHtml(item.name)}</strong><span>2FA 条目 · 删除于 ${escapeHtml(formatDateTime(item.deletedAt))}</span></div>
+      <div class="manage-row-main"><strong>${escapeHtml(item.name)}</strong><span>2FA 条目${details ? ` · ${escapeHtml(details)}` : ''} · 删除于 ${escapeHtml(formatDateTime(item.deletedAt))}</span></div>
       <div class="manage-actions"><button class="small-btn" type="button" data-trash-action="restore">恢复</button><button class="small-btn delete" type="button" data-trash-action="purge">彻底删除</button></div>
-    </div>`).join('');
-  const noteRows = state.deletedWorkflowNotes.map((note) => `
+    </div>`;
+  }).join('');
+  const noteRows = notes.map((note) => `
     <div class="manage-row" data-trash-kind="workflow" data-trash-id="${escapeHtml(note.id)}">
-      <div class="manage-row-main"><strong>${escapeHtml(note.title)}</strong><span>使用场景 · 删除于 ${escapeHtml(formatDateTime(note.deletedAt))}</span></div>
+      <div class="manage-row-main"><strong>${escapeHtml(note.title)}</strong><span>使用场景 · ${note.linkedKeys.length} 个验证码 · 删除于 ${escapeHtml(formatDateTime(note.deletedAt))}</span></div>
       <div class="manage-actions"><button class="small-btn" type="button" data-trash-action="restore">恢复</button><button class="small-btn delete" type="button" data-trash-action="purge">彻底删除</button></div>
     </div>`).join('');
   list.innerHTML = keyRows + noteRows;
@@ -2749,10 +2763,22 @@ function setupEvents() {
     else deleteGroup(row.dataset.groupName);
   });
 
-  $('#trash-open').addEventListener('click', () => { renderTrash(); openModal('trash-modal'); });
+  $('#trash-open').addEventListener('click', () => {
+    $('#trash-search').value = '';
+    renderTrash();
+    const hasDeletedContent = state.deletedItems.length + state.deletedWorkflowNotes.length > 0;
+    openModal('trash-modal', hasDeletedContent ? '#trash-search' : '[data-close-modal="trash-modal"]');
+  });
+  $('#trash-search').addEventListener('input', renderTrash);
   $('#trash-list').addEventListener('click', (event) => {
-    const row = event.target.closest('[data-trash-id]');
     const action = event.target.closest('[data-trash-action]')?.dataset.trashAction;
+    if (action === 'clear-search') {
+      $('#trash-search').value = '';
+      renderTrash();
+      $('#trash-search').focus();
+      return;
+    }
+    const row = event.target.closest('[data-trash-id]');
     if (!row || !action) return;
     if (row.dataset.trashKind === 'workflow') {
       if (action === 'restore') restoreWorkflowTrashItem(row.dataset.trashId);

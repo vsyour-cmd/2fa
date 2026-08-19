@@ -224,6 +224,17 @@ describe('static application shell', () => {
     expect(app).toContain('data-trash-kind="workflow"');
   });
 
+  it('searches deleted keys and usage scenarios inside the recycle bin', () => {
+    expect(html).toContain('id="trash-search"');
+    expect(html).toContain('id="trash-list-summary"');
+    expect(html).toContain('aria-controls="trash-list"');
+    expect(app).toContain('matchesKeyFilter(item, query)');
+    expect(app).toContain('matchesWorkflowNoteFilter(note, query)');
+    expect(app).toContain('`显示 ${visible} / ${total} 条`');
+    expect(app).toContain('data-trash-action="clear-search"');
+    expect(styles).toContain('.trash-filter-bar { display: flex;');
+  });
+
   it('waits for a fresh verification code during the final second', () => {
     expect(app).toContain('验证码即将过期，正在复制新码');
     expect(app).toContain('验证码即将过期，注意尽快粘贴');

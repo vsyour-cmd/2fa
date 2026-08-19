@@ -518,6 +518,14 @@
       <div class="modal modal-wide">
         <div class="modal-header"><div><p id="trash-retention-label" class="eyebrow">保留 30 天</p><h2 id="trash-title">回收站</h2></div><button class="icon-btn" type="button" data-close-modal="trash-modal" aria-label="关闭">×</button></div>
         <p id="trash-description" class="field-hint">移除的密钥和使用场景会暂存在这里，到期前可以随时恢复；只有“彻底删除”会立即永久删除。</p>
+        <div id="trash-filter-bar" class="trash-filter-bar card-subtle hidden">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+            <label class="sr-only" for="trash-search">搜索回收站</label>
+            <input id="trash-search" type="search" placeholder="搜索已删除的验证码或使用场景…" autocomplete="off" aria-controls="trash-list">
+          </div>
+          <span id="trash-list-summary" aria-live="polite">0 条已删除内容</span>
+        </div>
         <div id="trash-list" class="manage-list"></div>
       </div>
     </div>
