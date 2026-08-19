@@ -247,6 +247,17 @@ describe('static application shell', () => {
     expect(searchableSelectStyles).toContain('min-height: 44px;');
   });
 
+  it('keeps active token and workflow filters visible and easy to reset', () => {
+    for (const id of ['token-filter-reset', 'token-filter-reset-label', 'workflow-filter-reset']) expect(html).toContain(`id="${id}"`);
+    expect(app).toContain('function clearTokenFilters()');
+    expect(app).toContain('function clearWorkflowSearch()');
+    expect(app).toContain("$$('#clear-filters, #token-filter-reset')");
+    expect(app).toContain("$$('#workflow-clear-search, #workflow-filter-reset')");
+    expect(app).toContain("`清除 ${activeFilterCount} 项筛选`");
+    expect(styles).toContain('.active-filter-reset { display: inline-flex; min-height: 44px;');
+    expect(styles).toContain('.workflow-filter-bar .active-filter-reset { min-height: 42px;');
+  });
+
   it('searches deleted keys and usage scenarios inside the recycle bin', () => {
     expect(html).toContain('id="trash-search"');
     expect(html).toContain('id="trash-list-summary"');

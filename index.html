@@ -169,8 +169,11 @@
             </label>
             <span class="field-hint">卡片点击只会切换选择，不会复制验证码</span>
           </div>
-          <label class="sr-only" for="group-filters">按分组筛选</label>
-          <select id="group-filters" data-searchable-filter data-searchable-class="align-start" data-filter-label="分组筛选" data-search-placeholder="筛选分组…" data-options-label="可用分组" data-searchable-default="__all"></select>
+          <div class="token-filter-row">
+            <label class="sr-only" for="group-filters">按分组筛选</label>
+            <select id="group-filters" data-searchable-filter data-searchable-class="align-start" data-filter-label="分组筛选" data-search-placeholder="筛选分组…" data-options-label="可用分组" data-searchable-default="__all"></select>
+            <button id="token-filter-reset" class="active-filter-reset hidden" type="button"><span aria-hidden="true">×</span><span id="token-filter-reset-label">清除筛选</span></button>
+          </div>
         </div>
 
         <aside id="backup-reminder" class="backup-reminder hidden" aria-labelledby="backup-reminder-title">
@@ -239,6 +242,7 @@
               <input id="workflow-search" type="search" placeholder="搜索场景名称、内容或关联验证码…" autocomplete="off">
             </div>
             <span id="workflow-list-summary" aria-live="polite">0 个使用场景</span>
+            <button id="workflow-filter-reset" class="active-filter-reset hidden" type="button"><span aria-hidden="true">×</span><span>清除搜索</span></button>
           </div>
           <div id="workflow-note-list" class="workflow-note-grid" tabindex="-1" aria-live="polite"></div>
           <div id="workflow-empty" class="empty-state compact hidden">

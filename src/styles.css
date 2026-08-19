@@ -288,7 +288,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .select-visible-row input { width: 20px; min-height: 20px; margin: 0; accent-color: var(--primary); }
 #list-summary { color: var(--text-soft); font-weight: 760; }
 #sort-hint { overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.toolbar > .searchable-select { width: min(100%, 290px); margin-top: 9px; }
+.token-filter-row { display: flex; min-width: 0; align-items: center; gap: 8px; margin-top: 9px; }
+.token-filter-row .searchable-select { width: min(100%, 290px); }
+.active-filter-reset { display: inline-flex; min-height: 44px; flex: 0 0 auto; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 7px 11px; color: var(--primary-hover); background: var(--primary-soft); font-size: 0.76rem; font-weight: 780; white-space: nowrap; }
+.active-filter-reset:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 74%, var(--surface-solid)); }
+.active-filter-reset > span:first-child { font-size: 1rem; line-height: 1; }
 
 .token-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .token-grid[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
@@ -406,6 +410,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .workflow-heading-buttons .btn { min-height: 44px; white-space: nowrap; }
 .workflow-filter-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; padding: 12px 13px; }
 #workflow-list-summary { flex: 0 0 auto; color: var(--text-soft); font-size: 0.75rem; font-weight: 760; }
+.workflow-filter-bar .active-filter-reset { min-height: 42px; }
 .workflow-note-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .workflow-note-card { position: relative; min-width: 0; padding: 18px; overflow: hidden; border-radius: var(--radius); box-shadow: var(--shadow-small); }
 .workflow-note-card.frequent::before { position: absolute; top: 0; right: 18px; left: 18px; height: 2px; content: ''; background: linear-gradient(90deg, transparent, var(--primary), transparent); opacity: 0.75; }
@@ -689,6 +694,7 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .workflow-heading-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-filter-bar { align-items: stretch; flex-direction: column; gap: 7px; }
   #workflow-list-summary { padding: 0 3px; text-align: right; }
+  .workflow-filter-bar .active-filter-reset { justify-content: center; }
   .workflow-heading-actions select, .workflow-heading-actions .btn { width: 100%; }
   .workflow-note-actions { align-items: stretch; flex-direction: column; }
   .workflow-note-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

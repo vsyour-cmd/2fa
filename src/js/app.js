@@ -623,6 +623,12 @@ function renderListMeta(visibleCount) {
   const total = state.keys.length;
   const filtered = Boolean(state.search) || state.groupFilter !== '__all';
   $('#list-summary').textContent = filtered ? `显示 ${visibleCount} / ${total} 个验证码` : `${total} 个验证码`;
+  const activeFilterCount = Number(Boolean(state.search)) + Number(state.groupFilter !== '__all');
+  const resetButton = $('#token-filter-reset');
+  setHidden(resetButton, activeFilterCount === 0);
+  $('#token-filter-reset-label').textContent = activeFilterCount > 1 ? `清除 ${activeFilterCount} 项筛选` : state.search ? '清除关键词' : '清除分组';
+  const filterDetails = [state.search ? `关键词“${state.search}”` : '', state.groupFilter !== '__all' ? '分组筛选' : ''].filter(Boolean).join('、');
+  resetButton.setAttribute('aria-label', filterDetails ? `清除筛选：${filterDetails}` : '清除筛选');
   const hints = {
     smart: '智能排序会根据使用频次和最近使用自动调整',
     recent: '最近复制的验证码排在前面',
@@ -931,6 +937,7 @@ function renderWorkflowNotes() {
   const filtered = Boolean(state.workflowSearch);
   const notes = getVisibleWorkflowNotes();
   $('#workflow-list-summary').textContent = filtered ? `显示 ${notes.length} / ${total} 个使用场景` : `${total} 个使用场景`;
+  setHidden('#workflow-filter-reset', !filtered);
   setHidden('#workflow-empty', total !== 0);
   setHidden('#workflow-no-results', !filtered || notes.length !== 0 || total === 0);
   setHidden('#workflow-note-list', notes.length === 0);
@@ -962,6 +969,22 @@ function renderWorkflowNotes() {
         <div class="workflow-note-actions"><button class="btn btn-primary" type="button" data-workflow-action="run">开始操作</button><div class="workflow-note-secondary-actions"><button class="small-btn" type="button" data-workflow-action="edit">编辑</button><button class="small-btn delete" type="button" data-workflow-action="delete">移入回收站</button></div></div>
       </article>`;
   }).join('');
+}
+
+function clearTokenFilters() {
+  state.search = '';
+  state.groupFilter = '__all';
+  $('#search-input').value = '';
+  renderGroupFilters();
+  renderKeys();
+  $('#search-input').focus();
+}
+
+function clearWorkflowSearch() {
+  state.workflowSearch = '';
+  $('#workflow-search').value = '';
+  renderWorkflowNotes();
+  $('#workflow-search').focus();
 }
 
 function getSortedWorkflowNotes() {
@@ -2676,12 +2699,7 @@ function setupEvents() {
 
   $('#search-input').addEventListener('input', (event) => { state.search = event.target.value.trim(); renderKeys(); });
   $('#workflow-search').addEventListener('input', (event) => { state.workflowSearch = event.target.value.trim(); renderWorkflowNotes(); });
-  $('#workflow-clear-search').addEventListener('click', () => {
-    state.workflowSearch = '';
-    $('#workflow-search').value = '';
-    renderWorkflowNotes();
-    $('#workflow-search').focus();
-  });
+  for (const button of $$('#workflow-clear-search, #workflow-filter-reset')) button.addEventListener('click', clearWorkflowSearch);
   $('#multi-select-toggle').addEventListener('click', () => setMultiSelectMode(!state.multiSelectMode));
   $('#select-visible').addEventListener('change', (event) => {
     const visibleIds = getVisibleKeys().map((key) => key.id);
@@ -2750,14 +2768,7 @@ function setupEvents() {
     setHidden('#edit-qr-panel', true);
     $('#show-qr').focus();
   });
-  $('#clear-filters').addEventListener('click', () => {
-    state.search = '';
-    state.groupFilter = '__all';
-    $('#search-input').value = '';
-    renderGroupFilters();
-    renderKeys();
-    $('#search-input').focus();
-  });
+  for (const button of $$('#clear-filters, #token-filter-reset')) button.addEventListener('click', clearTokenFilters);
   $('#group-filters').addEventListener('change', (event) => {
     state.groupFilter = event.target.value;
     renderKeys();
