@@ -276,12 +276,14 @@ async function unlockWithPin(pin) {
   state.accountName = cache.accountName;
   state.keyIterations = cache.keyIterations;
   let record = null;
+  let accessBlockedMessage = '';
   if (offline.isOnline) {
     try {
       const cloud = await loadCloudRecord(state.keyHash, state.accountName);
       if (cloud.exists) record = cloud;
     } catch (error) {
       if (error instanceof ApiError && error.status === 423) throw error;
+      if (error instanceof ApiError && error.status === 403) accessBlockedMessage = error.message;
       console.warn('Quick unlock cloud load failed:', error);
     }
   }
@@ -290,6 +292,7 @@ async function unlockWithPin(pin) {
   useVaultData(await decryptJson(record.encryptedData, state.masterKey));
   await rememberCurrentSession();
   discardQuickUnlock();
+  return accessBlockedMessage ? `云端同步不可用：${accessBlockedMessage}，当前使用本机缓存` : '';
 }
 
 async function rememberCurrentSession() {
@@ -390,22 +393,28 @@ async function unlockWithPassword(password, accountName) {
 
   for (const candidate of candidates) {
     let record = null;
+    let accessBlockedMessage = '';
     if (offline.isOnline) {
       try {
         const cloud = await loadCloudRecord(candidate.hash, normalizedAccount);
         if (cloud.exists) record = cloud;
       } catch (error) {
-        // Surface access/security rejections (403 Access denied, 423 account disabled,
-        // 429 rate limited) instead of masking them as a wrong password. Transient
-        // server errors are tolerated so the offline cache can still rescue the login.
-        if (!(error instanceof ApiError) || error.status === 403 || error.status === 423 || error.status === 429) throw error;
+        // Surface security rejections instead of masking them as a wrong password.
+        // A 403 (Access denied / vault bound to another Access user) still lets the
+        // local cache rescue the unlock, but the user is told cloud sync is blocked.
+        if (!(error instanceof ApiError)) throw error;
+        if (error.status === 403) accessBlockedMessage = error.message;
+        else if (error.status === 423 || error.status === 429) throw error;
       }
     }
     if (!record) {
       const cached = await offline.get(candidate.hash);
       if (cached) record = cached;
     }
-    if (!record) continue;
+    if (!record) {
+      if (accessBlockedMessage) throw new ApiError(`云端同步不可用：${accessBlockedMessage}`, 403);
+      continue;
+    }
     sawEncryptedRecord = true;
     try {
       const { key, raw } = await decryptRecord(record, password, candidate.iterations);
@@ -417,6 +426,7 @@ async function unlockWithPassword(password, accountName) {
       useVaultData(raw);
       if (candidate.mode !== 'scoped' && offline.isOnline) await migrateLegacyVault(password, candidate.hash);
       await rememberCurrentSession();
+      if (accessBlockedMessage) showToast(`云端同步不可用：${accessBlockedMessage}，当前显示本机缓存`, { duration: 8_000 });
       return true;
     } catch (error) {
       console.warn('Vault decryption failed:', error);
@@ -462,23 +472,31 @@ async function restoreSession(accountName) {
     state.accountName = normalizeAccountName(session.accountName);
     state.keyIterations = Number(session.keyIterations || PBKDF2_ITERATIONS.CURRENT);
     let record = null;
+    let accessBlockedMessage = '';
     if (offline.isOnline) {
       try {
         const cloud = await loadCloudRecord(state.keyHash, state.accountName);
         if (cloud.exists) record = cloud;
       } catch (error) {
         if (error instanceof ApiError && error.status === 423) throw error;
+        if (error instanceof ApiError && error.status === 403) accessBlockedMessage = error.message;
         console.warn('Session cloud load failed:', error);
       }
     }
     if (!record) record = await offline.get(state.keyHash);
-    if (!record) throw new Error('会话数据不存在');
+    if (!record) {
+      throw accessBlockedMessage
+        ? new Error(`云端同步不可用：${accessBlockedMessage}`)
+        : new Error('会话数据不存在');
+    }
     useVaultData(await decryptJson(record.encryptedData, state.masterKey));
     setActiveAccount(state.accountName);
     showMainApp();
+    if (accessBlockedMessage) showToast(`云端同步不可用：${accessBlockedMessage}，当前显示本机缓存`, { duration: 8_000 });
     return true;
   } catch (error) {
     console.warn('Session restore failed:', error);
+    if (error instanceof ApiError && error.status === 423) showToast(error.message, { duration: 6_000 });
     removeSession(accountName);
     clearSensitiveState();
     return false;
@@ -2553,10 +2571,10 @@ function setupEvents() {
     try {
       const pin = $('#quick-unlock-pin').value.trim();
       if (!/^\d{6}$/.test(pin)) throw new Error('请输入 6 位数字 PIN');
-      await unlockWithPin(pin);
+      const quickUnlockWarning = await unlockWithPin(pin);
       $('#quick-unlock-pin').value = '';
       showMainApp();
-      showToast('已快速解锁');
+      showToast(quickUnlockWarning ? `已快速解锁；${quickUnlockWarning}` : '已快速解锁', quickUnlockWarning ? { duration: 8_000 } : undefined);
     } catch (error) {
       clearSensitiveState();
       showError('#quick-unlock-error', error.message || '快速解锁失败');
