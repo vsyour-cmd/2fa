@@ -406,6 +406,17 @@ describe('static application shell', () => {
     expect(styles).not.toContain('.network-status { position: fixed;');
   });
 
+  it('offers a one-click manual cloud sync with visible feedback', () => {
+    expect(html).toContain('id="sync-now"');
+    expect(html).toContain('aria-label="立即与云端同步"');
+    expect(app).toContain("$('#sync-now').addEventListener('click', manualSync)");
+    expect(app).toContain('async function performSyncCheck()');
+    expect(app).toContain('async function manualSync()');
+    expect(app).toContain("button.classList.add('syncing')");
+    expect(app).toContain('showToast(result.message');
+    expect(styles).toContain('.icon-btn.syncing svg { animation: app-boot-spin 900ms linear infinite; }');
+  });
+
   it('shows offline migration QR codes and limits quick PIN unlock to a short in-tab cache', () => {
     expect(html).toContain('id="show-qr"');
     expect(html).toContain('id="edit-qr-canvas"');

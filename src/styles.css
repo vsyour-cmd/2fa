@@ -253,6 +253,8 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .icon-btn { display: inline-grid; width: 44px; height: 44px; flex: 0 0 44px; padding: 0; place-items: center; color: var(--text-soft); background: var(--surface-solid); border: 1px solid var(--border); border-radius: 12px; font-size: 1.2rem; touch-action: manipulation; }
 .icon-btn svg, .favorite-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.icon-btn.syncing { color: var(--primary); border-color: var(--primary); pointer-events: none; }
+.icon-btn.syncing svg { animation: app-boot-spin 900ms linear infinite; }
 .primary-icon { color: white; background: var(--primary); border-color: var(--primary); font-size: 1.5rem; }
 
 .error, .warning { margin: 12px 0; padding: 11px 13px; border-radius: 10px; font-size: 0.84rem; }

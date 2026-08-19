@@ -2359,14 +2359,16 @@ async function changeMasterPassword(event) {
   }
 }
 
-async function triggerSyncCheck() {
-  if (!state.masterKey || !state.keyHash || !offline.isOnline) return;
+async function performSyncCheck() {
+  if (!state.masterKey || !state.keyHash || !offline.isOnline) {
+    return { ok: false, message: '当前离线，无法与云端同步' };
+  }
   try {
     const cloud = await loadCloudRecord(state.keyHash);
     const local = await offline.get(state.keyHash);
     if (!cloud.exists) {
       await saveVault();
-      return;
+      return { ok: true, message: '云端暂无数据，已将本地保险库上传' };
     }
     if (local && offline.detectConflict(local, cloud.updatedAt)) {
       state.conflict = { local, cloud };
@@ -2375,26 +2377,57 @@ async function triggerSyncCheck() {
       $('#local-conflict-info').textContent = `${localVault.keys.length} 个密钥 · ${formatDateTime(local.updatedAt)}`;
       $('#cloud-conflict-info').textContent = `${cloudVault.keys.length} 个密钥 · ${formatDateTime(cloud.updatedAt)}`;
       openModal('conflict-modal', '[data-conflict="local"]');
-      return;
+      return { ok: true, conflict: true, message: '检测到本地与云端冲突，请选择保留的版本' };
     }
     if (local?.locallyModified) {
       useVaultData(await decryptJson(local.encryptedData, state.masterKey));
       const result = await apiSave(state.keyHash, local.encryptedData, local.salt, local.version || VAULT_VERSION, state.accountName);
       await offline.save(state.keyHash, local.encryptedData, local.salt, local.version || VAULT_VERSION, Number(result.updatedAt || Date.now()));
       renderAll();
-      showToast('本地修改已同步到云端');
-      return;
+      return { ok: true, uploaded: true, message: '本地修改已同步到云端' };
     }
-    useVaultData(await decryptJson(cloud.encryptedData, state.masterKey));
+    const previousPayload = JSON.stringify(vaultPayload());
+    const cloudRaw = await decryptJson(cloud.encryptedData, state.masterKey);
+    const changed = previousPayload !== JSON.stringify(normalizeVaultData(cloudRaw));
+    useVaultData(cloudRaw);
     await offline.save(state.keyHash, cloud.encryptedData, state.salt, VAULT_VERSION, cloud.updatedAt);
     renderAll();
+    return { ok: true, changed, message: changed ? '已从云端拉取最新数据' : '已与云端同步，数据是最新的' };
   } catch (error) {
     console.error('Sync check failed:', error);
     if (error instanceof ApiError && error.status === 423) {
       await lockAll(error.message);
-      return;
+      return { ok: false, message: error.message };
     }
-    showToast('云端同步检查失败');
+    const message = error instanceof ApiError ? `云端同步失败：${error.message}` : '云端同步失败，请稍后重试';
+    return { ok: false, message };
+  }
+}
+
+async function triggerSyncCheck() {
+  const result = await performSyncCheck();
+  if (!result || result.conflict) return;
+  if (result.uploaded || !result.ok) showToast(result.message);
+}
+
+async function manualSync() {
+  const button = $('#sync-now');
+  if (!button || button.disabled) return;
+  if (!state.masterKey) {
+    showToast('请先解锁保险库');
+    return;
+  }
+  button.disabled = true;
+  button.classList.add('syncing');
+  button.setAttribute('aria-busy', 'true');
+  try {
+    const result = await performSyncCheck();
+    if (!result || result.conflict) return;
+    showToast(result.message, result.ok ? undefined : { duration: 8_000 });
+  } finally {
+    button.disabled = false;
+    button.classList.remove('syncing');
+    button.removeAttribute('aria-busy');
   }
 }
 
@@ -2600,6 +2633,7 @@ function setupEvents() {
     state.settings = saveSettings(state.settings);
     applyTheme(state.settings.theme);
   });
+  $('#sync-now').addEventListener('click', manualSync);
   $('#settings-open').addEventListener('click', () => { fillSettingsForm(); openModal('settings-modal', '#theme-select'); });
   for (const button of $$('[data-vault-view]')) button.addEventListener('click', () => setVaultView(button.dataset.vaultView));
   $('#vault-view-tabs').addEventListener('keydown', (event) => {
