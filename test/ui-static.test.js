@@ -521,9 +521,13 @@ describe('static application shell', () => {
 
   it('groups responsive toolbar controls and card status badges', () => {
     expect(html).toContain('class="header-actions"');
+    expect(html).toContain('class="account-switcher"');
     expect(html).toContain('class="toolbar-primary"');
     expect(html).toContain('class="toolbar-controls"');
+    expect(html).toContain('class="toolbar-heading"');
     expect(app).toContain('class="token-badges"');
+    expect(styles).toContain('.vault-view-tabs { position: sticky;');
+    expect(styles).toContain('.workflow-heading-actions { display: grid;');
     expect(styles).toContain('@container token-card');
   });
 
@@ -538,7 +542,7 @@ describe('static application shell', () => {
     expect(styles).toContain('.toolbar-meta-status { display: flex; min-width: 0;');
     expect(styles).toContain('.network-status { display: inline-flex; min-height: 28px;');
     expect(styles).toContain('.offline-banner { position: sticky; top: 0;');
-    expect(styles).toContain('.toolbar { position: sticky; top: calc(12px + var(--offline-banner-offset, 0px));');
+    expect(styles).toContain('.toolbar { position: sticky; top: calc(72px + var(--offline-banner-offset, 0px));');
     expect(styles).toContain('.toast { position: fixed; top: calc(18px + var(--offline-banner-offset, 0px));');
     expect(ui).toContain("setHidden(banner, isOnline);");
     expect(ui).toContain("offlineBannerObserver = new ResizeObserver(() => updateOfflineBannerOffset(banner));");

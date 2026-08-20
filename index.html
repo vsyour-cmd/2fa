@@ -114,8 +114,10 @@
             <p class="access-identity-inline hidden" data-access-identity title="已通过 Cloudflare Access 验证"><span>Access</span><strong data-access-email></strong></p>
           </div>
           <div class="header-controls">
-            <label class="sr-only" for="account-switch">切换账户</label>
-            <select id="account-switch" class="compact-select"></select>
+            <label class="account-switcher" for="account-switch">
+              <span>当前保险库</span>
+              <select id="account-switch" class="compact-select" aria-label="切换当前保险库"></select>
+            </label>
             <div class="header-actions" aria-label="保险库快捷操作">
               <button class="icon-btn" id="sync-now" type="button" aria-label="立即与云端同步" title="立即与云端同步"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
               <button class="icon-btn" id="theme-quick" type="button" aria-label="切换明暗主题" title="切换主题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 15.2A8.5 8.5 0 0 1 8.8 3.7 8.5 8.5 0 1 0 20.3 15.2Z"></path></svg></button>
@@ -133,8 +135,14 @@
 
         <div id="tokens-view" role="tabpanel" aria-labelledby="tokens-tab">
         <div class="toolbar card-subtle">
-          <div class="token-toolbar-actions" aria-label="验证码管理">
-            <button id="trash-open" class="btn btn-ghost trash-open" type="button">回收站 <span id="trash-count" class="badge trash-count">0</span></button>
+          <div class="toolbar-heading">
+            <div class="toolbar-heading-copy">
+              <h2>验证码列表</h2>
+              <span id="list-summary">0 个验证码</span>
+            </div>
+            <div class="token-toolbar-actions" aria-label="验证码管理">
+              <button id="trash-open" class="btn btn-ghost trash-open" type="button">回收站 <span id="trash-count" class="badge trash-count">0</span></button>
+            </div>
           </div>
           <div class="toolbar-main">
             <div class="toolbar-primary">
@@ -169,7 +177,6 @@
             </div>
           </div>
           <div class="toolbar-meta">
-            <span id="list-summary">0 个验证码</span>
             <div class="toolbar-meta-status">
               <span id="sort-hint">智能排序会根据使用频次和最近使用自动调整</span>
               <div id="network-status" class="network-status online" role="status" aria-label="当前在线"><span class="status-dot"></span><span class="status-text">在线</span></div>
