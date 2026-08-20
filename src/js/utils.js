@@ -81,6 +81,16 @@ export function normalizeWorkflowNote(raw = {}) {
   };
 }
 
+export function normalizeWorkflowProtection(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const salt = String(raw.salt || '').trim();
+  const hash = String(raw.hash || '').trim().toLocaleLowerCase('en-US');
+  const iterations = Number(raw.iterations);
+  if (!salt || salt.length > 256 || !/^[a-f0-9]{64}$/.test(hash)) return null;
+  if (!Number.isInteger(iterations) || iterations < 100_000 || iterations > 2_000_000) return null;
+  return { salt, hash, iterations };
+}
+
 export function getSmartSortScore(key, now = Date.now()) {
   const useCount = Math.max(0, Number(key?.useCount || 0));
   const lastUsed = Math.max(0, Number(key?.lastUsed || 0));
@@ -174,7 +184,7 @@ export function syncWorkflowLinksForKey(notes = [], key = {}, selectedNoteIds = 
 
 export function normalizeVaultData(raw) {
   if (Array.isArray(raw)) {
-    return { version: 3, keys: raw.map(normalizeKey), deletedItems: [], workflowNotes: [], deletedWorkflowNotes: [] };
+    return { version: 3, keys: raw.map(normalizeKey), deletedItems: [], workflowNotes: [], deletedWorkflowNotes: [], workflowProtection: null };
   }
   const source = raw && typeof raw === 'object' ? raw : {};
   const keyList = Array.isArray(source.keys) ? source.keys : [];
@@ -193,6 +203,7 @@ export function normalizeVaultData(raw) {
       ...normalizeWorkflowNote(item.note || item),
       deletedAt: Number(item.deletedAt || Date.now()),
     })),
+    workflowProtection: normalizeWorkflowProtection(source.workflowProtection),
   };
 }
 

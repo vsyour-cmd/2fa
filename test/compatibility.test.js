@@ -76,6 +76,15 @@ describe('backward compatibility', () => {
     expect(vault.deletedItems).toEqual([]);
     expect(vault.workflowNotes).toEqual([]);
     expect(vault.deletedWorkflowNotes).toEqual([]);
+    expect(vault.workflowProtection).toBeNull();
+  });
+
+  it('normalizes valid workflow edit protection and rejects malformed hashes', () => {
+    const valid = normalizeVaultData({
+      workflowProtection: { salt: 'c2FsdA==', hash: 'a'.repeat(64), iterations: 300_000 },
+    });
+    expect(valid.workflowProtection).toEqual({ salt: 'c2FsdA==', hash: 'a'.repeat(64), iterations: 300_000 });
+    expect(normalizeVaultData({ workflowProtection: { salt: 'x', hash: 'not-a-hash', iterations: 1 } }).workflowProtection).toBeNull();
   });
 
   it('normalizes workflow notes and legacy key id links', () => {

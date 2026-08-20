@@ -423,6 +423,23 @@
       </div>
     </div>
 
+    <div id="workflow-protection-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-protection-title" aria-describedby="workflow-protection-description">
+      <div class="modal">
+        <div class="modal-header"><div><p class="eyebrow">二次验证</p><h2 id="workflow-protection-title">验证场景编辑密码</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-protection-modal" aria-label="关闭">×</button></div>
+        <form id="workflow-protection-form" novalidate>
+          <p id="workflow-protection-description" class="dialog-message">使用场景可能包含敏感信息，验证后才能编辑。</p>
+          <div id="workflow-protection-current-group" class="form-group"><label id="workflow-protection-current-label" for="workflow-protection-current">场景编辑密码</label><div class="input-with-action"><input id="workflow-protection-current" type="password" autocomplete="off"><button class="input-action" type="button" data-toggle-password="workflow-protection-current" aria-label="显示密码" aria-pressed="false">显示</button></div></div>
+          <div id="workflow-protection-new-fields">
+            <div class="form-group"><label for="workflow-protection-new">新场景编辑密码</label><div class="input-with-action"><input id="workflow-protection-new" type="password" minlength="10" autocomplete="new-password" aria-describedby="workflow-protection-new-hint"><button class="input-action" type="button" data-toggle-password="workflow-protection-new" aria-label="显示密码" aria-pressed="false">显示</button></div><p id="workflow-protection-new-hint" class="field-hint">至少 10 个字符，并包含字母和数字；不会保存明文密码。</p></div>
+            <div class="form-group"><label for="workflow-protection-confirm">确认新密码</label><div class="input-with-action"><input id="workflow-protection-confirm" type="password" minlength="10" autocomplete="new-password"><button class="input-action" type="button" data-toggle-password="workflow-protection-confirm" aria-label="显示密码" aria-pressed="false">显示</button></div></div>
+          </div>
+          <button id="workflow-protection-recover" class="text-button" type="button">忘记编辑密码？使用主密码重设</button>
+          <div id="workflow-protection-error" class="error hidden" role="alert"></div>
+          <div class="modal-actions"><button id="workflow-protection-disable" class="btn btn-danger hidden" type="button">关闭保护</button><button class="btn btn-secondary" type="button" data-close-modal="workflow-protection-modal">取消</button><button id="workflow-protection-submit" class="btn btn-primary" type="submit">验证并编辑</button></div>
+        </form>
+      </div>
+    </div>
+
     <div id="workflow-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-edit-title">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">加密保存</p><h2 id="workflow-edit-title">新建使用场景</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-edit-modal" aria-label="关闭">×</button></div>
@@ -503,6 +520,7 @@
           <div class="settings-links">
             <button id="install-app" class="btn btn-primary hidden" type="button">安装到主屏幕/桌面</button>
             <button id="groups-open" class="btn btn-secondary" type="button">管理分组</button>
+            <button id="workflow-password-manage" class="btn btn-secondary" type="button">设置场景编辑密码</button>
             <button id="change-password-open" class="btn btn-secondary" type="button">修改主密码</button>
             <button id="login-other" class="btn btn-secondary" type="button">登录其他账户</button>
             <a class="btn btn-secondary" href="/admin.html">管理后台</a>

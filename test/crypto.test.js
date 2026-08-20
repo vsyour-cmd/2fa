@@ -6,6 +6,7 @@ import {
   deriveKey,
   deriveKeyHash,
   deriveQuickUnlockHash,
+  deriveWorkflowProtectionHash,
   encryptBackup,
   encryptJson,
   generateSalt,
@@ -52,5 +53,13 @@ describe('vault cryptography', () => {
     expect(first).toMatch(/^[a-f0-9]{64}$/);
     await expect(deriveQuickUnlockHash('123456', salt, '个人', 1_000)).resolves.toBe(first);
     await expect(deriveQuickUnlockHash('123456', salt, '工作', 1_000)).resolves.not.toBe(first);
+  });
+
+  it('derives salted, account-scoped hashes for workflow edit passwords', async () => {
+    const salt = generateSalt();
+    const first = await deriveWorkflowProtectionHash('workflow pass 123', salt, '个人', 1_000);
+    expect(first).toMatch(/^[a-f0-9]{64}$/);
+    await expect(deriveWorkflowProtectionHash('workflow pass 123', salt, '个人', 1_000)).resolves.toBe(first);
+    await expect(deriveWorkflowProtectionHash('workflow pass 123', salt, '工作', 1_000)).resolves.not.toBe(first);
   });
 });

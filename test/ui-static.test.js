@@ -29,8 +29,8 @@ describe('static application shell', () => {
     expect(styles).toContain('.app-booting .app-boot-screen { display: grid; }');
     expect(styles).toContain('.app-booting .shell { display: none; }');
     expect(app).toContain("document.documentElement.classList.remove('app-booting')");
-    expect(app).toMatch(/function showAuthScreen[\s\S]*?finishInitialBoot\(\);\n}/);
-    expect(app).toMatch(/function showMainApp[\s\S]*?finishInitialBoot\(\);\n}/);
+    expect(app).toMatch(/function showAuthScreen[\s\S]*?finishInitialBoot\(\);\r?\n}/);
+    expect(app).toMatch(/function showMainApp[\s\S]*?finishInitialBoot\(\);\r?\n}/);
   });
 
   it('does not clear the saved session when a page refresh looks like a background transition', () => {
@@ -67,11 +67,23 @@ describe('static application shell', () => {
   });
 
   it('contains the core accessible views and dialogs', () => {
-    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'token-workflow-modal', 'workflow-edit-modal', 'workflow-run-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
+    for (const id of ['unlock-screen', 'main-app', 'token-list', 'add-modal', 'quick-group-modal', 'token-workflow-modal', 'workflow-protection-modal', 'workflow-edit-modal', 'workflow-run-modal', 'confirm-modal', 'rename-group-modal', 'settings-modal', 'import-modal', 'conflict-modal']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('role="dialog"');
+  });
+
+  it('requires a hashed secondary password before editing workflow content', () => {
+    expect(html).toContain('id="workflow-protection-modal"');
+    expect(html).toContain('id="workflow-password-manage"');
+    expect(html).toContain('忘记编辑密码？使用主密码重设');
+    expect(app).toContain('deriveWorkflowProtectionHash');
+    expect(app).toContain('WORKFLOW_EDIT_UNLOCK_MS');
+    expect(app).toMatch(/function openWorkflowEditor[\s\S]*?workflowEditAccessActive\(\)/);
+    expect(app).toContain('state.workflowEditUnlockedUntil = Date.now() + WORKFLOW_EDIT_UNLOCK_MS');
+    expect(app).toContain('await aesKeysEqual(masterKey, state.masterKey)');
+    expect(app).not.toContain('workflowProtection.password');
   });
 
   it('dismisses modal backdrops only after a stationary pointer gesture', () => {
@@ -222,7 +234,8 @@ describe('static application shell', () => {
       'login-password', 'quick-unlock-pin', 'new-password', 'confirm-password',
       'add-secret', 'edit-secret', 'quick-unlock-new-pin', 'quick-unlock-confirm-pin',
       'import-password', 'export-password', 'current-password', 'changed-password',
-      'changed-password-confirm',
+      'changed-password-confirm', 'workflow-protection-current', 'workflow-protection-new',
+      'workflow-protection-confirm',
     ];
     for (const field of sensitiveFields) {
       expect(html).toContain(`data-toggle-password="${field}"`);

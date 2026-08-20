@@ -1,12 +1,14 @@
 import {
   PBKDF2_ITERATIONS,
   QUICK_UNLOCK_ITERATIONS,
+  WORKFLOW_PROTECTION_ITERATIONS,
   VAULT_VERSION,
   aesKeysEqual,
   decryptJson,
   deriveKey,
   deriveKeyHash,
   deriveQuickUnlockHash,
+  deriveWorkflowProtectionHash,
   encryptBackup,
   encryptJson,
   exportAesKey,
@@ -105,6 +107,7 @@ const LAST_EXPORT_KEY = '2fa_last_export_v1';
 const BACKUP_DISMISSED_KEY = '2fa_backup_reminder_dismissed_v1';
 const BACKUP_REMINDER_DAYS = 30;
 const RECENT_USAGE_WINDOW_MS = 7 * 86_400_000;
+const WORKFLOW_EDIT_UNLOCK_MS = 5 * 60_000;
 const state = {
   masterKey: null,
   keyHash: '',
@@ -115,6 +118,9 @@ const state = {
   deletedItems: [],
   workflowNotes: [],
   deletedWorkflowNotes: [],
+  workflowProtection: null,
+  workflowEditUnlockedUntil: 0,
+  pendingWorkflowEditorId: null,
   settings: loadSettings(),
   search: '',
   groupFilter: '__all',
@@ -155,6 +161,7 @@ function vaultPayload() {
     deletedItems: state.deletedItems,
     workflowNotes: state.workflowNotes,
     deletedWorkflowNotes: state.deletedWorkflowNotes,
+    workflowProtection: state.workflowProtection,
   };
 }
 
@@ -164,6 +171,9 @@ function useVaultData(raw) {
   state.deletedItems = normalized.deletedItems;
   state.workflowNotes = normalized.workflowNotes;
   state.deletedWorkflowNotes = normalized.deletedWorkflowNotes;
+  state.workflowProtection = normalized.workflowProtection;
+  state.workflowEditUnlockedUntil = 0;
+  state.pendingWorkflowEditorId = null;
 }
 
 function clearSensitiveState() {
@@ -175,6 +185,9 @@ function clearSensitiveState() {
   state.deletedItems = [];
   state.workflowNotes = [];
   state.deletedWorkflowNotes = [];
+  state.workflowProtection = null;
+  state.workflowEditUnlockedUntil = 0;
+  state.pendingWorkflowEditorId = null;
   state.keyIterations = PBKDF2_ITERATIONS.CURRENT;
   state.search = '';
   state.groupFilter = '__all';
@@ -480,6 +493,8 @@ async function setupAccount(password, accountName) {
   state.deletedItems = [];
   state.workflowNotes = [];
   state.deletedWorkflowNotes = [];
+  state.workflowProtection = null;
+  state.workflowEditUnlockedUntil = 0;
   const saved = await saveVault({ silent: true });
   if (!saved) throw new Error('无法将新账户保存到云端');
   await rememberCurrentSession();
@@ -1282,7 +1297,56 @@ function renderWorkflowKeyPicker() {
   }).join('');
 }
 
+function workflowEditAccessActive() {
+  return Boolean(state.workflowProtection && state.workflowEditUnlockedUntil > Date.now());
+}
+
+function openWorkflowProtectionModal(mode, pendingEditorId = null) {
+  const configured = Boolean(state.workflowProtection);
+  const effectiveMode = mode === 'manage' && !configured ? 'setup' : mode;
+  state.pendingWorkflowEditorId = pendingEditorId;
+  const modal = $('#workflow-protection-modal');
+  modal.dataset.mode = effectiveMode;
+  $('#workflow-protection-form').reset();
+  hideError('#workflow-protection-error');
+  concealSensitiveFields(modal);
+  const needsCurrent = effectiveMode !== 'setup';
+  const needsNew = effectiveMode !== 'unlock';
+  setHidden('#workflow-protection-current-group', !needsCurrent);
+  setHidden('#workflow-protection-new-fields', !needsNew);
+  setHidden('#workflow-protection-disable', effectiveMode !== 'manage' || !configured);
+  setHidden('#workflow-protection-recover', effectiveMode === 'setup' || effectiveMode === 'recover');
+  const titles = {
+    setup: '设置场景编辑密码',
+    unlock: '验证场景编辑密码',
+    manage: '修改场景编辑密码',
+    recover: '使用主密码重设',
+  };
+  const descriptions = {
+    setup: '首次新增或编辑使用场景前，请设置独立密码。密码只保存为加盐哈希。',
+    unlock: '使用场景可能包含敏感信息，验证后 5 分钟内可继续编辑。',
+    manage: '验证当前编辑密码后，可以设置新的场景编辑密码。',
+    recover: '忘记场景编辑密码时，可验证保险库主密码并设置新密码。',
+  };
+  $('#workflow-protection-title').textContent = titles[effectiveMode];
+  $('#workflow-protection-description').textContent = descriptions[effectiveMode];
+  $('#workflow-protection-current-label').textContent = effectiveMode === 'recover' ? '保险库主密码' : '场景编辑密码';
+  $('#workflow-protection-current').autocomplete = effectiveMode === 'recover' ? 'current-password' : 'off';
+  $('#workflow-protection-submit').textContent = effectiveMode === 'unlock' ? '验证并编辑' : effectiveMode === 'manage' ? '保存新密码' : '设置密码';
+  const focusSelector = needsCurrent ? '#workflow-protection-current' : '#workflow-protection-new';
+  if (modal.classList.contains('hidden')) openModal('workflow-protection-modal', focusSelector);
+  else requestAnimationFrame(() => $(focusSelector, modal)?.focus());
+}
+
 function openWorkflowEditor(id = '') {
+  if (workflowEditAccessActive()) {
+    showWorkflowEditor(id);
+    return;
+  }
+  openWorkflowProtectionModal(state.workflowProtection ? 'unlock' : 'setup', id);
+}
+
+function showWorkflowEditor(id = '') {
   const note = state.workflowNotes.find((item) => item.id === id);
   $('#workflow-form').reset();
   closeWorkflowKeyDropdown();
@@ -1296,6 +1360,72 @@ function openWorkflowEditor(id = '') {
   renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
   openModal('workflow-edit-modal', '#workflow-title');
+}
+
+async function verifyWorkflowProtectionPassword(password) {
+  const protection = state.workflowProtection;
+  if (!protection) return false;
+  const derived = await deriveWorkflowProtectionHash(password, protection.salt, state.accountName, protection.iterations);
+  return hashesEqual(derived, protection.hash);
+}
+
+async function saveWorkflowProtectionFromForm(event) {
+  event.preventDefault();
+  hideError('#workflow-protection-error');
+  const mode = $('#workflow-protection-modal').dataset.mode;
+  const button = $('#workflow-protection-submit');
+  setBusy(button, true, mode === 'unlock' ? '正在验证…' : '正在保存…');
+  try {
+    const currentPassword = $('#workflow-protection-current').value;
+    if (mode === 'unlock') {
+      if (!await verifyWorkflowProtectionPassword(currentPassword)) throw new Error('场景编辑密码错误');
+    } else {
+      if (mode === 'manage' && !await verifyWorkflowProtectionPassword(currentPassword)) throw new Error('当前场景编辑密码错误');
+      if (mode === 'recover') {
+        const masterKey = await deriveKey(currentPassword, state.salt, state.keyIterations);
+        if (!await aesKeysEqual(masterKey, state.masterKey)) throw new Error('保险库主密码错误');
+      }
+      const nextPassword = $('#workflow-protection-new').value;
+      const confirmation = $('#workflow-protection-confirm').value;
+      const validation = validatePassword(nextPassword);
+      if (!validation.valid) throw new Error(validation.error);
+      if (nextPassword !== confirmation) throw new Error('两次输入的场景编辑密码不一致');
+      const salt = generateSalt();
+      state.workflowProtection = {
+        salt,
+        hash: await deriveWorkflowProtectionHash(nextPassword, salt, state.accountName, WORKFLOW_PROTECTION_ITERATIONS),
+        iterations: WORKFLOW_PROTECTION_ITERATIONS,
+      };
+      await saveVault();
+    }
+    state.workflowEditUnlockedUntil = Date.now() + WORKFLOW_EDIT_UNLOCK_MS;
+    const pendingEditorId = state.pendingWorkflowEditorId;
+    closeModal('workflow-protection-modal', false);
+    if (pendingEditorId !== null) showWorkflowEditor(pendingEditorId);
+    else showToast(mode === 'manage' || mode === 'recover' ? '场景编辑密码已更新' : '场景编辑密码已设置');
+  } catch (error) {
+    showError('#workflow-protection-error', error.message || '场景编辑密码处理失败');
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function disableWorkflowProtection() {
+  hideError('#workflow-protection-error');
+  const button = $('#workflow-protection-disable');
+  setBusy(button, true, '正在关闭…');
+  try {
+    if (!await verifyWorkflowProtectionPassword($('#workflow-protection-current').value)) throw new Error('当前场景编辑密码错误');
+    state.workflowProtection = null;
+    state.workflowEditUnlockedUntil = 0;
+    await saveVault();
+    closeModal('workflow-protection-modal');
+    showToast('场景编辑密码已关闭');
+  } catch (error) {
+    showError('#workflow-protection-error', error.message || '无法关闭场景编辑密码');
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 async function saveWorkflowNote(event) {
@@ -2174,6 +2304,7 @@ function exportedVault(keys = exportKeys()) {
     deletedItems: selectedExport ? [] : state.deletedItems,
     workflowNotes: selectedExport ? [] : state.workflowNotes,
     deletedWorkflowNotes: selectedExport ? [] : state.deletedWorkflowNotes,
+    workflowProtection: selectedExport ? null : state.workflowProtection,
   };
 }
 
@@ -2283,6 +2414,7 @@ function fillSettingsForm() {
   $('#quick-unlock-enabled').checked = Boolean(getQuickUnlockConfig(state.accountName));
   $('#quick-unlock-new-pin').value = '';
   $('#quick-unlock-confirm-pin').value = '';
+  $('#workflow-password-manage').textContent = state.workflowProtection ? '修改场景编辑密码' : '设置场景编辑密码';
   hideError('#settings-error');
   renderQuickUnlockSettings();
   updateInstallButton();
@@ -2732,6 +2864,14 @@ function setupEvents() {
     applyWorkflowColumnsPerRow(true);
   });
   $('#workflow-form').addEventListener('submit', saveWorkflowNote);
+  $('#workflow-protection-form').addEventListener('submit', saveWorkflowProtectionFromForm);
+  $('#workflow-protection-disable').addEventListener('click', disableWorkflowProtection);
+  $('#workflow-protection-recover').addEventListener('click', () => openWorkflowProtectionModal('recover', state.pendingWorkflowEditorId));
+  $('#workflow-protection-modal').addEventListener('modal:close', () => {
+    state.pendingWorkflowEditorId = null;
+    $('#workflow-protection-form').reset();
+    hideError('#workflow-protection-error');
+  });
   $('#workflow-edit-modal').addEventListener('modal:close', () => {
     state.editingWorkflowLinks = [];
     $('#workflow-key-filter').value = '';
@@ -3053,6 +3193,7 @@ function setupEvents() {
     hideError('#change-password-error');
     openModal('change-password-modal', '#current-password');
   });
+  $('#workflow-password-manage').addEventListener('click', () => openWorkflowProtectionModal('manage'));
   $('#change-password-form').addEventListener('submit', changeMasterPassword);
   for (const button of $$('[data-conflict]')) button.addEventListener('click', () => resolveConflict(button.dataset.conflict));
 

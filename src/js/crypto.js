@@ -8,6 +8,7 @@ export const PBKDF2_ITERATIONS = Object.freeze({
 
 export const VAULT_VERSION = 3;
 export const QUICK_UNLOCK_ITERATIONS = 200_000;
+export const WORKFLOW_PROTECTION_ITERATIONS = 300_000;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -86,6 +87,16 @@ export async function deriveKey(password, salt, iterations = PBKDF2_ITERATIONS.C
 export async function deriveQuickUnlockHash(pin, salt, accountName, iterations = QUICK_UNLOCK_ITERATIONS) {
   const material = await importPassword(pin, ['deriveBits']);
   const scopedSalt = concatBytes(base64ToBytes(salt), encoder.encode(normalizeAccountName(accountName).normalize('NFKC')));
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: scopedSalt, iterations, hash: 'SHA-256' }, material, 256);
+  return bytesToHex(new Uint8Array(bits));
+}
+
+export async function deriveWorkflowProtectionHash(password, salt, accountName, iterations = WORKFLOW_PROTECTION_ITERATIONS) {
+  const material = await importPassword(password, ['deriveBits']);
+  const scopedSalt = concatBytes(
+    base64ToBytes(salt),
+    encoder.encode(`workflow-edit:${normalizeAccountName(accountName).normalize('NFKC')}`),
+  );
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: scopedSalt, iterations, hash: 'SHA-256' }, material, 256);
   return bytesToHex(new Uint8Array(bits));
 }
