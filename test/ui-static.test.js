@@ -33,6 +33,19 @@ describe('static application shell', () => {
     expect(app).toMatch(/function showMainApp[\s\S]*?finishInitialBoot\(\);\n}/);
   });
 
+  it('does not clear the saved session when a page refresh looks like a background transition', () => {
+    expect(app).toContain('hiddenLockTimer: null');
+    expect(app).toContain("document.addEventListener('visibilitychange'");
+    expect(app).toContain('state.hiddenLockTimer = setTimeout(() => {');
+    expect(app).toContain("}, 300)");
+    expect(app).toMatch(/window\.addEventListener\('beforeunload'[\s\S]*?clearTimeout\(state\.hiddenLockTimer\)/);
+    expect(app).toContain("recordSource = 'cloud'");
+    expect(app).toContain("record.version || VAULT_VERSION");
+    expect(app).toContain("console.warn('Session cloud snapshot cache failed:'");
+    expect(app).toContain('for (const accountName of sessionAccounts)');
+    expect(app).toContain('if (await restoreSession(accountName)) return');
+  });
+
   it('shows the verified Cloudflare Access identity without replacing the vault master password', () => {
     expect(html.match(/data-access-identity/g)).toHaveLength(2);
     expect(html.match(/data-access-email/g)).toHaveLength(2);
@@ -104,6 +117,11 @@ describe('static application shell', () => {
     expect(html).toContain('id="columns-quick"');
     expect(app).toContain("columnsPerRow: event.target.value");
     expect(app).toContain("grid.dataset.columns = value");
+    expect(html).toContain('id="workflow-columns"');
+    expect(app).toContain("workflowColumnsPerRow: event.target.value");
+    expect(app).toContain('function applyWorkflowColumnsPerRow');
+    expect(styles).toContain('.workflow-note-grid[data-columns="4"]');
+    expect(styles).toContain('.workflow-heading-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }');
   });
 
   it('supports encrypted notes when adding, editing, displaying, and searching keys', () => {
@@ -415,6 +433,9 @@ describe('static application shell', () => {
     expect(app).toContain("button.classList.add('syncing')");
     expect(app).toContain('showToast(result.message');
     expect(styles).toContain('.icon-btn.syncing svg { animation: app-boot-spin 900ms linear infinite; }');
+    expect(app).toContain('const uploaded = await saveVault({ silent: true })');
+    expect(app).toContain("{ ok: false, message: '云端暂无数据，但上传失败；更改已保存在本机' }");
+    expect(app).toContain('cloud.version || VAULT_VERSION');
   });
 
   it('shows offline migration QR codes and limits quick PIN unlock to a short in-tab cache', () => {

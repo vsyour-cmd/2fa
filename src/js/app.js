@@ -121,6 +121,7 @@ const state = {
   renderVersion: 0,
   updateTimer: null,
   autoLockTimer: null,
+  hiddenLockTimer: null,
   saveTimer: null,
   clipboardTimer: null,
   pendingCodeCopies: new Map(),
@@ -198,6 +199,8 @@ function clearSensitiveState() {
   }
   state.pendingCodeCopies.clear();
   clearTimeout(state.autoLockTimer);
+  clearTimeout(state.hiddenLockTimer);
+  state.hiddenLockTimer = null;
   if (state.updateTimer) clearInterval(state.updateTimer);
   state.updateTimer = null;
   qrScanner?.stop();
@@ -393,11 +396,15 @@ async function unlockWithPassword(password, accountName) {
 
   for (const candidate of candidates) {
     let record = null;
+    let recordSource = '';
     let accessBlockedMessage = '';
     if (offline.isOnline) {
       try {
         const cloud = await loadCloudRecord(candidate.hash, normalizedAccount);
-        if (cloud.exists) record = cloud;
+        if (cloud.exists) {
+          record = cloud;
+          recordSource = 'cloud';
+        }
       } catch (error) {
         // Surface security rejections instead of masking them as a wrong password.
         // A 403 (Access denied / vault bound to another Access user) still lets the
@@ -409,7 +416,10 @@ async function unlockWithPassword(password, accountName) {
     }
     if (!record) {
       const cached = await offline.get(candidate.hash);
-      if (cached) record = cached;
+      if (cached) {
+        record = cached;
+        recordSource = 'offline';
+      }
     }
     if (!record) {
       if (accessBlockedMessage) throw new ApiError(`云端同步不可用：${accessBlockedMessage}`, 403);
@@ -424,6 +434,19 @@ async function unlockWithPassword(password, accountName) {
       state.accountName = normalizedAccount;
       state.keyIterations = candidate.iterations;
       useVaultData(raw);
+      if (recordSource === 'cloud') {
+        try {
+          await offline.save(
+            candidate.hash,
+            record.encryptedData,
+            record.salt,
+            record.version || VAULT_VERSION,
+            record.updatedAt,
+          );
+        } catch (cacheError) {
+          console.warn('Cloud snapshot cache failed:', cacheError);
+        }
+      }
       if (candidate.mode !== 'scoped' && offline.isOnline) await migrateLegacyVault(password, candidate.hash);
       await rememberCurrentSession();
       if (accessBlockedMessage) showToast(`云端同步不可用：${accessBlockedMessage}，当前显示本机缓存`, { duration: 8_000 });
@@ -472,24 +495,46 @@ async function restoreSession(accountName) {
     state.accountName = normalizeAccountName(session.accountName);
     state.keyIterations = Number(session.keyIterations || PBKDF2_ITERATIONS.CURRENT);
     let record = null;
+    let recordSource = '';
     let accessBlockedMessage = '';
     if (offline.isOnline) {
       try {
         const cloud = await loadCloudRecord(state.keyHash, state.accountName);
-        if (cloud.exists) record = cloud;
+        if (cloud.exists) {
+          record = cloud;
+          recordSource = 'cloud';
+        }
       } catch (error) {
         if (error instanceof ApiError && error.status === 423) throw error;
         if (error instanceof ApiError && error.status === 403) accessBlockedMessage = error.message;
         console.warn('Session cloud load failed:', error);
       }
     }
-    if (!record) record = await offline.get(state.keyHash);
     if (!record) {
-      throw accessBlockedMessage
-        ? new Error(`云端同步不可用：${accessBlockedMessage}`)
-        : new Error('会话数据不存在');
+      record = await offline.get(state.keyHash);
+      if (record) recordSource = 'offline';
+    }
+    if (!record) {
+      console.warn(accessBlockedMessage
+        ? `Session data unavailable: ${accessBlockedMessage}`
+        : 'Session data unavailable');
+      clearSensitiveState();
+      return false;
     }
     useVaultData(await decryptJson(record.encryptedData, state.masterKey));
+    if (recordSource === 'cloud') {
+      try {
+        await offline.save(
+          state.keyHash,
+          record.encryptedData,
+          record.salt,
+          record.version || VAULT_VERSION,
+          record.updatedAt,
+        );
+      } catch (cacheError) {
+        console.warn('Session cloud snapshot cache failed:', cacheError);
+      }
+    }
     setActiveAccount(state.accountName);
     showMainApp();
     if (accessBlockedMessage) showToast(`云端同步不可用：${accessBlockedMessage}，当前显示本机缓存`, { duration: 8_000 });
@@ -1007,6 +1052,7 @@ function renderWorkflowNotes() {
   $('#tokens-tab-count').textContent = String(state.keys.length);
   $('#workflow-tab-count').textContent = String(state.workflowNotes.length);
   $('#workflow-sort').value = state.settings.workflowSortMode;
+  applyWorkflowColumnsPerRow();
   renderWorkflowGroupFilters();
   const total = state.workflowNotes.length;
   const activeFilterCount = Number(Boolean(state.workflowSearch)) + Number(state.workflowGroupFilter !== '__all');
@@ -1052,6 +1098,17 @@ function renderWorkflowNotes() {
         <div class="workflow-note-actions"><button class="btn btn-primary" type="button" data-workflow-action="run">开始操作</button><div class="workflow-note-secondary-actions"><button class="small-btn" type="button" data-workflow-action="edit">编辑</button><button class="small-btn delete" type="button" data-workflow-action="delete">移入回收站</button></div></div>
       </article>`;
   }).join('');
+}
+
+function applyWorkflowColumnsPerRow(announce = false) {
+  const grid = $('#workflow-note-list');
+  const value = ['auto', '1', '2', '3', '4'].includes(String(state.settings.workflowColumnsPerRow))
+    ? String(state.settings.workflowColumnsPerRow)
+    : 'auto';
+  if (value === 'auto') grid.removeAttribute('data-columns');
+  else grid.dataset.columns = value;
+  $('#workflow-columns').value = value;
+  if (announce) showToast(value === 'auto' ? '使用场景已启用自动列数' : `使用场景每行显示 ${value} 个`);
 }
 
 function clearTokenFilters() {
@@ -2367,8 +2424,10 @@ async function performSyncCheck() {
     const cloud = await loadCloudRecord(state.keyHash);
     const local = await offline.get(state.keyHash);
     if (!cloud.exists) {
-      await saveVault();
-      return { ok: true, message: '云端暂无数据，已将本地保险库上传' };
+      const uploaded = await saveVault({ silent: true });
+      return uploaded
+        ? { ok: true, uploaded: true, message: '云端暂无数据，已将本地保险库上传' }
+        : { ok: false, message: '云端暂无数据，但上传失败；更改已保存在本机' };
     }
     if (local && offline.detectConflict(local, cloud.updatedAt)) {
       state.conflict = { local, cloud };
@@ -2390,7 +2449,7 @@ async function performSyncCheck() {
     const cloudRaw = await decryptJson(cloud.encryptedData, state.masterKey);
     const changed = previousPayload !== JSON.stringify(normalizeVaultData(cloudRaw));
     useVaultData(cloudRaw);
-    await offline.save(state.keyHash, cloud.encryptedData, state.salt, VAULT_VERSION, cloud.updatedAt);
+    await offline.save(state.keyHash, cloud.encryptedData, cloud.salt, cloud.version || VAULT_VERSION, cloud.updatedAt);
     renderAll();
     return { ok: true, changed, message: changed ? '已从云端拉取最新数据' : '已与云端同步，数据是最新的' };
   } catch (error) {
@@ -2441,7 +2500,13 @@ async function resolveConflict(choice) {
       showToast('已使用本地数据并同步到云端');
     } else {
       useVaultData(await decryptJson(state.conflict.cloud.encryptedData, state.masterKey));
-      await offline.save(state.keyHash, state.conflict.cloud.encryptedData, state.salt, VAULT_VERSION, state.conflict.cloud.updatedAt);
+      await offline.save(
+        state.keyHash,
+        state.conflict.cloud.encryptedData,
+        state.conflict.cloud.salt,
+        state.conflict.cloud.version || VAULT_VERSION,
+        state.conflict.cloud.updatedAt,
+      );
       showToast('已使用云端数据');
     }
     state.conflict = null;
@@ -2662,6 +2727,10 @@ function setupEvents() {
   $('#workflow-add-open').addEventListener('click', () => openWorkflowEditor());
   $('[data-action="open-workflow-add"]').addEventListener('click', () => openWorkflowEditor());
   $('#workflow-sort').addEventListener('change', (event) => applyWorkflowSortMode(event.target.value, true));
+  $('#workflow-columns').addEventListener('change', (event) => {
+    state.settings = saveSettings({ ...state.settings, workflowColumnsPerRow: event.target.value });
+    applyWorkflowColumnsPerRow(true);
+  });
   $('#workflow-form').addEventListener('submit', saveWorkflowNote);
   $('#workflow-edit-modal').addEventListener('modal:close', () => {
     state.editingWorkflowLinks = [];
@@ -3025,11 +3094,26 @@ function setupEvents() {
   const activityEvents = ['pointerdown', 'keydown', 'touchstart'];
   activityEvents.forEach((name) => document.addEventListener(name, resetAutoLockTimer, { passive: true }));
   document.addEventListener('visibilitychange', () => {
+    clearTimeout(state.hiddenLockTimer);
+    state.hiddenLockTimer = null;
     if (!document.hidden) return;
     qrScanner?.stop();
-    if (state.masterKey && state.settings.lockOnHidden) lockAll('页面进入后台，保险库已锁定', true);
+    if (state.masterKey && state.settings.lockOnHidden) {
+      // Refresh/navigation also emits visibilitychange. Delay the lock so an
+      // unloading document is destroyed before it can erase sessionStorage.
+      state.hiddenLockTimer = setTimeout(() => {
+        state.hiddenLockTimer = null;
+        if (document.hidden && state.masterKey && state.settings.lockOnHidden) {
+          lockAll('页面进入后台，保险库已锁定', true);
+        }
+      }, 300);
+    }
   });
-  window.addEventListener('beforeunload', () => qrScanner?.stop());
+  window.addEventListener('beforeunload', () => {
+    clearTimeout(state.hiddenLockTimer);
+    state.hiddenLockTimer = null;
+    qrScanner?.stop();
+  });
 }
 
 function setupQrScanner() {
@@ -3132,7 +3216,11 @@ async function init() {
   const active = getActiveAccount();
   const sessionAccounts = Object.values(getSessions()).map((session) => session.accountName);
   if (active && await restoreSession(active)) return;
-  if (sessionAccounts.length > 0 && await restoreSession(sessionAccounts[0])) return;
+  const activeId = normalizeAccountName(active).toLocaleLowerCase('en-US');
+  for (const accountName of sessionAccounts) {
+    if (activeId && normalizeAccountName(accountName).toLocaleLowerCase('en-US') === activeId) continue;
+    if (await restoreSession(accountName)) return;
+  }
   showAuthScreen(active);
 }
 

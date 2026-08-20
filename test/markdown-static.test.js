@@ -42,4 +42,11 @@ describe('safe Markdown rendering', () => {
       expect(rendered).not.toContain('<strong>');
     }
   });
+
+  it('preserves password whitespace and avoids collisions with literal mask-token text', () => {
+    expect(markdown).toContain("return String(value || '').trim()");
+    expect(markdown).not.toContain("replace(/\\s+/g, ' ')");
+    expect(markdown).toContain("while (source.includes(tokenPrefix)) tokenPrefix += 'X'");
+    expect(markdown).toContain('if (!raw) return marker');
+  });
 });

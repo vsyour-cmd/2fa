@@ -424,7 +424,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 #workflow-list-summary { flex: 0 0 auto; color: var(--text-soft); font-size: 0.75rem; font-weight: 760; }
 .workflow-filter-bar .active-filter-reset { min-height: 42px; }
 .workflow-note-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.workflow-note-card { position: relative; min-width: 0; padding: 18px; overflow: hidden; border-radius: var(--radius); box-shadow: var(--shadow-small); }
+.workflow-note-grid[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
+.workflow-note-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.workflow-note-grid[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.workflow-note-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.workflow-note-card { position: relative; min-width: 0; padding: 18px; overflow: hidden; container-name: workflow-card; container-type: inline-size; border-radius: var(--radius); box-shadow: var(--shadow-small); }
 .workflow-note-card.frequent::before { position: absolute; top: 0; right: 18px; left: 18px; height: 2px; content: ''; background: linear-gradient(90deg, transparent, var(--primary), transparent); opacity: 0.75; }
 .workflow-note-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .workflow-note-header .favorite-btn { width: 44px; height: 44px; flex-basis: 44px; }
@@ -445,6 +449,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .workflow-note-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
 .workflow-note-secondary-actions { display: flex; gap: 6px; }
 .workflow-note-actions .btn { flex: 1; }
+@container workflow-card (max-width: 300px) {
+  .workflow-note-actions { align-items: stretch; flex-direction: column; }
+  .workflow-note-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workflow-note-secondary-actions .small-btn { width: 100%; }
+}
 .token-workflow-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
 .token-workflow-heading p { margin: 0; color: var(--text-soft); font-size: 0.82rem; font-weight: 720; }
 .token-workflow-heading span { color: var(--primary); font-size: 0.74rem; font-weight: 800; white-space: nowrap; }
@@ -664,7 +673,12 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .favorite-btn { width: 44px; height: 44px; flex-basis: 44px; }
   .token-grid, .token-grid[data-columns="1"] { grid-template-columns: 1fr; }
   .token-grid[data-columns="2"], .token-grid[data-columns="3"], .token-grid[data-columns="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .workflow-note-grid { grid-template-columns: 1fr; }
+  .workflow-note-grid, .workflow-note-grid[data-columns="1"] { grid-template-columns: 1fr; }
+  .workflow-note-grid[data-columns="2"], .workflow-note-grid[data-columns="3"], .workflow-note-grid[data-columns="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workflow-heading { align-items: stretch; flex-direction: column; gap: 14px; }
+  .workflow-heading-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+  .workflow-heading-buttons { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workflow-heading-actions select, .workflow-heading-actions .btn { width: 100%; }
   .workflow-filter-bar { align-items: stretch; flex-direction: column; gap: 7px; }
   .workflow-group-filter-wrap { width: 100%; min-width: 0; }
   #workflow-list-summary { padding: 0 3px; text-align: right; }
@@ -697,6 +711,7 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .token-item { padding: 15px; }
   .token-code-panel { padding: 10px; }
   .token-grid, .token-grid[data-columns] { grid-template-columns: 1fr; }
+  .workflow-note-grid, .workflow-note-grid[data-columns] { grid-template-columns: 1fr; }
   .standard-actions { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .modal-actions { display: grid; grid-template-columns: 1fr; }
   .standard-actions .btn, .modal-actions .btn { width: 100%; }
@@ -715,7 +730,7 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .import-preview-header > span { display: block; margin-top: 4px; text-align: left; }
   .workflow-heading { align-items: stretch; flex-direction: column; gap: 14px; }
   .workflow-heading-actions { display: grid; grid-template-columns: 1fr; align-items: end; }
-  .workflow-heading-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workflow-heading-buttons { grid-column: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-heading-actions select, .workflow-heading-actions .btn { width: 100%; }
   .workflow-note-actions { align-items: stretch; flex-direction: column; }
   .workflow-note-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

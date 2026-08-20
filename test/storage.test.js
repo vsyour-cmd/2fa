@@ -18,6 +18,7 @@ describe('settings migration', () => {
     expect(loadSettings().sortMode).toBe('smart');
     expect(loadSettings().workflowSortMode).toBe('smart');
     expect(loadSettings().columnsPerRow).toBe('auto');
+    expect(loadSettings().workflowColumnsPerRow).toBe('auto');
     expect(DEFAULT_SETTINGS.settingsVersion).toBe(3);
   });
 
@@ -33,6 +34,8 @@ describe('settings migration', () => {
     vi.stubGlobal('localStorage', memoryStorage());
     expect(saveSettings({ ...DEFAULT_SETTINGS, columnsPerRow: '4' }).columnsPerRow).toBe('4');
     expect(saveSettings({ ...DEFAULT_SETTINGS, columnsPerRow: '9' }).columnsPerRow).toBe('auto');
+    expect(saveSettings({ ...DEFAULT_SETTINGS, workflowColumnsPerRow: '3' }).workflowColumnsPerRow).toBe('3');
+    expect(saveSettings({ ...DEFAULT_SETTINGS, workflowColumnsPerRow: '9' }).workflowColumnsPerRow).toBe('auto');
   });
 
   it('persists the oldest-used sorting mode', () => {
