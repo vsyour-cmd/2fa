@@ -5,6 +5,7 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const app = await readFile(new URL('../src/js/app.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const ui = await readFile(new URL('../src/js/ui.js', import.meta.url), 'utf8');
+const passwordGenerator = await readFile(new URL('../src/js/password-generator.js', import.meta.url), 'utf8');
 
 describe('static application shell', () => {
   it('uses a strict CSP and contains no inline event handlers', () => {
@@ -379,6 +380,24 @@ describe('static application shell', () => {
     expect(app).not.toContain('importScope');
     expect(app).not.toContain('exportScope');
     expect(styles).toContain('.settings-backup-panel { display: flex;');
+  });
+
+  it('provides a secure non-persistent random password generator in settings', () => {
+    expect(html).toContain('id="password-generator-open"');
+    expect(html).toContain('id="password-generator-modal"');
+    expect(html).toContain('密码不会上传或保存，关闭弹窗后立即清空');
+    for (const id of ['password-lowercase', 'password-uppercase', 'password-numbers', 'password-symbols', 'password-length', 'password-count', 'password-exclude-enabled', 'password-excluded-chars', 'password-copy-all']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(app).toContain("generatePasswords(passwordGeneratorOptions())");
+    expect(app).toContain("generatedPasswords.fill('')");
+    expect(app).toMatch(/function clearSensitiveState[\s\S]*?clearGeneratedPasswords\(\)/);
+    expect(app).toContain("$('#password-generator-modal').addEventListener('modal:close'");
+    expect(app).toContain("copyText(generatedPasswords.join('\\n')");
+    expect(passwordGenerator).toContain('cryptoSource.getRandomValues(value)');
+    expect(passwordGenerator).toContain('Math.floor(UINT32_RANGE / max) * max');
+    expect(styles).toContain('.password-character-options { display: grid;');
+    expect(styles).toContain('.password-result-row { display: flex;');
   });
 
   it('waits for a fresh verification code during the final second', () => {

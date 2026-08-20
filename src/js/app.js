@@ -27,6 +27,7 @@ import {
 import { QrScanner, scanQrImage } from './qr.js';
 import { drawQrToCanvas } from './qrcode.js';
 import { renderMarkdown } from './markdown.js';
+import { generatePasswords } from './password-generator.js';
 import {
   ApiError,
   OfflineManager,
@@ -112,6 +113,7 @@ const workflowSecretStores = {
   editor: new Map(),
   run: new Map(),
 };
+let generatedPasswords = [];
 const state = {
   masterKey: null,
   keyHash: '',
@@ -205,6 +207,7 @@ function clearSensitiveState() {
   state.editingWorkflowLinks = [];
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
+  clearGeneratedPasswords();
   workflowSecretStores.list.clear();
   workflowSecretStores.editor.clear();
   workflowSecretStores.run.clear();
@@ -2450,6 +2453,69 @@ function openSettingsDialog() {
   openModal('settings-modal', '#theme-select');
 }
 
+function clearGeneratedPasswords() {
+  generatedPasswords.fill('');
+  generatedPasswords = [];
+  $('#password-result-list').replaceChildren();
+  $('#password-results-summary').textContent = '';
+  setHidden('#password-results', true);
+}
+
+function passwordGeneratorOptions() {
+  return {
+    length: Number($('#password-length').value),
+    count: Number($('#password-count').value),
+    lowercase: $('#password-lowercase').checked,
+    uppercase: $('#password-uppercase').checked,
+    numbers: $('#password-numbers').checked,
+    symbols: $('#password-symbols').checked,
+    exclude: $('#password-exclude-enabled').checked ? $('#password-excluded-chars').value : '',
+  };
+}
+
+function renderGeneratedPasswords() {
+  const list = $('#password-result-list');
+  const rows = generatedPasswords.map((password, index) => {
+    const row = document.createElement('li');
+    row.className = 'password-result-row';
+    const value = document.createElement('code');
+    value.className = 'password-result-value';
+    value.textContent = password;
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'btn btn-secondary';
+    copy.dataset.passwordIndex = String(index);
+    copy.setAttribute('aria-label', `复制第 ${index + 1} 个密码`);
+    copy.textContent = '复制';
+    row.append(value, copy);
+    return row;
+  });
+  list.replaceChildren(...rows);
+  $('#password-results-summary').textContent = `${generatedPasswords.length} 个 · 每个 ${generatedPasswords[0]?.length || 0} 位`;
+  setHidden('#password-results', false);
+}
+
+function generateRandomPasswords(event) {
+  event?.preventDefault();
+  hideError('#password-generator-error');
+  try {
+    generatedPasswords = generatePasswords(passwordGeneratorOptions());
+    renderGeneratedPasswords();
+  } catch (error) {
+    clearGeneratedPasswords();
+    showError('#password-generator-error', error.message || '无法生成密码');
+  }
+}
+
+function openPasswordGenerator() {
+  $('#password-generator-form').reset();
+  $('#password-excluded-chars').disabled = false;
+  hideError('#password-generator-error');
+  clearGeneratedPasswords();
+  generateRandomPasswords();
+  openModal('password-generator-modal', '#password-length');
+}
+
 function renderQuickUnlockSettings() {
   const enabled = $('#quick-unlock-enabled').checked;
   const configured = Boolean(getQuickUnlockConfig(state.accountName));
@@ -3234,6 +3300,28 @@ function setupEvents() {
     renderBackupReminder();
   });
   $('#install-app').addEventListener('click', installApp);
+  $('#password-generator-open').addEventListener('click', () => {
+    closeModal('settings-modal', false);
+    openPasswordGenerator();
+  });
+  $('#password-generator-form').addEventListener('submit', generateRandomPasswords);
+  $('#password-exclude-enabled').addEventListener('change', (event) => {
+    $('#password-excluded-chars').disabled = !event.target.checked;
+  });
+  $('#password-result-list').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-password-index]');
+    if (!button) return;
+    const password = generatedPasswords[Number(button.dataset.passwordIndex)];
+    if (password) copyText(password, '随机密码已复制');
+  });
+  $('#password-copy-all').addEventListener('click', () => {
+    if (generatedPasswords.length) copyText(generatedPasswords.join('\n'), `已复制 ${generatedPasswords.length} 个密码`);
+  });
+  $('#password-generator-modal').addEventListener('modal:close', () => {
+    clearGeneratedPasswords();
+    $('#password-generator-form').reset();
+    hideError('#password-generator-error');
+  });
 
   $('#change-password-open').addEventListener('click', () => {
     closeModal('settings-modal', false);
