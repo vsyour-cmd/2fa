@@ -382,11 +382,18 @@ describe('static application shell', () => {
     expect(styles).toContain('.settings-backup-panel { display: flex;');
   });
 
-  it('provides a secure non-persistent random password generator in settings', () => {
+  it('provides a secure random password generator beside workflows with local history', () => {
+    const workflowTab = html.indexOf('id="workflow-tab"');
+    const passwordGeneratorOpen = html.indexOf('id="password-generator-open"');
+    const tokenView = html.indexOf('id="tokens-view"');
+    expect(passwordGeneratorOpen).toBeGreaterThan(workflowTab);
+    expect(passwordGeneratorOpen).toBeLessThan(tokenView);
+    expect(html.match(/id="password-generator-open"/g)).toHaveLength(1);
     expect(html).toContain('id="password-generator-open"');
     expect(html).toContain('id="password-generator-modal"');
-    expect(html).toContain('密码不会上传或保存，关闭弹窗后立即清空');
-    for (const id of ['password-lowercase', 'password-uppercase', 'password-numbers', 'password-symbols', 'password-length', 'password-count', 'password-exclude-enabled', 'password-excluded-chars', 'password-copy-all']) {
+    expect(html).toContain('启用历史时最多保存最近 100 条到当前浏览器');
+    expect(html).toContain('使用当前保险库密钥加密后保存在本地');
+    for (const id of ['password-lowercase', 'password-uppercase', 'password-numbers', 'password-symbols', 'password-length', 'password-count', 'password-exclude-enabled', 'password-excluded-chars', 'password-copy-all', 'password-history-enabled', 'password-history-clear', 'password-history-list']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(app).toContain("generatePasswords(passwordGeneratorOptions())");
@@ -394,10 +401,19 @@ describe('static application shell', () => {
     expect(app).toMatch(/function clearSensitiveState[\s\S]*?clearGeneratedPasswords\(\)/);
     expect(app).toContain("$('#password-generator-modal').addEventListener('modal:close'");
     expect(app).toContain("copyText(generatedPasswords.join('\\n')");
+    expect(app).toContain("const PASSWORD_HISTORY_LIMIT = 100");
+    expect(app).toContain("await encryptJson(passwordHistory, state.masterKey)");
+    expect(app).toContain("await decryptJson(encrypted, state.masterKey)");
+    expect(app).toContain("localStorage.removeItem(passwordHistoryStorageKey())");
+    expect(app).toContain("savePasswordHistoryEnabled(event.target.checked)");
+    expect(app).toContain("clearPasswordHistoryMemory()");
+    expect(app).toContain("await reencryptPasswordHistory(nextKey)");
     expect(passwordGenerator).toContain('cryptoSource.getRandomValues(value)');
     expect(passwordGenerator).toContain('Math.floor(UINT32_RANGE / max) * max');
+    expect(styles).toContain('.vault-view-navigation { display: flex;');
     expect(styles).toContain('.password-character-options { display: grid;');
     expect(styles).toContain('.password-result-row { display: flex;');
+    expect(styles).toContain('.password-history-content { display: grid;');
   });
 
   it('waits for a fresh verification code during the final second', () => {

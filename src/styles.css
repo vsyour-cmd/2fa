@@ -277,10 +277,12 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .header-controls { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .compact-select { width: auto; max-width: 220px; min-height: 44px; }
-.vault-view-tabs { width: min(100%, 360px); margin: 0 0 18px; }
+.vault-view-navigation { display: flex; align-items: stretch; gap: 10px; margin-bottom: 18px; }
+.vault-view-tabs { width: min(100%, 360px); min-width: 0; flex: 1 1 360px; margin: 0; }
 .vault-view-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .vault-view-tabs .badge { background: color-mix(in srgb, var(--surface-muted) 72%, transparent); }
 .vault-view-tabs button.active .badge { color: var(--primary-hover); background: var(--primary-soft); }
+.vault-password-generator-open { min-width: 108px; align-self: stretch; white-space: nowrap; }
 .toolbar { position: sticky; top: calc(12px + var(--offline-banner-offset, 0px)); z-index: 20; margin-bottom: 18px; padding: 13px; }
 .token-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 10px; }
 .token-toolbar-actions .btn { min-height: 44px; }
@@ -624,7 +626,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .password-generator-grid { margin-bottom: 2px; }
 .password-exclude-control { display: grid; grid-template-columns: minmax(180px, auto) minmax(0, 1fr); align-items: center; gap: 10px; margin-top: 2px; }
 .password-exclude-control input[type="text"] { min-width: 0; }
+.password-history-preference { margin-top: 8px; padding: 10px 12px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; }
+.password-history-preference .field-hint { margin-top: 1px; padding-left: 30px; }
 .password-results { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.password-history { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
 .password-results-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .password-results-header h3 { margin: 0 0 3px; font-size: 0.98rem; }
 .password-results-header span { color: var(--text-muted); font-size: 0.76rem; }
@@ -633,6 +638,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .password-result-row { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 10px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; }
 .password-result-value { min-width: 0; flex: 1; color: var(--text); font: 720 0.9rem/1.55 var(--font-mono); overflow-wrap: anywhere; user-select: all; }
 .password-result-row .btn { min-width: 64px; min-height: 44px; flex: 0 0 auto; }
+.password-history-empty { margin: 0; padding: 20px 14px; color: var(--text-muted); background: var(--surface-muted); border: 1px dashed var(--border-strong); border-radius: 12px; font-size: 0.8rem; text-align: center; }
+#password-history-list { max-height: 300px; overflow-y: auto; }
+.password-history-content { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.password-history-content time { color: var(--text-muted); font-size: 0.7rem; }
 kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 5px; font: 700 0.72rem var(--font-mono); }
 .manage-list { display: grid; gap: 9px; }
 .manage-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; }

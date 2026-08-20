@@ -106,6 +106,9 @@ const offline = new OfflineManager();
 const LAST_EXPORT_KEY = '2fa_last_export_v1';
 const BACKUP_DISMISSED_KEY = '2fa_backup_reminder_dismissed_v1';
 const BACKUP_REMINDER_DAYS = 30;
+const PASSWORD_HISTORY_KEY_PREFIX = '2fa_password_history_v1';
+const PASSWORD_HISTORY_ENABLED_KEY_PREFIX = '2fa_password_history_enabled_v1';
+const PASSWORD_HISTORY_LIMIT = 100;
 const RECENT_USAGE_WINDOW_MS = 7 * 86_400_000;
 const WORKFLOW_EDIT_UNLOCK_MS = 5 * 60_000;
 const workflowSecretStores = {
@@ -114,6 +117,7 @@ const workflowSecretStores = {
   run: new Map(),
 };
 let generatedPasswords = [];
+let passwordHistory = [];
 const state = {
   masterKey: null,
   keyHash: '',
@@ -208,6 +212,7 @@ function clearSensitiveState() {
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
   clearGeneratedPasswords();
+  clearPasswordHistoryMemory();
   workflowSecretStores.list.clear();
   workflowSecretStores.editor.clear();
   workflowSecretStores.run.clear();
@@ -2461,6 +2466,80 @@ function clearGeneratedPasswords() {
   setHidden('#password-results', true);
 }
 
+function passwordHistoryStorageKey(prefix = PASSWORD_HISTORY_KEY_PREFIX) {
+  return `${prefix}:${encodeURIComponent(state.accountName || DEFAULT_ACCOUNT)}`;
+}
+
+function clearPasswordHistoryMemory() {
+  for (const item of passwordHistory) item.password = '';
+  passwordHistory = [];
+  $('#password-history-list').replaceChildren();
+  $('#password-history-summary').textContent = '仅保存在当前浏览器';
+  $('#password-history-clear').disabled = true;
+  setHidden('#password-history-empty', false);
+}
+
+async function loadPasswordHistory() {
+  clearPasswordHistoryMemory();
+  try {
+    const encrypted = localStorage.getItem(passwordHistoryStorageKey());
+    if (!encrypted || !state.masterKey) return;
+    const stored = await decryptJson(encrypted, state.masterKey);
+    if (!Array.isArray(stored)) return;
+    passwordHistory = stored
+      .filter((item) => item && typeof item.password === 'string' && item.password.length >= 4 && item.password.length <= 128 && Number.isFinite(Number(item.createdAt)))
+      .slice(0, PASSWORD_HISTORY_LIMIT)
+      .map((item) => ({ id: String(item.id || generateId()), password: item.password, createdAt: Number(item.createdAt) }));
+  } catch {
+    passwordHistory = [];
+  }
+}
+
+async function savePasswordHistory() {
+  try {
+    if (!state.masterKey) return false;
+    const encrypted = await encryptJson(passwordHistory, state.masterKey);
+    localStorage.setItem(passwordHistoryStorageKey(), encrypted);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function loadPasswordHistoryEnabled() {
+  try {
+    return localStorage.getItem(passwordHistoryStorageKey(PASSWORD_HISTORY_ENABLED_KEY_PREFIX)) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+function savePasswordHistoryEnabled(enabled) {
+  try {
+    localStorage.setItem(passwordHistoryStorageKey(PASSWORD_HISTORY_ENABLED_KEY_PREFIX), String(enabled));
+  } catch {
+    // Password generation remains available when browser storage is blocked.
+  }
+}
+
+async function reencryptPasswordHistory(nextKey) {
+  const storageKey = passwordHistoryStorageKey();
+  try {
+    const encrypted = localStorage.getItem(storageKey);
+    if (!encrypted) return true;
+    const stored = await decryptJson(encrypted, state.masterKey);
+    localStorage.setItem(storageKey, await encryptJson(stored, nextKey));
+    return true;
+  } catch {
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      // The stale encrypted history remains unreadable without the old key.
+    }
+    return false;
+  }
+}
+
 function passwordGeneratorOptions() {
   return {
     length: Number($('#password-length').value),
@@ -2495,25 +2574,86 @@ function renderGeneratedPasswords() {
   setHidden('#password-results', false);
 }
 
-function generateRandomPasswords(event) {
+function renderPasswordHistory() {
+  const rows = passwordHistory.map((item) => {
+    const row = document.createElement('li');
+    row.className = 'password-result-row password-history-row';
+    const content = document.createElement('div');
+    content.className = 'password-history-content';
+    const value = document.createElement('code');
+    value.className = 'password-result-value';
+    value.textContent = item.password;
+    const time = document.createElement('time');
+    time.dateTime = new Date(item.createdAt).toISOString();
+    time.textContent = formatDateTime(item.createdAt);
+    content.append(value, time);
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'btn btn-secondary';
+    copy.dataset.passwordHistoryId = item.id;
+    copy.setAttribute('aria-label', `复制 ${formatDateTime(item.createdAt)} 生成的密码`);
+    copy.textContent = '复制';
+    row.append(content, copy);
+    return row;
+  });
+  $('#password-history-list').replaceChildren(...rows);
+  $('#password-history-summary').textContent = passwordHistory.length ? `最近 ${passwordHistory.length} 条 · 仅保存在当前浏览器` : '仅保存在当前浏览器';
+  $('#password-history-clear').disabled = passwordHistory.length === 0;
+  setHidden('#password-history-empty', passwordHistory.length > 0);
+}
+
+async function recordPasswordHistory(passwords) {
+  if (!$('#password-history-enabled').checked) return;
+  const createdAt = Date.now();
+  passwordHistory = [
+    ...passwords.map((password) => ({ id: generateId(), password, createdAt })),
+    ...passwordHistory,
+  ].slice(0, PASSWORD_HISTORY_LIMIT);
+  if (!await savePasswordHistory()) showToast('密码已生成，但浏览器无法保存加密历史');
+  renderPasswordHistory();
+}
+
+async function clearPasswordHistory() {
+  if (!passwordHistory.length) return;
+  const confirmed = await askConfirm({
+    title: '清空密码历史',
+    message: `确定清空当前浏览器保存的 ${passwordHistory.length} 条密码历史？此操作无法撤销。`,
+    confirmText: '清空历史',
+  });
+  if (!confirmed) return;
+  try {
+    localStorage.removeItem(passwordHistoryStorageKey());
+  } catch {
+    // Still remove the in-memory copy when browser storage is unavailable.
+  }
+  clearPasswordHistoryMemory();
+  renderPasswordHistory();
+  showToast('密码历史已清空');
+}
+
+async function generateRandomPasswords(event) {
   event?.preventDefault();
   hideError('#password-generator-error');
   try {
     generatedPasswords = generatePasswords(passwordGeneratorOptions());
     renderGeneratedPasswords();
+    await recordPasswordHistory(generatedPasswords);
   } catch (error) {
     clearGeneratedPasswords();
     showError('#password-generator-error', error.message || '无法生成密码');
   }
 }
 
-function openPasswordGenerator() {
+async function openPasswordGenerator() {
   $('#password-generator-form').reset();
+  $('#password-history-enabled').checked = loadPasswordHistoryEnabled();
   $('#password-excluded-chars').disabled = false;
   hideError('#password-generator-error');
   clearGeneratedPasswords();
-  generateRandomPasswords();
+  await loadPasswordHistory();
+  renderPasswordHistory();
   openModal('password-generator-modal', '#password-length');
+  await generateRandomPasswords();
 }
 
 function renderQuickUnlockSettings() {
@@ -2616,6 +2756,7 @@ async function changeMasterPassword(event) {
     const verification = await loadCloudRecord(nextHash);
     if (!verification.exists) throw new Error('新密码数据验证失败，旧数据已保留');
     await decryptJson(verification.encryptedData, nextKey);
+    const passwordHistoryPreserved = await reencryptPasswordHistory(nextKey);
 
     state.keyHash = nextHash;
     state.salt = nextSalt;
@@ -2631,7 +2772,7 @@ async function changeMasterPassword(event) {
     }
     closeModal('change-password-modal');
     $('#change-password-form').reset();
-    showToast('主密码已修改');
+    showToast(passwordHistoryPreserved ? '主密码已修改' : '主密码已修改；无法重新加密的本地密码历史已清空');
   } catch (error) {
     if (error instanceof ApiError && error.status === 423) {
       closeModal('change-password-modal');
@@ -3300,10 +3441,7 @@ function setupEvents() {
     renderBackupReminder();
   });
   $('#install-app').addEventListener('click', installApp);
-  $('#password-generator-open').addEventListener('click', () => {
-    closeModal('settings-modal', false);
-    openPasswordGenerator();
-  });
+  $('#password-generator-open').addEventListener('click', openPasswordGenerator);
   $('#password-generator-form').addEventListener('submit', generateRandomPasswords);
   $('#password-exclude-enabled').addEventListener('change', (event) => {
     $('#password-excluded-chars').disabled = !event.target.checked;
@@ -3317,8 +3455,19 @@ function setupEvents() {
   $('#password-copy-all').addEventListener('click', () => {
     if (generatedPasswords.length) copyText(generatedPasswords.join('\n'), `已复制 ${generatedPasswords.length} 个密码`);
   });
+  $('#password-history-enabled').addEventListener('change', (event) => {
+    savePasswordHistoryEnabled(event.target.checked);
+  });
+  $('#password-history-list').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-password-history-id]');
+    if (!button) return;
+    const item = passwordHistory.find((candidate) => candidate.id === button.dataset.passwordHistoryId);
+    if (item?.password) copyText(item.password, '历史密码已复制');
+  });
+  $('#password-history-clear').addEventListener('click', clearPasswordHistory);
   $('#password-generator-modal').addEventListener('modal:close', () => {
     clearGeneratedPasswords();
+    clearPasswordHistoryMemory();
     $('#password-generator-form').reset();
     hideError('#password-generator-error');
   });
