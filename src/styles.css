@@ -618,9 +618,15 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .settings-security-panel > .field-hint:first-child { margin: 0 0 12px; color: var(--primary); font-weight: 750; }
 #settings-modal .modal-actions { position: sticky; bottom: -24px; z-index: 2; margin-bottom: -24px; padding: 18px 0 24px; background: linear-gradient(transparent 0, var(--surface-solid) 18px); }
 .password-generator-view { outline: 0; }
-.password-generator-heading { margin-bottom: 16px; }
+.password-generator-heading { align-items: center; margin-bottom: 16px; }
+.password-generator-heading-actions { display: flex; flex: 0 0 auto; }
+.password-generator-heading-actions .btn { min-width: 150px; }
 .password-generator-card { padding: clamp(18px, 4vw, 28px); }
 .password-generator-form { margin: 0; }
+.password-results.password-results-primary { margin: 0 0 20px; padding: 0 0 18px; border-top: 0; border-bottom: 1px solid var(--border); }
+.password-config-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.password-config-header h3 { margin: 0; font-size: 0.98rem; }
+.password-config-header span { color: var(--text-muted); font-size: 0.74rem; text-align: right; }
 .password-character-fieldset { margin: 0 0 16px; padding: 12px 14px 14px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 14px; }
 .password-character-fieldset legend { padding: 0 6px; color: var(--text-soft); font-size: 0.78rem; font-weight: 780; }
 .password-character-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
@@ -629,8 +635,6 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .password-exclude-control input[type="text"] { min-width: 0; }
 .password-history-preference { margin-top: 8px; padding: 10px 12px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; }
 .password-history-preference .field-hint { margin-top: 1px; padding-left: 30px; }
-.password-generator-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
-.password-generator-actions .btn { min-width: 150px; }
 .password-results { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
 .password-history { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
 .password-results-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -781,7 +785,9 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .settings-backup-actions .btn { width: 100%; }
   .password-character-options { grid-template-columns: 1fr; }
   .password-exclude-control { grid-template-columns: 1fr; gap: 4px; }
-  .password-generator-actions .btn { width: 100%; }
+  .password-generator-heading-actions, .password-generator-heading-actions .btn { width: 100%; }
+  .password-config-header { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .password-config-header span { text-align: left; }
   .password-results-header { align-items: stretch; flex-direction: column; }
   .password-results-header .btn { width: 100%; }
   .workflow-note-actions { align-items: stretch; flex-direction: column; }

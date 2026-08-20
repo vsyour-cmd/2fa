@@ -392,6 +392,16 @@ describe('static application shell', () => {
     expect(html).toContain('aria-controls="password-generator-view" data-vault-view="password"');
     expect(html).toContain('id="password-generator-view" class="password-generator-view hidden" role="tabpanel"');
     expect(html).not.toContain('id="password-generator-modal"');
+    const generateButton = html.indexOf('id="password-generate"');
+    const currentResults = html.indexOf('id="password-results"');
+    const generatorForm = html.indexOf('id="password-generator-form"');
+    const passwordHistory = html.indexOf('id="password-history"');
+    expect(generateButton).toBeLessThan(currentResults);
+    expect(currentResults).toBeLessThan(generatorForm);
+    expect(generatorForm).toBeLessThan(passwordHistory);
+    expect(html).toContain('form="password-generator-form">生成密码</button>');
+    expect(html).toContain('>当前生成结果</h3>');
+    expect(html).toContain('<h3>生成配置</h3>');
     expect(html).toContain('启用历史时最多保存最近 100 条到当前浏览器');
     expect(html).toContain('使用当前保险库密钥加密后保存在本地');
     for (const id of ['password-lowercase', 'password-uppercase', 'password-numbers', 'password-symbols', 'password-length', 'password-count', 'password-exclude-enabled', 'password-excluded-chars', 'password-copy-all', 'password-history-enabled', 'password-history-clear', 'password-history-list']) {
@@ -416,6 +426,8 @@ describe('static application shell', () => {
     expect(passwordGenerator).toContain('Math.floor(UINT32_RANGE / max) * max');
     expect(styles).toContain('.password-generator-view { outline: 0;');
     expect(styles).toContain('.password-generator-card { padding:');
+    expect(styles).toContain('.password-results.password-results-primary { margin: 0 0 20px;');
+    expect(styles).toContain('.password-config-header { display: flex;');
     expect(styles).toContain('.password-character-options { display: grid;');
     expect(styles).toContain('.password-result-row { display: flex;');
     expect(styles).toContain('.password-history-content { display: grid;');

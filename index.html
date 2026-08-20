@@ -273,9 +273,15 @@
               <h2 id="password-generator-title">随机密码生成器</h2>
               <p id="password-generator-description">密码只在本地生成，不会上传服务器；启用历史时最多保存最近 100 条到当前浏览器。</p>
             </div>
+            <div class="password-generator-heading-actions"><button id="password-generate" class="btn btn-primary" type="submit" form="password-generator-form">生成密码</button></div>
           </div>
           <div class="password-generator-card card-subtle">
+            <section id="password-results" class="password-results password-results-primary hidden" aria-labelledby="password-results-title">
+              <div class="password-results-header"><div><h3 id="password-results-title">当前生成结果</h3><span id="password-results-summary"></span></div><button id="password-copy-all" class="btn btn-secondary" type="button">全部复制</button></div>
+              <ol id="password-result-list" class="password-result-list" aria-live="polite"></ol>
+            </section>
             <form id="password-generator-form" class="password-generator-form" novalidate>
+              <div class="password-config-header"><h3>生成配置</h3><span>调整配置后，点击页面上方“生成密码”</span></div>
               <fieldset class="password-character-fieldset">
                 <legend>使用字符</legend>
                 <div class="password-character-options">
@@ -299,12 +305,7 @@
                 <p class="field-hint">历史会使用当前保险库密钥加密后保存在本地，不会上传；公用设备建议关闭。</p>
               </div>
               <div id="password-generator-error" class="error hidden" role="alert"></div>
-              <div class="password-generator-actions"><button id="password-generate" class="btn btn-primary" type="submit">生成密码</button></div>
             </form>
-            <section id="password-results" class="password-results hidden" aria-labelledby="password-results-title">
-              <div class="password-results-header"><div><h3 id="password-results-title">生成结果</h3><span id="password-results-summary"></span></div><button id="password-copy-all" class="btn btn-secondary" type="button">全部复制</button></div>
-              <ol id="password-result-list" class="password-result-list" aria-live="polite"></ol>
-            </section>
             <section id="password-history" class="password-history" aria-labelledby="password-history-title">
               <div class="password-results-header"><div><h3 id="password-history-title">生成历史</h3><span id="password-history-summary">仅保存在当前浏览器</span></div><button id="password-history-clear" class="btn btn-ghost" type="button">清空历史</button></div>
               <p id="password-history-empty" class="password-history-empty">还没有历史记录，生成密码后会显示在这里。</p>
