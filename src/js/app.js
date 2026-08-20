@@ -79,7 +79,6 @@ import {
   updatePasswordStrength,
   watchSystemTheme,
 } from './ui.js';
-import { enhanceSearchableSelects, refreshSearchableSelect } from './searchable-select.js';
 import {
   DEFAULT_ACCOUNT,
   compareSmartKeys,
@@ -142,7 +141,6 @@ const state = {
   importRevision: 0,
   multiSelectMode: false,
   selectedKeyIds: new Set(),
-  exportKeyIds: null,
   vaultView: 'tokens',
   workflowSearch: '',
   workflowGroupFilter: '__all',
@@ -201,7 +199,6 @@ function clearSensitiveState() {
   state.importRevision += 1;
   state.multiSelectMode = false;
   state.selectedKeyIds.clear();
-  state.exportKeyIds = null;
   state.vaultView = 'tokens';
   state.workflowSearch = '';
   state.workflowGroupFilter = '__all';
@@ -699,31 +696,41 @@ function getGroups() {
   return [...new Set(state.keys.map((key) => key.group || '').filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
 }
 
+function getLinkedWorkflowKeyIds() {
+  const linkedKeyIds = new Set();
+  for (const note of state.workflowNotes) {
+    for (const link of note.linkedKeys || []) linkedKeyIds.add(link.keyId);
+  }
+  return linkedKeyIds;
+}
+
 function updateGroupOptions() {
   $('#group-options').innerHTML = getGroups().map((group) => `<option value="${escapeHtml(group)}"></option>`).join('');
 }
 
 function renderGroupFilters() {
   const ungroupedCount = state.keys.filter((key) => !key.group).length;
+  const linkedWorkflowKeyIds = getLinkedWorkflowKeyIds();
   const filters = [
     { value: '__all', label: '全部', count: state.keys.length },
+    { value: '__unlinked_workflow', label: '未关联场景', count: state.keys.filter((key) => !linkedWorkflowKeyIds.has(key.id)).length },
     ...getGroups().map((group) => ({ value: group, label: group, count: state.keys.filter((key) => key.group === group).length })),
     { value: '__ungrouped', label: '未分组', count: ungroupedCount },
   ];
-  const select = $('#group-filters');
-  select.innerHTML = filters.map((filter) => {
-    const triggerLabel = filter.value === '__all' ? '全部分组' : filter.value === '__ungrouped' ? '未分组' : `分组：${filter.label}`;
-    return `<option value="${escapeHtml(filter.value)}" data-count="${filter.count}" data-description="${filter.count} 个验证码" data-trigger-label="${escapeHtml(triggerLabel)}">${escapeHtml(filter.label)}</option>`;
+  $('#group-filters').innerHTML = filters.map((filter) => {
+    const active = filter.value === state.groupFilter;
+    return `<button class="group-filter-chip${active ? ' active' : ''}" type="button" data-token-group-filter="${escapeHtml(filter.value)}" aria-pressed="${String(active)}" aria-label="${escapeHtml(`${filter.label}，${filter.count} 个验证码`)}"><span>${escapeHtml(filter.label)}</span><span class="group-filter-count" aria-hidden="true">${filter.count}</span></button>`;
   }).join('');
-  select.value = state.groupFilter;
-  refreshSearchableSelect(select);
 }
 
 function getVisibleKeys() {
   const query = state.search.toLocaleLowerCase();
+  const linkedWorkflowKeyIds = getLinkedWorkflowKeyIds();
   const filtered = state.keys.filter((key) => {
     const groupMatches = state.groupFilter === '__all'
-      || (state.groupFilter === '__ungrouped' ? !key.group : key.group === state.groupFilter);
+      || (state.groupFilter === '__unlinked_workflow'
+        ? !linkedWorkflowKeyIds.has(key.id)
+        : state.groupFilter === '__ungrouped' ? !key.group : key.group === state.groupFilter);
     const textMatches = !query || `${key.name} ${key.issuer} ${key.account} ${key.group} ${key.note}`.toLocaleLowerCase().includes(query);
     return groupMatches && textMatches;
   });
@@ -745,8 +752,9 @@ function renderListMeta(visibleCount) {
   const activeFilterCount = Number(Boolean(state.search)) + Number(state.groupFilter !== '__all');
   const resetButton = $('#token-filter-reset');
   setHidden(resetButton, activeFilterCount === 0);
-  $('#token-filter-reset-label').textContent = activeFilterCount > 1 ? `清除 ${activeFilterCount} 项筛选` : state.search ? '清除关键词' : '清除分组';
-  const filterDetails = [state.search ? `关键词“${state.search}”` : '', state.groupFilter !== '__all' ? '分组筛选' : ''].filter(Boolean).join('、');
+  const relationFilterActive = state.groupFilter === '__unlinked_workflow';
+  $('#token-filter-reset-label').textContent = activeFilterCount > 1 ? `清除 ${activeFilterCount} 项筛选` : state.search ? '清除关键词' : relationFilterActive ? '清除关联筛选' : '清除分组';
+  const filterDetails = [state.search ? `关键词“${state.search}”` : '', relationFilterActive ? '未关联场景' : state.groupFilter !== '__all' ? '分组筛选' : ''].filter(Boolean).join('、');
   resetButton.setAttribute('aria-label', filterDetails ? `清除筛选：${filterDetails}` : '清除筛选');
   const hints = {
     smart: '智能排序会根据使用频次和最近使用自动调整',
@@ -804,7 +812,7 @@ function renderMultiSelectUi(visible = getVisibleKeys()) {
   $('#bulk-selected-count').textContent = `已选 ${selected.length} 项`;
 
   const disabled = selected.length === 0;
-  for (const id of ['bulk-favorite', 'bulk-unfavorite', 'bulk-export', 'bulk-delete']) $(`#${id}`).disabled = disabled;
+  for (const id of ['bulk-favorite', 'bulk-unfavorite', 'bulk-delete']) $(`#${id}`).disabled = disabled;
   $('#bulk-move').disabled = disabled || $('#bulk-group-select').value === '__choose';
 
   const groupSelect = $('#bulk-group-select');
@@ -1042,14 +1050,15 @@ function renderWorkflowGroupFilters() {
     ...groups.map((group) => ({ value: group, label: group, count: state.workflowNotes.filter((note) => note.group === group).length })),
     { value: '__ungrouped', label: '未分组', count: state.workflowNotes.filter((note) => !note.group).length },
   ];
-  const select = $('#workflow-group-filter');
-  select.innerHTML = filters.map((filter) => {
-    const triggerLabel = filter.value === '__all' ? '全部场景分组' : filter.value === '__ungrouped' ? '未分组' : `分组：${filter.label}`;
-    return `<option value="${escapeHtml(filter.value)}" data-count="${filter.count}" data-description="${filter.count} 个使用场景" data-trigger-label="${escapeHtml(triggerLabel)}">${escapeHtml(filter.label)}</option>`;
+  $('#workflow-group-filter').innerHTML = filters.map((filter) => {
+    const active = filter.value === state.workflowGroupFilter;
+    return `<button class="group-filter-chip${active ? ' active' : ''}" type="button" data-workflow-group-chip="${escapeHtml(filter.value)}" aria-pressed="${String(active)}" aria-label="${escapeHtml(`${filter.label}，${filter.count} 个使用场景`)}"><span>${escapeHtml(filter.label)}</span><span class="group-filter-count" aria-hidden="true">${filter.count}</span></button>`;
   }).join('');
-  select.value = state.workflowGroupFilter;
   $('#workflow-group-options').innerHTML = groups.map((group) => `<option value="${escapeHtml(group)}"></option>`).join('');
-  refreshSearchableSelect(select);
+}
+
+function focusActiveGroupChip(container) {
+  $('.group-filter-chip.active', container)?.focus({ preventScroll: true });
 }
 
 function setVaultView(view, focus = false) {
@@ -1779,9 +1788,8 @@ function openOtpAuthValue(value, source = 'qr') {
   if (text.startsWith('otpauth-migration://')) {
     parseGoogleMigrationUri(text);
     if (!$('#add-modal').classList.contains('hidden')) closeModal('add-modal', false);
-    resetImportPreview({ resetForm: true });
+    openImportDialog('#import-strategy');
     $('#import-text').value = text;
-    openModal('import-modal', '#import-strategy');
     showToast(source === 'paste' ? '已从剪贴板识别 Google Authenticator 迁移包' : '已识别 Google Authenticator 迁移包');
     return;
   }
@@ -2170,20 +2178,25 @@ function resetImportPreview({ resetForm = false, clearError = true } = {}) {
   updateImportSubmitState();
 }
 
+function openImportDialog(focusSelector = '#import-file') {
+  resetImportPreview({ resetForm: true });
+  openModal('import-modal', focusSelector);
+}
+
 function importSecretHint(secret) {
   const normalized = normalizeSecret(secret);
   if (!normalized) return '密钥不可识别';
   return normalized.length > 4 ? `密钥尾号 ${normalized.slice(-4)}` : '密钥已隐藏';
 }
 
-function renderImportPreview(source, plan, workflowNoteCount = 0) {
+function renderImportPreview(source, plan, workflowNotes = []) {
   const actionMeta = {
     add: { label: '新增', detail: '将新增到保险库' },
     overwrite: { label: '覆盖', detail: '将覆盖同名条目' },
     skip: { label: '跳过', detail: '同名条目不会导入' },
     invalid: { label: '无效', detail: '密钥无法生成验证码' },
   };
-  const rows = plan.items.map((item) => {
+  const keyRows = plan.items.map((item) => {
     const meta = actionMeta[item.action];
     const candidate = item.candidate;
     const icon = getKeyIcon(candidate);
@@ -2208,17 +2221,35 @@ function renderImportPreview(source, plan, workflowNoteCount = 0) {
         <span class="import-action-badge ${item.action}">${meta.label}</span>
       </li>`;
   }).join('');
+  const workflowRows = workflowNotes.map((rawNote) => {
+    const note = normalizeWorkflowNote(rawNote);
+    return `
+      <li class="import-preview-row" data-import-action="add">
+        <div class="import-preview-entry">
+          <div class="token-icon import-preview-icon initial avatar-tone-3" aria-hidden="true">S</div>
+          <div class="import-preview-main">
+            <strong>${escapeHtml(note.title)}</strong>
+            <span>${escapeHtml(note.group || '未分组')} · ${note.linkedKeys.length} 个关联验证码</span>
+            <small>将作为新场景导入；重名时自动重命名</small>
+          </div>
+        </div>
+        <span class="import-action-badge add">场景</span>
+      </li>`;
+  }).join('');
+  const rows = `${keyRows}${workflowRows}`;
+  const totalCount = plan.items.length + workflowNotes.length;
   const skipped = plan.stats.skip + plan.stats.invalid;
   const preview = $('#import-preview');
   preview.innerHTML = `
     <div class="import-preview-header">
       <div><p>${escapeHtml(source)} · 解析完成</p><strong>确认导入内容</strong></div>
-      <span>确认前保险库不会改变${workflowNoteCount ? ` · 含 ${workflowNoteCount} 个使用场景` : ''}</span>
+      <span>确认前保险库不会改变${workflowNotes.length ? ` · 含 ${workflowNotes.length} 个使用场景` : ''}</span>
     </div>
     <div class="import-preview-stats" aria-label="导入统计">
-      <span class="total">共 <strong>${plan.items.length}</strong> 条</span>
+      <span class="total">共 <strong>${totalCount}</strong> 条</span>
       <span class="add"><strong>${plan.stats.add}</strong> 新增</span>
       <span class="overwrite"><strong>${plan.stats.overwrite}</strong> 覆盖</span>
+      ${workflowNotes.length ? `<span class="add"><strong>${workflowNotes.length}</strong> 场景</span>` : ''}
       <span class="skip"><strong>${skipped}</strong> 跳过</span>
     </div>
     <ul class="import-preview-list" aria-label="导入条目预览">${rows}</ul>`;
@@ -2249,7 +2280,7 @@ async function importKeysFromForm(event) {
       if (valid.length === 0 && workflowNotes.length === 0) throw new Error(`没有有效的可导入条目，已跳过 ${invalid.length} 个`);
       const plan = createImportPlan(valid, state.keys, $('#import-strategy').value, invalid);
       state.importPreview = { source: parsed.source, plan, workflowNotes };
-      renderImportPreview(parsed.source, plan, workflowNotes.length);
+      renderImportPreview(parsed.source, plan, workflowNotes);
     } catch (error) {
       showError('#import-error', error.code === 'PASSWORD_REQUIRED' ? `${error.message}，然后重试` : error.message);
     } finally {
@@ -2269,7 +2300,12 @@ async function importKeysFromForm(event) {
       const note = normalizeWorkflowNote(rawNote);
       const linkedKeys = note.linkedKeys.map((link) => {
         const keyId = result.importedKeyIds.get(link.keyId) || link.keyId;
-        const key = result.keys.find((item) => item.id === keyId);
+        const key = result.keys.find((item) => item.id === keyId) || result.keys.find((item) => (
+          link.name
+          && item.name.toLocaleLowerCase() === link.name.toLocaleLowerCase()
+          && (!link.issuer || item.issuer.toLocaleLowerCase() === link.issuer.toLocaleLowerCase())
+          && (!link.account || item.account.toLocaleLowerCase() === link.account.toLocaleLowerCase())
+        ));
         return key ? workflowLinkSnapshot(key) : { ...link, keyId };
       });
       const title = uniqueName(note.title, existingNoteNames);
@@ -2294,32 +2330,26 @@ async function importKeysFromForm(event) {
   }
 }
 
-function exportKeys() {
-  if (!(state.exportKeyIds instanceof Set)) return state.keys;
-  return state.keys.filter((key) => state.exportKeyIds.has(key.id));
-}
-
-function exportedVault(keys = exportKeys()) {
-  const selectedExport = state.exportKeyIds instanceof Set;
+function exportedVault() {
   return {
     format: '2fa-authenticator-backup',
     version: VAULT_VERSION,
     account: state.accountName,
     exportedAt: new Date().toISOString(),
-    keys,
-    deletedItems: selectedExport ? [] : state.deletedItems,
-    workflowNotes: selectedExport ? [] : state.workflowNotes,
-    deletedWorkflowNotes: selectedExport ? [] : state.deletedWorkflowNotes,
-    workflowProtection: selectedExport ? null : state.workflowProtection,
+    keys: state.keys,
+    deletedItems: state.deletedItems,
+    workflowNotes: state.workflowNotes,
+    deletedWorkflowNotes: state.deletedWorkflowNotes,
+    workflowProtection: state.workflowProtection,
   };
 }
 
-function openExportDialog(keyIds = null) {
-  state.exportKeyIds = keyIds ? new Set(keyIds) : null;
-  const count = exportKeys().length;
-  $('#export-title').textContent = state.exportKeyIds ? '导出所选密钥' : '导出备份';
-  $('#export-scope').textContent = state.exportKeyIds ? `将导出已选择的 ${count} 个密钥。` : `将导出 ${count} 个密钥、${state.workflowNotes.length} 个使用场景和回收站数据。`;
+function openExportDialog() {
+  $('#export-title').textContent = '导出完整备份';
+  $('#export-scope').textContent = `将导出 ${state.keys.length} 个验证码、${state.workflowNotes.length} 个使用场景和回收站数据。`;
   $('#export-form').reset();
+  $('#export-format-hint').textContent = '两种格式都会完整包含验证码、使用场景和回收站；建议使用密码加密格式。';
+  $('#export-warning').textContent = '该格式含有明文密钥，请只保存到安全位置。';
   hideError('#export-error');
   setHidden('#export-warning', true);
   setHidden('#export-password-group', false);
@@ -2375,12 +2405,9 @@ async function exportKeysFromForm(event) {
   const button = $('#export-submit');
   setBusy(button, true, '正在导出…');
   try {
-    const keys = exportKeys();
-    const selectedExport = state.exportKeyIds instanceof Set;
     const format = $('#export-format').value;
-    if (keys.length === 0 && (selectedExport || format === 'otpauth' || state.workflowNotes.length === 0)) {
-      throw new Error(format === 'otpauth' ? '没有可导出的密钥' : '没有可导出的数据');
-    }
+    const hasData = state.keys.length + state.workflowNotes.length + state.deletedItems.length + state.deletedWorkflowNotes.length > 0;
+    if (!hasData) throw new Error('没有可导出的数据');
     const date = new Date().toISOString().slice(0, 10);
     const accountSlug = state.accountName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]+/g, '-');
     if (format === 'encrypted') {
@@ -2388,20 +2415,12 @@ async function exportKeysFromForm(event) {
       const validation = validatePassword(password);
       if (!validation.valid) throw new Error(validation.error);
       const encrypted = await encryptBackup(exportedVault(), password);
-      downloadText(`2fa-${accountSlug}-${date}${selectedExport ? '-selected' : ''}.encrypted.json`, JSON.stringify(encrypted, null, 2), 'application/json');
-    } else if (format === 'plain') {
-      downloadText(`2fa-${accountSlug}-${date}${selectedExport ? '-selected' : ''}.json`, JSON.stringify(exportedVault(), null, 2), 'application/json');
-    } else {
-      downloadText(`2fa-${accountSlug}-${date}${selectedExport ? '-selected' : ''}.otpauth.txt`, keys.map(buildOtpauthUri).join('\n'));
-    }
+      downloadText(`2fa-${accountSlug}-${date}.encrypted.json`, JSON.stringify(encrypted, null, 2), 'application/json');
+    } else downloadText(`2fa-${accountSlug}-${date}.json`, JSON.stringify(exportedVault(), null, 2), 'application/json');
     closeModal('export-modal');
     $('#export-form').reset();
-    if (selectedExport) {
-      state.multiSelectMode = false;
-      state.selectedKeyIds.clear();
-      renderKeys();
-    } else recordBackupExport();
-    showToast(selectedExport ? `已导出 ${keys.length} 个密钥` : '备份已导出');
+    recordBackupExport();
+    showToast('完整备份已导出');
   } catch (error) {
     showError('#export-error', error.message);
   } finally {
@@ -2424,6 +2443,11 @@ function fillSettingsForm() {
   hideError('#settings-error');
   renderQuickUnlockSettings();
   updateInstallButton();
+}
+
+function openSettingsDialog() {
+  fillSettingsForm();
+  openModal('settings-modal', '#theme-select');
 }
 
 function renderQuickUnlockSettings() {
@@ -2837,7 +2861,7 @@ function setupEvents() {
     applyTheme(state.settings.theme);
   });
   $('#sync-now').addEventListener('click', manualSync);
-  $('#settings-open').addEventListener('click', () => { fillSettingsForm(); openModal('settings-modal', '#theme-select'); });
+  $('#settings-open').addEventListener('click', openSettingsDialog);
   for (const button of $$('[data-vault-view]')) button.addEventListener('click', () => setVaultView(button.dataset.vaultView));
   $('#vault-view-tabs').addEventListener('keydown', (event) => {
     if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
@@ -2933,7 +2957,7 @@ function setupEvents() {
     if (groupTag) {
       state.workflowGroupFilter = groupTag.dataset.workflowGroupFilter;
       renderWorkflowNotes();
-      $('#workflow-group-filter').closest('.searchable-select')?.querySelector('.searchable-select-trigger')?.focus({ preventScroll: true });
+      focusActiveGroupChip($('#workflow-group-filter'));
       return;
     }
     const card = event.target.closest('[data-workflow-id]');
@@ -3069,7 +3093,13 @@ function setupEvents() {
 
   $('#search-input').addEventListener('input', (event) => { state.search = event.target.value.trim(); renderKeys(); });
   $('#workflow-search').addEventListener('input', (event) => { state.workflowSearch = event.target.value.trim(); renderWorkflowNotes(); });
-  $('#workflow-group-filter').addEventListener('change', (event) => { state.workflowGroupFilter = event.target.value; renderWorkflowNotes(); });
+  $('#workflow-group-filter').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-workflow-group-chip]');
+    if (!button || button.dataset.workflowGroupChip === state.workflowGroupFilter) return;
+    state.workflowGroupFilter = button.dataset.workflowGroupChip;
+    renderWorkflowNotes();
+    focusActiveGroupChip($('#workflow-group-filter'));
+  });
   for (const button of $$('#workflow-clear-search, #workflow-filter-reset')) button.addEventListener('click', clearWorkflowFilters);
   $('#multi-select-toggle').addEventListener('click', () => setMultiSelectMode(!state.multiSelectMode));
   $('#select-visible').addEventListener('change', (event) => {
@@ -3085,7 +3115,6 @@ function setupEvents() {
   $('#bulk-unfavorite').addEventListener('click', () => bulkSetFavorite(false));
   $('#bulk-group-select').addEventListener('change', () => { $('#bulk-move').disabled = selectedKeys().length === 0 || $('#bulk-group-select').value === '__choose'; });
   $('#bulk-move').addEventListener('click', bulkMoveToGroup);
-  $('#bulk-export').addEventListener('click', () => openExportDialog([...state.selectedKeyIds]));
   $('#bulk-delete').addEventListener('click', bulkDeleteSelected);
   $('#bulk-cancel').addEventListener('click', () => setMultiSelectMode(false));
   document.addEventListener('compositionstart', () => { isComposing = true; });
@@ -3141,9 +3170,13 @@ function setupEvents() {
     $('#show-qr').focus();
   });
   for (const button of $$('#clear-filters, #token-filter-reset')) button.addEventListener('click', clearTokenFilters);
-  $('#group-filters').addEventListener('change', (event) => {
-    state.groupFilter = event.target.value;
+  $('#group-filters').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-token-group-filter]');
+    if (!button || button.dataset.tokenGroupFilter === state.groupFilter) return;
+    state.groupFilter = button.dataset.tokenGroupFilter;
+    renderGroupFilters();
     renderKeys();
+    focusActiveGroupChip($('#group-filters'));
   });
 
   $('#groups-open').addEventListener('click', () => { closeModal('settings-modal', false); renderGroups(); openModal('groups-modal'); });
@@ -3174,21 +3207,28 @@ function setupEvents() {
     else purgeTrashItem(row.dataset.trashId);
   });
 
-  $('#import-open').addEventListener('click', () => { resetImportPreview({ resetForm: true }); openModal('import-modal', '#import-file'); });
+  $('#settings-import-open').addEventListener('click', () => {
+    closeModal('settings-modal', false);
+    openImportDialog();
+  });
   $('#import-form').addEventListener('submit', importKeysFromForm);
   for (const input of $$('#import-file, #import-text, #import-password, #import-strategy')) {
     input.addEventListener(input.matches('select, input[type="file"]') ? 'change' : 'input', () => resetImportPreview());
   }
-  $('#import-modal').addEventListener('modal:close', () => resetImportPreview({ resetForm: true }));
-  $('#export-open').addEventListener('click', () => openExportDialog());
-  $('#export-modal').addEventListener('modal:close', () => { state.exportKeyIds = null; });
+  $('#import-modal').addEventListener('modal:close', () => {
+    resetImportPreview({ resetForm: true });
+  });
+  $('#settings-export-open').addEventListener('click', () => {
+    closeModal('settings-modal', false);
+    openExportDialog();
+  });
   $('#export-format').addEventListener('change', (event) => {
     const encrypted = event.target.value === 'encrypted';
     setHidden('#export-password-group', !encrypted);
     setHidden('#export-warning', encrypted);
   });
   $('#export-form').addEventListener('submit', exportKeysFromForm);
-  $('#backup-reminder-export').addEventListener('click', () => openExportDialog());
+  $('#backup-reminder-settings').addEventListener('click', openSettingsDialog);
   $('#backup-reminder-dismiss').addEventListener('click', () => {
     saveAccountTimestamp(BACKUP_DISMISSED_KEY);
     renderBackupReminder();
@@ -3340,7 +3380,6 @@ function setupInstallPrompt() {
 async function init() {
   applyTheme(state.settings.theme);
   watchSystemTheme(() => state.settings.theme);
-  enhanceSearchableSelects();
   setupQrScanner();
   setupEvents();
   setupInstallPrompt();

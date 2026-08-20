@@ -5,8 +5,6 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const app = await readFile(new URL('../src/js/app.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const ui = await readFile(new URL('../src/js/ui.js', import.meta.url), 'utf8');
-const searchableSelect = await readFile(new URL('../src/js/searchable-select.js', import.meta.url), 'utf8');
-const searchableSelectStyles = await readFile(new URL('../src/searchable-select.css', import.meta.url), 'utf8');
 
 describe('static application shell', () => {
   it('uses a strict CSP and contains no inline event handlers', () => {
@@ -306,16 +304,27 @@ describe('static application shell', () => {
     expect(app).toContain('data-trash-kind="workflow"');
   });
 
-  it('places group filtering inside an accessible searchable dropdown', () => {
-    expect(html).toContain('id="group-filters" data-searchable-filter');
-    expect(html).toContain('data-search-placeholder="筛选分组…"');
-    expect(app).toContain('refreshSearchableSelect(select)');
-    expect(app).toContain("$('#group-filters').addEventListener('change'");
-    expect(searchableSelect).toContain("search.type = 'search'");
-    expect(searchableSelect).toContain("trigger.setAttribute('aria-expanded', 'true')");
-    expect(searchableSelect).toContain("event.key === 'Escape'");
-    expect(searchableSelectStyles).toContain('.searchable-select-panel { position: absolute;');
-    expect(searchableSelectStyles).toContain('min-height: 44px;');
+  it('shows token and workflow group filters as direct accessible chips', () => {
+    expect(html).toContain('id="group-filters" class="group-filter-chips" role="group"');
+    expect(html).toContain('id="workflow-group-filter" class="group-filter-chips" role="group"');
+    expect(html).not.toContain('id="group-filters" data-searchable-filter');
+    expect(html).not.toContain('id="workflow-group-filter" data-searchable-filter');
+    expect(app).toContain('data-token-group-filter=');
+    expect(app).toContain('data-workflow-group-chip=');
+    expect(app).toContain('aria-pressed="${String(active)}"');
+    expect(app).toContain("$('#group-filters').addEventListener('click'");
+    expect(app).toContain("$('#workflow-group-filter').addEventListener('click'");
+    expect(styles).toContain('.group-filter-chips { display: flex; min-width: 0; min-height: 44px;');
+    expect(styles).toContain('.group-filter-chip { display: inline-flex;');
+    expect(styles).toContain('.group-filter-chip.active { color: white;');
+  });
+
+  it('filters tokens that are not linked to an active workflow', () => {
+    expect(app).toContain('function getLinkedWorkflowKeyIds()');
+    expect(app).toContain("{ value: '__unlinked_workflow', label: '未关联场景'");
+    expect(app).toContain("state.groupFilter === '__unlinked_workflow'");
+    expect(app).toContain('!linkedWorkflowKeyIds.has(key.id)');
+    expect(app).toContain("relationFilterActive ? '清除关联筛选'");
   });
 
   it('keeps active token and workflow filters visible and easy to reset', () => {
@@ -346,7 +355,30 @@ describe('static application shell', () => {
     expect(html.match(/class="[^"]*trash-count/g)).toHaveLength(2);
     expect(app).toContain("for (const badge of $$('.trash-count')) badge.textContent = trashCount");
     expect(app).toContain("for (const button of $$('.trash-open')) button.addEventListener('click', openTrashModal)");
-    expect(styles).toContain('.workflow-heading-buttons { display: flex;');
+    expect(styles).toContain('.workflow-heading-buttons { grid-column: 1 / -1; display: grid;');
+  });
+
+  it('keeps one complete import and export entry inside settings', () => {
+    const settingsModal = html.indexOf('id="settings-modal"');
+    const settingsImport = html.indexOf('id="settings-import-open"');
+    const settingsExport = html.indexOf('id="settings-export-open"');
+    expect(settingsImport).toBeGreaterThan(settingsModal);
+    expect(settingsExport).toBeGreaterThan(settingsModal);
+    for (const id of ['import-open', 'export-open', 'workflow-import-open', 'workflow-export-open', 'backup-reminder-export', 'bulk-export']) {
+      expect(html).not.toContain(`id="${id}"`);
+    }
+    expect(html).toContain('完整导出包含验证码、使用场景和回收站；导入会同时恢复验证码与使用场景');
+    expect(html).toContain('id="backup-reminder-settings"');
+    expect(app).toContain("$('#settings-import-open').addEventListener('click'");
+    expect(app).toContain("$('#settings-export-open').addEventListener('click'");
+    expect(app).toContain("$('#backup-reminder-settings').addEventListener('click', openSettingsDialog)");
+    expect(app).toContain("format: '2fa-authenticator-backup'");
+    expect(app).toContain('将导出 ${state.keys.length} 个验证码、${state.workflowNotes.length} 个使用场景和回收站数据');
+    expect(app).toContain('state.deletedItems.length + state.deletedWorkflowNotes.length > 0');
+    expect(app).not.toContain('2fa-workflow-backup');
+    expect(app).not.toContain('importScope');
+    expect(app).not.toContain('exportScope');
+    expect(styles).toContain('.settings-backup-panel { display: flex;');
   });
 
   it('waits for a fresh verification code during the final second', () => {
@@ -365,7 +397,8 @@ describe('static application shell', () => {
     expect(app).toContain('applyImportPlan(pending.plan, state.keys');
     expect(app).toContain('const icon = getKeyIcon(candidate)');
     expect(app).toContain('token-icon import-preview-icon');
-    expect(app).toContain('共 <strong>${plan.items.length}</strong> 条');
+    expect(app).toContain('共 <strong>${totalCount}</strong> 条');
+    expect(app).toContain('重名时自动重命名');
     expect(app).toContain('确认导入 ${count} 条');
     expect(app).toContain("input.addEventListener(input.matches('select, input[type=\"file\"]') ? 'change' : 'input'");
     expect(app).toContain("$('#import-modal').addEventListener('modal:close'");
@@ -388,7 +421,7 @@ describe('static application shell', () => {
   });
 
   it('supports accessible bulk selection over the current filtered results', () => {
-    for (const id of ['multi-select-toggle', 'multi-select-tools', 'select-visible', 'bulk-actions', 'bulk-group-select', 'bulk-favorite', 'bulk-unfavorite', 'bulk-export', 'bulk-delete', 'bulk-cancel']) {
+    for (const id of ['multi-select-toggle', 'multi-select-tools', 'select-visible', 'bulk-actions', 'bulk-group-select', 'bulk-favorite', 'bulk-unfavorite', 'bulk-delete', 'bulk-cancel']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(app).toContain('const visibleIds = getVisibleKeys().map((key) => key.id)');

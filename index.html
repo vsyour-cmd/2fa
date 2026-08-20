@@ -12,7 +12,6 @@
     <title>2FA Authenticator</title>
     <script src="/theme-boot.js"></script>
     <link rel="stylesheet" href="/src/styles.css">
-    <link rel="stylesheet" href="/src/searchable-select.css">
     <script type="module" src="/src/js/app.js"></script>
   </head>
   <body>
@@ -133,6 +132,9 @@
 
         <div id="tokens-view" role="tabpanel" aria-labelledby="tokens-tab">
         <div class="toolbar card-subtle">
+          <div class="token-toolbar-actions" aria-label="验证码管理">
+            <button id="trash-open" class="btn btn-ghost trash-open" type="button">回收站 <span id="trash-count" class="badge trash-count">0</span></button>
+          </div>
           <div class="toolbar-main">
             <div class="toolbar-primary">
               <div class="search-box">
@@ -180,15 +182,14 @@
             <span class="field-hint">卡片点击只会切换选择，不会复制验证码</span>
           </div>
           <div class="token-filter-row">
-            <label class="sr-only" for="group-filters">按分组筛选</label>
-            <select id="group-filters" data-searchable-filter data-searchable-class="align-start" data-filter-label="分组筛选" data-search-placeholder="筛选分组…" data-options-label="可用分组" data-searchable-default="__all"></select>
+            <div id="group-filters" class="group-filter-chips" role="group" aria-label="按验证码分组筛选"></div>
             <button id="token-filter-reset" class="active-filter-reset hidden" type="button"><span aria-hidden="true">×</span><span id="token-filter-reset-label">清除筛选</span></button>
           </div>
         </div>
 
         <aside id="backup-reminder" class="backup-reminder hidden" aria-labelledby="backup-reminder-title">
           <div><strong id="backup-reminder-title">建议备份密钥</strong><span id="backup-reminder-message"></span></div>
-          <div class="backup-reminder-actions"><button id="backup-reminder-export" class="btn btn-primary" type="button">导出加密备份</button><button id="backup-reminder-dismiss" class="icon-btn" type="button" aria-label="暂时关闭备份提醒" title="暂时关闭">×</button></div>
+          <div class="backup-reminder-actions"><button id="backup-reminder-settings" class="btn btn-primary" type="button">前往设置</button><button id="backup-reminder-dismiss" class="icon-btn" type="button" aria-label="暂时关闭备份提醒" title="暂时关闭">×</button></div>
         </aside>
 
         <div id="token-list" class="token-grid" tabindex="-1" aria-live="polite"></div>
@@ -204,30 +205,22 @@
           <button id="clear-filters" class="btn btn-secondary" type="button">清除筛选</button>
         </div>
 
-        <footer class="footer-actions">
-          <div id="standard-actions" class="standard-actions">
-            <button id="import-open" class="btn btn-secondary" type="button">导入</button>
-            <button id="export-open" class="btn btn-secondary" type="button">导出</button>
-            <button id="trash-open" class="btn btn-ghost trash-open" type="button">回收站 <span id="trash-count" class="badge trash-count">0</span></button>
-          </div>
-          <div id="bulk-actions" class="bulk-actions card hidden" role="region" aria-label="批量操作">
-            <div class="bulk-primary-actions">
-              <button id="bulk-favorite" class="btn btn-secondary" type="button">收藏</button>
-              <button id="bulk-unfavorite" class="btn btn-secondary" type="button">取消收藏</button>
-              <div class="bulk-group-control">
-                <label class="sr-only" for="bulk-group-select">移动到分组</label>
-                <select id="bulk-group-select" aria-label="选择目标分组"><option value="__choose" selected disabled>移动到分组…</option></select>
-                <button id="bulk-move" class="btn btn-secondary" type="button">移动</button>
-              </div>
-              <button id="bulk-export" class="btn btn-secondary" type="button">导出所选</button>
-              <button id="bulk-delete" class="btn btn-danger" type="button">移入回收站</button>
+        <div id="bulk-actions" class="bulk-actions card hidden" role="region" aria-label="批量操作">
+          <div class="bulk-primary-actions">
+            <button id="bulk-favorite" class="btn btn-secondary" type="button">收藏</button>
+            <button id="bulk-unfavorite" class="btn btn-secondary" type="button">取消收藏</button>
+            <div class="bulk-group-control">
+              <label class="sr-only" for="bulk-group-select">移动到分组</label>
+              <select id="bulk-group-select" aria-label="选择目标分组"><option value="__choose" selected disabled>移动到分组…</option></select>
+              <button id="bulk-move" class="btn btn-secondary" type="button">移动</button>
             </div>
-            <div class="bulk-selection-status" aria-live="polite">
-              <strong id="bulk-selected-count">已选 0 项</strong>
-              <button id="bulk-cancel" class="btn btn-ghost" type="button">取消</button>
-            </div>
+            <button id="bulk-delete" class="btn btn-danger" type="button">移入回收站</button>
           </div>
-        </footer>
+          <div class="bulk-selection-status" aria-live="polite">
+            <strong id="bulk-selected-count">已选 0 项</strong>
+            <button id="bulk-cancel" class="btn btn-ghost" type="button">取消</button>
+          </div>
+        </div>
         </div>
 
         <section id="workflow-view" class="workflow-view hidden" role="tabpanel" aria-labelledby="workflow-tab">
@@ -253,8 +246,7 @@
               <input id="workflow-search" type="search" placeholder="搜索场景名称、分组、内容或关联验证码…" autocomplete="off">
             </div>
             <div class="workflow-group-filter-wrap">
-              <label class="sr-only" for="workflow-group-filter">按场景分组筛选</label>
-              <select id="workflow-group-filter" data-searchable-filter data-searchable-class="align-start" data-filter-label="场景分组" data-search-placeholder="筛选场景分组…" data-options-label="可用分组" data-searchable-default="__all"></select>
+              <div id="workflow-group-filter" class="group-filter-chips" role="group" aria-label="按使用场景分组筛选"></div>
             </div>
             <span id="workflow-list-summary" aria-live="polite">0 个使用场景</span>
             <button id="workflow-filter-reset" class="active-filter-reset hidden" type="button"><span aria-hidden="true">×</span><span id="workflow-filter-reset-label">清除筛选</span></button>
@@ -516,6 +508,16 @@
             <p class="field-hint">PIN 只用于当前标签页锁定后的短时恢复；刷新、跨标签页或超过 5 分钟仍需主密码。</p>
           </div>
           <div id="settings-error" class="error hidden" role="alert"></div>
+          <section class="settings-backup-panel" aria-labelledby="settings-backup-title">
+            <div class="settings-backup-copy">
+              <h3 id="settings-backup-title">数据迁移与备份</h3>
+              <p>完整导出包含验证码、使用场景和回收站；导入会同时恢复验证码与使用场景。</p>
+            </div>
+            <div class="settings-backup-actions">
+              <button id="settings-import-open" class="btn btn-secondary" type="button">导入完整备份</button>
+              <button id="settings-export-open" class="btn btn-primary" type="button">导出完整备份</button>
+            </div>
+          </section>
           <p class="settings-shortcuts">快捷键：<kbd>/</kbd> 搜索 · <kbd>N</kbd> 添加 · <kbd>Esc</kbd> 清空</p>
           <div class="settings-links">
             <button id="install-app" class="btn btn-primary hidden" type="button">安装到主屏幕/桌面</button>
@@ -578,10 +580,10 @@
         <div class="modal-header"><div><p class="eyebrow">迁移工具</p><h2 id="import-title">导入备份或密钥</h2></div><button class="icon-btn" type="button" data-close-modal="import-modal" aria-label="关闭">×</button></div>
         <form id="import-form">
           <p id="import-description" class="dialog-message import-intro">先解析预览，再确认写入。预览会逐条标出新增、覆盖、跳过和无效条目。</p>
-          <div class="form-group"><label for="import-file">备份文件</label><input id="import-file" type="file" accept=".json,.txt,.2fas,application/json,text/plain" aria-describedby="import-file-hint"><p id="import-file-hint" class="field-hint">本应用的完整备份可恢复密钥和使用场景；也支持 Aegis、2FAS、andOTP 备份及 OTPAuth 文本列表。最大 5 MB。</p></div>
-          <div class="form-group"><label for="import-text">或粘贴 otpauth:// / otpauth-migration:// 链接</label><textarea id="import-text" rows="4" autocomplete="off" spellcheck="false" aria-describedby="import-text-hint"></textarea><p id="import-text-hint" class="field-hint">普通 OTPAuth 链接可每行粘贴一个；也支持 Google Authenticator 迁移链接。</p></div>
+          <div id="import-file-group" class="form-group"><label for="import-file">备份文件</label><input id="import-file" type="file" accept=".json,.txt,.2fas,application/json,text/plain" aria-describedby="import-file-hint"><p id="import-file-hint" class="field-hint">本应用的完整备份可恢复密钥和使用场景；也支持 Aegis、2FAS、andOTP 备份及 OTPAuth 文本列表。最大 5 MB。</p></div>
+          <div id="import-text-group" class="form-group"><label for="import-text">或粘贴 otpauth:// / otpauth-migration:// 链接</label><textarea id="import-text" rows="4" autocomplete="off" spellcheck="false" aria-describedby="import-text-hint"></textarea><p id="import-text-hint" class="field-hint">普通 OTPAuth 链接可每行粘贴一个；也支持 Google Authenticator 迁移链接。</p></div>
           <div class="form-group"><label for="import-password">导入密码</label><div class="input-with-action"><input id="import-password" type="password" autocomplete="off" aria-describedby="import-password-hint"><button class="input-action" type="button" data-toggle-password="import-password" aria-label="显示密码" aria-pressed="false">显示</button></div><p id="import-password-hint" class="field-hint">仅导入 Aegis 或本应用的加密备份时填写，普通备份请留空。</p></div>
-          <div class="form-group"><label for="import-strategy">同名条目</label><select id="import-strategy" aria-describedby="import-strategy-hint"><option value="skip">跳过重名</option><option value="overwrite">覆盖已有</option><option value="all">全部导入（自动重命名）</option></select><p id="import-strategy-hint" class="field-hint">决定名称重复时如何处理；预览确认前不会写入保险库。</p></div>
+          <div id="import-strategy-group" class="form-group"><label for="import-strategy">同名条目</label><select id="import-strategy" aria-describedby="import-strategy-hint"><option value="skip">跳过重名</option><option value="overwrite">覆盖已有</option><option value="all">全部导入（自动重命名）</option></select><p id="import-strategy-hint" class="field-hint">决定名称重复时如何处理；预览确认前不会写入保险库。</p></div>
           <div id="import-error" class="error hidden" role="alert"></div>
           <div id="import-preview" class="import-preview hidden" role="status" aria-live="polite" aria-atomic="true"></div>
           <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="import-modal">取消</button><button id="import-submit" class="btn btn-primary" type="submit">预览导入</button></div>
@@ -594,7 +596,7 @@
         <div class="modal-header"><h2 id="export-title">导出备份</h2><button class="icon-btn" type="button" data-close-modal="export-modal" aria-label="关闭">×</button></div>
         <form id="export-form">
           <p id="export-scope" class="field-hint">将导出当前保险库中的全部数据。</p>
-          <div class="form-group"><label for="export-format">格式</label><select id="export-format" aria-describedby="export-format-hint"><option value="encrypted">密码加密 JSON（推荐）</option><option value="plain">明文 JSON</option><option value="otpauth">OTPAuth URI 列表</option></select><p id="export-format-hint" class="field-hint">加密 JSON 适合安全备份；明文 JSON 和 OTPAuth URI 会直接包含密钥。</p></div>
+          <div class="form-group"><label for="export-format">格式</label><select id="export-format" aria-describedby="export-format-hint"><option value="encrypted">密码加密 JSON（推荐）</option><option value="plain">明文 JSON</option></select><p id="export-format-hint" class="field-hint">两种格式都会完整包含验证码、使用场景和回收站；建议使用密码加密格式。</p></div>
           <div id="export-password-group" class="form-group"><label for="export-password">导出密码</label><div class="input-with-action"><input id="export-password" type="password" autocomplete="new-password" aria-describedby="export-password-hint"><button class="input-action" type="button" data-toggle-password="export-password" aria-label="显示密码" aria-pressed="false">显示</button></div><p id="export-password-hint" class="field-hint">用于打开这份备份，请使用与主密码不同的强密码。</p></div>
           <div id="export-warning" class="warning hidden">该格式含有明文密钥，请只保存到安全位置。</div>
           <div id="export-error" class="error hidden" role="alert"></div>
