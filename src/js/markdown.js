@@ -39,15 +39,26 @@ function embedSecretTokens(source) {
   return { replaced, values, tokenPrefix };
 }
 
-function injectSecretRevealMarkup(html, values, tokenPrefix) {
+function secretReference() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return [...crypto.getRandomValues(new Uint8Array(16))]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function injectSecretRevealMarkup(html, values, tokenPrefix, secretStore) {
   if (!values.length) return html;
   let rendered = html;
   for (let index = 0; index < values.length; index += 1) {
     const token = `${tokenPrefix}${index}`;
     const raw = values[index];
     const masked = secretMask(raw.length);
-    const encoded = encodeURIComponent(raw);
-    const replacement = `<span class="markdown-secret"><span class="markdown-secret-mask" aria-hidden="true">${masked}</span><a href="#" class="markdown-secret-copy" data-secret-copy="${encoded}" title="复制密码">复制</a></span>`;
+    const reference = secretStore instanceof Map ? secretReference() : '';
+    if (reference) secretStore.set(reference, raw);
+    const copyAction = reference
+      ? `<a href="#" class="markdown-secret-copy" data-secret-ref="${reference}" title="复制密码">复制</a>`
+      : '';
+    const replacement = `<span class="markdown-secret"><span class="markdown-secret-mask" aria-hidden="true">${masked}</span>${copyAction}</span>`;
     rendered = rendered.replace(token, replacement);
   }
   return rendered;
@@ -64,7 +75,7 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   }
 });
 
-export function renderMarkdown(value) {
+export function renderMarkdown(value, secretStore = null) {
   const source = String(value || '');
   if (!source.trim()) return '';
   const { replaced, values, tokenPrefix } = embedSecretTokens(source);
@@ -73,8 +84,8 @@ export function renderMarkdown(value) {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
     ALLOW_ARIA_ATTR: false,
-    ALLOW_DATA_ATTR: true,
+    ALLOW_DATA_ATTR: false,
     SANITIZE_NAMED_PROPS: true,
   });
-  return injectSecretRevealMarkup(sanitized, values, tokenPrefix);
+  return injectSecretRevealMarkup(sanitized, values, tokenPrefix, secretStore);
 }

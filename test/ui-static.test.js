@@ -164,7 +164,7 @@ describe('static application shell', () => {
     expect(app).toContain('matchesWorkflowNoteFilter(note, query)');
     expect(styles).toContain('.token-workflow-option { display: flex; min-height: 58px;');
     expect(app).toContain('renderWorkflowMarkdownPreview()');
-    expect(app).toContain("renderMarkdown(note.content)");
+    expect(app).toContain('renderMarkdown(note.content, workflowSecretStores.list)');
     expect(app).toContain('data-workflow-group-filter=');
     expect(app).toContain("group: $('#workflow-group').value");
     expect(app).toContain('function renderWorkflowGroupFilters()');
@@ -189,6 +189,16 @@ describe('static application shell', () => {
     expect(app).toContain('class="usage-badge recent"');
     expect(app).toContain('data-workflow-action="favorite"');
     expect(styles).toContain('.workflow-note-card.frequent::before');
+  });
+
+  it('resolves workflow passwords from volatile memory instead of DOM attributes', () => {
+    expect(app).toContain('const workflowSecretStores = {');
+    expect(app).toContain("event.target.closest('[data-secret-ref]')");
+    expect(app).toContain('workflowSecretStores.run.get(reference)');
+    expect(app).toContain('workflowSecretStores.editor.clear()');
+    expect(app).toContain('workflowSecretStores.run.clear()');
+    expect(app).not.toContain('decodeMarkdownSecret');
+    expect(app).not.toContain('dataset.secretCopy');
   });
 
   it('lets touch and keyboard users expand long notes without cluttering short notes', () => {

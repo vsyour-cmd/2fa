@@ -15,7 +15,7 @@ describe('safe Markdown rendering', () => {
     expect(markdown).toContain("import DOMPurify from 'dompurify'");
     expect(markdown).toContain('ALLOWED_TAGS');
     expect(markdown).toContain('ALLOWED_ATTR');
-    expect(markdown).toContain('ALLOW_DATA_ATTR: true');
+    expect(markdown).toContain('ALLOW_DATA_ATTR: false');
     expect(markdown).toContain('SANITIZE_NAMED_PROPS: true');
     expect(markdown).not.toContain("'img'");
     expect(markdown).not.toContain("'script'");
@@ -48,5 +48,13 @@ describe('safe Markdown rendering', () => {
     expect(markdown).not.toContain("replace(/\\s+/g, ' ')");
     expect(markdown).toContain("while (source.includes(tokenPrefix)) tokenPrefix += 'X'");
     expect(markdown).toContain('if (!raw) return marker');
+  });
+
+  it('keeps plaintext secrets out of rendered HTML attributes', () => {
+    expect(markdown).toContain('secretStore.set(reference, raw)');
+    expect(markdown).toContain('data-secret-ref="${reference}"');
+    expect(markdown).toContain('secretStore instanceof Map');
+    expect(markdown).not.toContain('data-secret-copy');
+    expect(markdown).not.toContain('encodeURIComponent(raw)');
   });
 });

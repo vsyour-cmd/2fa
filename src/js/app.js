@@ -108,6 +108,11 @@ const BACKUP_DISMISSED_KEY = '2fa_backup_reminder_dismissed_v1';
 const BACKUP_REMINDER_DAYS = 30;
 const RECENT_USAGE_WINDOW_MS = 7 * 86_400_000;
 const WORKFLOW_EDIT_UNLOCK_MS = 5 * 60_000;
+const workflowSecretStores = {
+  list: new Map(),
+  editor: new Map(),
+  run: new Map(),
+};
 const state = {
   masterKey: null,
   keyHash: '',
@@ -203,6 +208,9 @@ function clearSensitiveState() {
   state.editingWorkflowLinks = [];
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
+  workflowSecretStores.list.clear();
+  workflowSecretStores.editor.clear();
+  workflowSecretStores.run.clear();
   document.body.classList.remove('bulk-mode');
   clearTimeout(state.saveTimer);
   clearTimeout(state.clipboardTimer);
@@ -1090,8 +1098,9 @@ function renderWorkflowNotes() {
       .slice(0, 3)
       .map((note) => note.id)
     : []);
+  workflowSecretStores.list = new Map();
   $('#workflow-note-list').innerHTML = notes.map((note) => {
-    const preview = renderMarkdown(note.content);
+    const preview = renderMarkdown(note.content, workflowSecretStores.list);
     const linkStates = note.linkedKeys.map(resolveWorkflowLink);
     const previewLinks = linkStates.slice(0, 4).map((item) => `<span class="workflow-link-chip${item.status === 'active' ? '' : ' unavailable'}"><span>${escapeHtml(item.label)}</span>${item.status === 'recycled' ? ' · 回收站' : item.status === 'unavailable' ? ' · 不可用' : ''}</span>`).join('');
     const hiddenLinks = linkStates.length - 4;
@@ -1236,7 +1245,8 @@ async function saveTokenWorkflowLinks(event) {
 function renderWorkflowMarkdownPreview() {
   const content = $('#workflow-content').value;
   $('#workflow-character-count').textContent = `${content.length} / 5000`;
-  $('#workflow-content-preview').innerHTML = renderMarkdown(content)
+  workflowSecretStores.editor = new Map();
+  $('#workflow-content-preview').innerHTML = renderMarkdown(content, workflowSecretStores.editor)
     || '<p class="markdown-empty">开始输入后，这里会显示 Markdown 预览。</p>';
 }
 
@@ -1530,7 +1540,8 @@ async function openWorkflowRun(id) {
   if (!note) return;
   $('#workflow-run-modal').dataset.workflowId = note.id;
   $('#workflow-run-title').textContent = note.title;
-  $('#workflow-run-content').innerHTML = renderMarkdown(note.content)
+  workflowSecretStores.run = new Map();
+  $('#workflow-run-content').innerHTML = renderMarkdown(note.content, workflowSecretStores.run)
     || '<p class="markdown-empty">尚未记录操作内容</p>';
   $('#workflow-run-key-count').textContent = note.linkedKeys.length ? `共 ${note.linkedKeys.length} 个` : '未关联验证码';
   $('#workflow-run-keys').innerHTML = note.linkedKeys.length
@@ -1616,19 +1627,14 @@ async function copyText(value, successMessage = '已复制') {
   }
 }
 
-function decodeMarkdownSecret(value) {
-  try {
-    return decodeURIComponent(String(value || ''));
-  } catch {
-    return '';
-  }
-}
-
 function handleWorkflowSecretCopy(event) {
-  const trigger = event.target.closest('[data-secret-copy]');
+  const trigger = event.target.closest('[data-secret-ref]');
   if (!trigger) return;
   event.preventDefault();
-  const value = decodeMarkdownSecret(trigger.dataset.secretCopy);
+  const reference = trigger.dataset.secretRef;
+  const value = workflowSecretStores.run.get(reference)
+    || workflowSecretStores.editor.get(reference)
+    || workflowSecretStores.list.get(reference);
   if (!value) return;
   copyText(value, '密码已复制');
   return true;
@@ -2874,9 +2880,11 @@ function setupEvents() {
   });
   $('#workflow-edit-modal').addEventListener('modal:close', () => {
     state.editingWorkflowLinks = [];
+    workflowSecretStores.editor.clear();
     $('#workflow-key-filter').value = '';
     closeWorkflowKeyDropdown();
   });
+  $('#workflow-run-modal').addEventListener('modal:close', () => workflowSecretStores.run.clear());
   $('#workflow-content').addEventListener('input', renderWorkflowMarkdownPreview);
   $('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker);
   $('#workflow-key-select').addEventListener('click', () => {
