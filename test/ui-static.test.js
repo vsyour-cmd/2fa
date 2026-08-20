@@ -382,15 +382,16 @@ describe('static application shell', () => {
     expect(styles).toContain('.settings-backup-panel { display: flex;');
   });
 
-  it('provides a secure random password generator beside workflows with local history', () => {
+  it('provides a secure inline password generator tab with local history', () => {
     const workflowTab = html.indexOf('id="workflow-tab"');
-    const passwordGeneratorOpen = html.indexOf('id="password-generator-open"');
+    const passwordGeneratorTab = html.indexOf('id="password-generator-tab"');
     const tokenView = html.indexOf('id="tokens-view"');
-    expect(passwordGeneratorOpen).toBeGreaterThan(workflowTab);
-    expect(passwordGeneratorOpen).toBeLessThan(tokenView);
-    expect(html.match(/id="password-generator-open"/g)).toHaveLength(1);
-    expect(html).toContain('id="password-generator-open"');
-    expect(html).toContain('id="password-generator-modal"');
+    expect(passwordGeneratorTab).toBeGreaterThan(workflowTab);
+    expect(passwordGeneratorTab).toBeLessThan(tokenView);
+    expect(html).toContain('id="password-generator-tab" type="button" role="tab"');
+    expect(html).toContain('aria-controls="password-generator-view" data-vault-view="password"');
+    expect(html).toContain('id="password-generator-view" class="password-generator-view hidden" role="tabpanel"');
+    expect(html).not.toContain('id="password-generator-modal"');
     expect(html).toContain('启用历史时最多保存最近 100 条到当前浏览器');
     expect(html).toContain('使用当前保险库密钥加密后保存在本地');
     for (const id of ['password-lowercase', 'password-uppercase', 'password-numbers', 'password-symbols', 'password-length', 'password-count', 'password-exclude-enabled', 'password-excluded-chars', 'password-copy-all', 'password-history-enabled', 'password-history-clear', 'password-history-list']) {
@@ -399,7 +400,10 @@ describe('static application shell', () => {
     expect(app).toContain("generatePasswords(passwordGeneratorOptions())");
     expect(app).toContain("generatedPasswords.fill('')");
     expect(app).toMatch(/function clearSensitiveState[\s\S]*?clearGeneratedPasswords\(\)/);
-    expect(app).toContain("$('#password-generator-modal').addEventListener('modal:close'");
+    expect(app).toContain("setHidden('#password-generator-view', state.vaultView !== 'password')");
+    expect(app).toContain('function resetPasswordGeneratorView()');
+    expect(app).toContain('async function preparePasswordGeneratorView()');
+    expect(app).not.toContain("openModal('password-generator-modal'");
     expect(app).toContain("copyText(generatedPasswords.join('\\n')");
     expect(app).toContain("const PASSWORD_HISTORY_LIMIT = 100");
     expect(app).toContain("await encryptJson(passwordHistory, state.masterKey)");
@@ -410,7 +414,8 @@ describe('static application shell', () => {
     expect(app).toContain("await reencryptPasswordHistory(nextKey)");
     expect(passwordGenerator).toContain('cryptoSource.getRandomValues(value)');
     expect(passwordGenerator).toContain('Math.floor(UINT32_RANGE / max) * max');
-    expect(styles).toContain('.vault-view-navigation { display: flex;');
+    expect(styles).toContain('.password-generator-view { outline: 0;');
+    expect(styles).toContain('.password-generator-card { padding:');
     expect(styles).toContain('.password-character-options { display: grid;');
     expect(styles).toContain('.password-result-row { display: flex;');
     expect(styles).toContain('.password-history-content { display: grid;');

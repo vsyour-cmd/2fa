@@ -162,6 +162,7 @@ let isComposing = false;
 let noteResizeFrame = 0;
 let quickUnlockCache = null;
 let quickUnlockTimer = null;
+let passwordGeneratorReady = false;
 
 function vaultPayload() {
   return {
@@ -211,6 +212,7 @@ function clearSensitiveState() {
   state.editingWorkflowLinks = [];
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
+  passwordGeneratorReady = false;
   clearGeneratedPasswords();
   clearPasswordHistoryMemory();
   workflowSecretStores.list.clear();
@@ -1070,22 +1072,25 @@ function focusActiveGroupChip(container) {
 }
 
 function setVaultView(view, focus = false) {
-  state.vaultView = view === 'workflow' ? 'workflow' : 'tokens';
-  const workflowActive = state.vaultView === 'workflow';
-  setHidden('#tokens-view', workflowActive);
-  setHidden('#workflow-view', !workflowActive);
+  const nextView = ['tokens', 'workflow', 'password'].includes(view) ? view : 'tokens';
+  if (state.vaultView === 'password' && nextView !== 'password') resetPasswordGeneratorView();
+  state.vaultView = nextView;
+  setHidden('#tokens-view', state.vaultView !== 'tokens');
+  setHidden('#workflow-view', state.vaultView !== 'workflow');
+  setHidden('#password-generator-view', state.vaultView !== 'password');
   for (const button of $$('[data-vault-view]')) {
     const active = button.dataset.vaultView === state.vaultView;
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', String(active));
     button.tabIndex = active ? 0 : -1;
   }
-  if (workflowActive && state.multiSelectMode) {
+  if (state.vaultView !== 'tokens' && state.multiSelectMode) {
     state.multiSelectMode = false;
     state.selectedKeyIds.clear();
     document.body.classList.remove('bulk-mode');
   }
-  if (focus) document.getElementById(workflowActive ? 'workflow-view' : 'tokens-view')?.focus({ preventScroll: true });
+  if (state.vaultView === 'password' && !passwordGeneratorReady) void preparePasswordGeneratorView();
+  if (focus) document.getElementById(`${state.vaultView === 'password' ? 'password-generator' : state.vaultView}-view`)?.focus({ preventScroll: true });
 }
 
 function renderWorkflowNotes() {
@@ -2644,16 +2649,28 @@ async function generateRandomPasswords(event) {
   }
 }
 
-async function openPasswordGenerator() {
+function resetPasswordGeneratorView() {
+  passwordGeneratorReady = false;
+  clearGeneratedPasswords();
+  clearPasswordHistoryMemory();
+  $('#password-generator-form').reset();
+  $('#password-excluded-chars').disabled = false;
+  hideError('#password-generator-error');
+}
+
+async function preparePasswordGeneratorView() {
+  passwordGeneratorReady = true;
   $('#password-generator-form').reset();
   $('#password-history-enabled').checked = loadPasswordHistoryEnabled();
   $('#password-excluded-chars').disabled = false;
   hideError('#password-generator-error');
   clearGeneratedPasswords();
   await loadPasswordHistory();
+  if (state.vaultView !== 'password') {
+    resetPasswordGeneratorView();
+    return;
+  }
   renderPasswordHistory();
-  openModal('password-generator-modal', '#password-length');
-  await generateRandomPasswords();
 }
 
 function renderQuickUnlockSettings() {
@@ -3346,17 +3363,21 @@ function setupEvents() {
         $('#search-input').value = '';
         renderKeys();
         $('#token-list').focus();
-      } else {
+      } else if (state.vaultView === 'workflow') {
         state.workflowSearch = '';
         state.workflowGroupFilter = '__all';
         $('#workflow-search').value = '';
         renderWorkflowNotes();
         $('#workflow-note-list').focus();
+      } else {
+        clearGeneratedPasswords();
+        $('#password-length').focus();
       }
       return;
     }
     if (inputTarget) return;
     if (event.key === '/' || ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k')) {
+      if (state.vaultView === 'password') return;
       event.preventDefault();
       const searchInput = $(state.vaultView === 'workflow' ? '#workflow-search' : '#search-input');
       searchInput.focus();
@@ -3364,6 +3385,7 @@ function setupEvents() {
     } else if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLocaleLowerCase() === 'n') {
       event.preventDefault();
       if (state.vaultView === 'workflow') openWorkflowEditor();
+      else if (state.vaultView === 'password') void generateRandomPasswords();
       else {
         resetAddForm();
         openModal('add-modal', '#add-name');
@@ -3441,7 +3463,6 @@ function setupEvents() {
     renderBackupReminder();
   });
   $('#install-app').addEventListener('click', installApp);
-  $('#password-generator-open').addEventListener('click', openPasswordGenerator);
   $('#password-generator-form').addEventListener('submit', generateRandomPasswords);
   $('#password-exclude-enabled').addEventListener('change', (event) => {
     $('#password-excluded-chars').disabled = !event.target.checked;
@@ -3465,12 +3486,6 @@ function setupEvents() {
     if (item?.password) copyText(item.password, '历史密码已复制');
   });
   $('#password-history-clear').addEventListener('click', clearPasswordHistory);
-  $('#password-generator-modal').addEventListener('modal:close', () => {
-    clearGeneratedPasswords();
-    clearPasswordHistoryMemory();
-    $('#password-generator-form').reset();
-    hideError('#password-generator-error');
-  });
 
   $('#change-password-open').addEventListener('click', () => {
     closeModal('settings-modal', false);

@@ -125,12 +125,10 @@
           </div>
         </header>
 
-        <div class="vault-view-navigation">
-          <div id="vault-view-tabs" class="segmented vault-view-tabs" role="tablist" aria-label="保险库内容">
-            <button id="tokens-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="tokens-view" data-vault-view="tokens">验证码 <span id="tokens-tab-count" class="badge">0</span></button>
-            <button id="workflow-tab" type="button" role="tab" aria-selected="false" aria-controls="workflow-view" data-vault-view="workflow">使用场景 <span id="workflow-tab-count" class="badge">0</span></button>
-          </div>
-          <button id="password-generator-open" class="btn btn-secondary vault-password-generator-open" type="button">随机密码</button>
+        <div id="vault-view-tabs" class="segmented vault-view-tabs" role="tablist" aria-label="保险库内容">
+          <button id="tokens-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="tokens-view" data-vault-view="tokens">验证码 <span id="tokens-tab-count" class="badge">0</span></button>
+          <button id="workflow-tab" type="button" role="tab" aria-selected="false" aria-controls="workflow-view" data-vault-view="workflow">使用场景 <span id="workflow-tab-count" class="badge">0</span></button>
+          <button id="password-generator-tab" type="button" role="tab" aria-selected="false" aria-controls="password-generator-view" data-vault-view="password">随机密码</button>
         </div>
 
         <div id="tokens-view" role="tabpanel" aria-labelledby="tokens-tab">
@@ -265,6 +263,53 @@
             <h2>没有匹配的使用场景</h2>
             <p>试试场景名称、分组、操作内容或关联的验证码名称。</p>
             <button id="workflow-clear-search" class="btn btn-secondary" type="button">清除筛选</button>
+          </div>
+        </section>
+
+        <section id="password-generator-view" class="password-generator-view hidden" role="tabpanel" aria-labelledby="password-generator-tab" tabindex="-1">
+          <div class="workflow-heading password-generator-heading">
+            <div>
+              <p class="eyebrow">安全工具</p>
+              <h2 id="password-generator-title">随机密码生成器</h2>
+              <p id="password-generator-description">密码只在本地生成，不会上传服务器；启用历史时最多保存最近 100 条到当前浏览器。</p>
+            </div>
+          </div>
+          <div class="password-generator-card card-subtle">
+            <form id="password-generator-form" class="password-generator-form" novalidate>
+              <fieldset class="password-character-fieldset">
+                <legend>使用字符</legend>
+                <div class="password-character-options">
+                  <label class="check-row"><input id="password-lowercase" type="checkbox" checked><span>小写字母 a-z</span></label>
+                  <label class="check-row"><input id="password-uppercase" type="checkbox" checked><span>大写字母 A-Z</span></label>
+                  <label class="check-row"><input id="password-numbers" type="checkbox" checked><span>数字 0-9</span></label>
+                  <label class="check-row"><input id="password-symbols" type="checkbox" checked><span>符号 !@#$%</span></label>
+                </div>
+              </fieldset>
+              <div class="form-grid password-generator-grid">
+                <div class="form-group"><label for="password-length">密码长度</label><input id="password-length" type="number" min="4" max="128" value="20" inputmode="numeric" aria-describedby="password-length-hint"><p id="password-length-hint" class="field-hint">支持 4～128 位，建议至少 16 位。</p></div>
+                <div class="form-group"><label for="password-count">生成数量</label><select id="password-count"><option value="1">1 个</option><option value="3">3 个</option><option value="5">5 个</option><option value="10">10 个</option><option value="20">20 个</option></select></div>
+              </div>
+              <div class="password-exclude-control">
+                <label class="check-row" for="password-exclude-enabled"><input id="password-exclude-enabled" type="checkbox" checked><span>排除易混淆字符</span></label>
+                <label class="sr-only" for="password-excluded-chars">要排除的字符</label>
+                <input id="password-excluded-chars" class="mono" type="text" value="iIl1Lo0O" maxlength="64" autocomplete="off" aria-label="要排除的字符">
+              </div>
+              <div class="password-history-preference">
+                <label class="check-row" for="password-history-enabled"><input id="password-history-enabled" type="checkbox" checked><span>记录生成历史</span></label>
+                <p class="field-hint">历史会使用当前保险库密钥加密后保存在本地，不会上传；公用设备建议关闭。</p>
+              </div>
+              <div id="password-generator-error" class="error hidden" role="alert"></div>
+              <div class="password-generator-actions"><button id="password-generate" class="btn btn-primary" type="submit">生成密码</button></div>
+            </form>
+            <section id="password-results" class="password-results hidden" aria-labelledby="password-results-title">
+              <div class="password-results-header"><div><h3 id="password-results-title">生成结果</h3><span id="password-results-summary"></span></div><button id="password-copy-all" class="btn btn-secondary" type="button">全部复制</button></div>
+              <ol id="password-result-list" class="password-result-list" aria-live="polite"></ol>
+            </section>
+            <section id="password-history" class="password-history" aria-labelledby="password-history-title">
+              <div class="password-results-header"><div><h3 id="password-history-title">生成历史</h3><span id="password-history-summary">仅保存在当前浏览器</span></div><button id="password-history-clear" class="btn btn-ghost" type="button">清空历史</button></div>
+              <p id="password-history-empty" class="password-history-empty">还没有历史记录，生成密码后会显示在这里。</p>
+              <ol id="password-history-list" class="password-result-list" aria-live="polite"></ol>
+            </section>
           </div>
         </section>
       </section>
@@ -532,48 +577,6 @@
           </div>
           <div class="modal-actions"><button id="lock-current" class="btn btn-ghost" type="button">锁定当前账户</button><button id="lock-all" class="btn btn-danger" type="button">锁定全部会话</button><button id="settings-submit" class="btn btn-primary" type="submit">保存设置</button></div>
         </form>
-      </div>
-    </div>
-
-    <div id="password-generator-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="password-generator-title" aria-describedby="password-generator-description">
-      <div class="modal modal-wide">
-        <div class="modal-header"><div><p class="eyebrow">安全工具</p><h2 id="password-generator-title">随机密码生成器</h2></div><button class="icon-btn" type="button" data-close-modal="password-generator-modal" aria-label="关闭">×</button></div>
-        <p id="password-generator-description" class="dialog-message">密码只在本地生成，不会上传服务器；启用历史时最多保存最近 100 条到当前浏览器。</p>
-        <form id="password-generator-form" class="password-generator-form" novalidate>
-          <fieldset class="password-character-fieldset">
-            <legend>使用字符</legend>
-            <div class="password-character-options">
-              <label class="check-row"><input id="password-lowercase" type="checkbox" checked><span>小写字母 a-z</span></label>
-              <label class="check-row"><input id="password-uppercase" type="checkbox" checked><span>大写字母 A-Z</span></label>
-              <label class="check-row"><input id="password-numbers" type="checkbox" checked><span>数字 0-9</span></label>
-              <label class="check-row"><input id="password-symbols" type="checkbox" checked><span>符号 !@#$%</span></label>
-            </div>
-          </fieldset>
-          <div class="form-grid password-generator-grid">
-            <div class="form-group"><label for="password-length">密码长度</label><input id="password-length" type="number" min="4" max="128" value="20" inputmode="numeric" aria-describedby="password-length-hint"><p id="password-length-hint" class="field-hint">支持 4～128 位，建议至少 16 位。</p></div>
-            <div class="form-group"><label for="password-count">生成数量</label><select id="password-count"><option value="1">1 个</option><option value="3">3 个</option><option value="5">5 个</option><option value="10">10 个</option><option value="20">20 个</option></select></div>
-          </div>
-          <div class="password-exclude-control">
-            <label class="check-row" for="password-exclude-enabled"><input id="password-exclude-enabled" type="checkbox" checked><span>排除易混淆字符</span></label>
-            <label class="sr-only" for="password-excluded-chars">要排除的字符</label>
-            <input id="password-excluded-chars" class="mono" type="text" value="iIl1Lo0O" maxlength="64" autocomplete="off" aria-label="要排除的字符">
-          </div>
-          <div class="password-history-preference">
-            <label class="check-row" for="password-history-enabled"><input id="password-history-enabled" type="checkbox" checked><span>记录生成历史</span></label>
-            <p class="field-hint">历史会使用当前保险库密钥加密后保存在本地，不会上传；公用设备建议关闭。</p>
-          </div>
-          <div id="password-generator-error" class="error hidden" role="alert"></div>
-          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="password-generator-modal">关闭</button><button id="password-generate" class="btn btn-primary" type="submit">重新生成</button></div>
-        </form>
-        <section id="password-results" class="password-results hidden" aria-labelledby="password-results-title">
-          <div class="password-results-header"><div><h3 id="password-results-title">生成结果</h3><span id="password-results-summary"></span></div><button id="password-copy-all" class="btn btn-secondary" type="button">全部复制</button></div>
-          <ol id="password-result-list" class="password-result-list" aria-live="polite"></ol>
-        </section>
-        <section id="password-history" class="password-history" aria-labelledby="password-history-title">
-          <div class="password-results-header"><div><h3 id="password-history-title">生成历史</h3><span id="password-history-summary">仅保存在当前浏览器</span></div><button id="password-history-clear" class="btn btn-ghost" type="button">清空历史</button></div>
-          <p id="password-history-empty" class="password-history-empty">还没有历史记录，生成密码后会显示在这里。</p>
-          <ol id="password-history-list" class="password-result-list" aria-live="polite"></ol>
-        </section>
       </div>
     </div>
 
