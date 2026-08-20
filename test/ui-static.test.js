@@ -11,8 +11,14 @@ const searchableSelectStyles = await readFile(new URL('../src/searchable-select.
 describe('static application shell', () => {
   it('uses a strict CSP and contains no inline event handlers', () => {
     expect(html).toContain("script-src 'self'");
+    expect(html).toContain("script-src 'self' https://static.cloudflareinsights.com");
     expect(html).not.toMatch(/\son[a-z]+\s*=/i);
     expect(html).not.toContain("'unsafe-inline'");
+  });
+
+  it('sends credentials when Cloudflare Access fetches the PWA manifest', () => {
+    expect(html).toContain('<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">');
+    expect(html).toContain("manifest-src 'self'");
   });
 
   it('loads the external theme boot script before the stylesheet', () => {
@@ -92,6 +98,15 @@ describe('static application shell', () => {
     expect(ui).toContain('BACKDROP_DRAG_TOLERANCE');
     expect(ui).toContain('event.target !== started.overlay');
     expect(ui).not.toContain("document.addEventListener('click', (event) => {\n    const overlay");
+  });
+
+  it('moves focus before hiding dialogs and marks hidden dialogs inert', () => {
+    const closeModal = ui.slice(ui.indexOf('export function closeModal'), ui.indexOf('export function askConfirm'));
+    expect(closeModal.indexOf('modal.contains(document.activeElement)')).toBeGreaterThan(-1);
+    expect(closeModal.indexOf("modal.setAttribute('aria-hidden', 'true')")).toBeGreaterThan(closeModal.indexOf('modal.contains(document.activeElement)'));
+    expect(closeModal).toContain('modal.inert = true');
+    expect(ui).toContain('modal.inert = false');
+    expect(ui).toContain("modal.inert = modal.classList.contains('hidden')");
   });
 
   it('provides an accessible responsive back-to-top control', () => {

@@ -7,6 +7,11 @@ const styles = await readFile(new URL('../src/admin.css', import.meta.url), 'utf
 const searchableSelect = await readFile(new URL('../src/js/searchable-select.js', import.meta.url), 'utf8');
 
 describe('admin console static shell', () => {
+  it('allows only the Cloudflare Web Analytics script in addition to same-origin scripts', () => {
+    expect(html).toContain("script-src 'self' https://static.cloudflareinsights.com");
+    expect(html).not.toContain("'unsafe-inline'");
+  });
+
   it('provides separate login, user management, recoverable reset, and audit-log views', () => {
     expect(html).toContain('id="admin-login-form"');
     expect(html).toContain('id="users-panel"');

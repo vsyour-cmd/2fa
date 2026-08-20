@@ -34,6 +34,7 @@ export function openModal(id, focusSelector = 'input:not([type="hidden"]), butto
   if (activeModal) closeModal(activeModal, false);
   modalTrigger = document.activeElement;
   activeModal = modal;
+  modal.inert = false;
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
@@ -44,11 +45,22 @@ export function openModal(id, focusSelector = 'input:not([type="hidden"]), butto
 export function closeModal(id, restoreFocus = true) {
   const modal = typeof id === 'string' ? document.getElementById(id) : id;
   if (!modal) return;
+  const restoreTarget = restoreFocus
+    && modalTrigger instanceof HTMLElement
+    && modalTrigger.isConnected
+    && !modal.contains(modalTrigger)
+    ? modalTrigger
+    : null;
+  if (modal.contains(document.activeElement)) {
+    if (restoreTarget) restoreTarget.focus({ preventScroll: true });
+    else document.activeElement.blur();
+  }
+  modal.inert = true;
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
   if (activeModal === modal) activeModal = null;
   if (!activeModal) document.body.classList.remove('modal-open');
-  if (restoreFocus && modalTrigger instanceof HTMLElement) modalTrigger.focus();
+  if (restoreTarget && document.activeElement !== restoreTarget) restoreTarget.focus({ preventScroll: true });
   modal.dispatchEvent(new CustomEvent('modal:close'));
 }
 
@@ -129,6 +141,7 @@ export function askText({ title, label, defaultValue = '', validate = () => null
 }
 
 export function setupModalAccessibility() {
+  for (const modal of $$('.modal-overlay')) modal.inert = modal.classList.contains('hidden');
   document.addEventListener('keydown', (event) => {
     if (!activeModal || activeModal.classList.contains('hidden')) return;
     if (event.key === 'Escape' && activeModal.dataset.dismissible !== 'false') {

@@ -109,6 +109,7 @@ describe('Express data API', () => {
     expect(body).toMatchObject({ status: 'ok' });
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(response.headers.get('content-security-policy')).toContain("script-src 'self' https://static.cloudflareinsights.com");
     expect(response.headers.get('ratelimit-limit')).toBeNull();
   });
 });
