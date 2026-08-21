@@ -5,7 +5,6 @@ export { VaultCoordinator };
 const DATA_RATE_LIMIT = 20;
 const ADMIN_RATE_LIMIT = 120;
 const ADMIN_LOGIN_RATE_LIMIT = 5;
-const RATE_PREFIX = '$ratelimit$:';
 const USER_PREFIX = '$user$:';
 const ADMIN_SESSION_PREFIX = '$admin-session$:';
 const AUDIT_PREFIX = '$audit$:';
@@ -50,7 +49,7 @@ export default {
 };
 
 async function handleDataRequest(request, url, env, accessUser) {
-  const limited = await checkRateLimit(request, env.DATA_KV, {
+  const limited = await checkRateLimit(request, env, {
     limit: DATA_RATE_LIMIT, windowMs: 60_000, namespace: 'data',
   });
   if (limited) return limited;
@@ -63,7 +62,7 @@ async function handleDataRequest(request, url, env, accessUser) {
 
 async function handleAdminLoginRequest(request, env, accessUser) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'POST' });
-  const limited = await checkRateLimit(request, env.DATA_KV, {
+  const limited = await checkRateLimit(request, env, {
     limit: ADMIN_LOGIN_RATE_LIMIT, windowMs: 10 * 60_000, namespace: 'admin-login',
   });
   if (limited) return limited;
@@ -105,7 +104,7 @@ async function handleAdminLoginRequest(request, env, accessUser) {
 }
 
 async function handleAdminRequest(request, url, env, accessUser) {
-  const limited = await checkRateLimit(request, env.DATA_KV, {
+  const limited = await checkRateLimit(request, env, {
     limit: ADMIN_RATE_LIMIT, windowMs: 60_000, namespace: 'admin',
   });
   if (limited) return limited;
@@ -152,24 +151,20 @@ async function handleAdminRequest(request, url, env, accessUser) {
   return jsonResponse({ error: 'Not found' }, 404);
 }
 
-async function checkRateLimit(request, kv, { limit, windowMs, namespace }) {
+async function checkRateLimit(request, env, { limit, windowMs, namespace }) {
   const ipHash = await requestSource(request);
-  const now = Date.now();
-  const windowIndex = Math.floor(now / windowMs);
-  const resetAt = (windowIndex + 1) * windowMs;
-  const prefix = `${RATE_PREFIX}${namespace}:${ipHash}:${windowIndex}:`;
-  const entries = await kv.list({ prefix, limit: limit + 1 });
-  const remaining = Math.max(0, limit - entries.keys.length);
-  const resetSeconds = Math.max(1, Math.ceil((resetAt - now) / 1000));
+  const result = await env.VAULT_COORDINATOR
+    .getByName(`rate:${namespace}:${ipHash}`)
+    .takeRateLimit(limit, windowMs, Date.now());
+  const resetSeconds = Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));
   const headers = {
-    'RateLimit-Limit': String(limit),
-    'RateLimit-Remaining': String(remaining),
-    'RateLimit-Reset': String(Math.ceil(resetAt / 1000)),
+    'RateLimit-Limit': String(result.limit),
+    'RateLimit-Remaining': String(result.remaining),
+    'RateLimit-Reset': String(Math.ceil(result.resetAt / 1000)),
   };
-  if (entries.keys.length >= limit) {
+  if (!result.allowed) {
     return jsonResponse({ error: 'Too many requests' }, 429, { ...headers, 'Retry-After': String(resetSeconds) });
   }
-  await kv.put(`${prefix}${crypto.randomUUID()}`, '1', { expirationTtl: Math.max(120, Math.ceil(windowMs / 1000) * 2) });
   return null;
 }
 
@@ -237,9 +232,9 @@ function accessAudienceMatches(actual, expected) {
 }
 
 async function requireAccessIdentity(env, ctx) {
-  if (env.REQUIRE_ACCESS !== 'true') {
-    // Access enforcement is opt-in. Without the flag, requests run with an
-    // anonymous identity: no login wall and no per-vault identity binding.
+  if (env.REQUIRE_ACCESS === 'false' || !env.ACCESS_AUD) {
+    // Explicit opt-out is reserved for standalone/local development. Any
+    // deployment carrying an Access audience fails closed by default.
     return { email: '', ownerId: '' };
   }
   const expectedAudience = cleanSingleLine(env.ACCESS_AUD, 256);

@@ -4,6 +4,7 @@ const VAULT_STORAGE_KEY = 'vault';
 const HISTORY_INDEX_KEY = 'vault-history-index';
 const HISTORY_KEY_PREFIX = 'vault-history:';
 const HISTORY_LIMIT = 20;
+const RATE_LIMIT_STORAGE_KEY = 'rate-limit';
 
 function validRecord(record) {
   return record
@@ -70,6 +71,22 @@ export class VaultCoordinator extends DurableObject {
   async listHistory(limit = HISTORY_LIMIT) {
     const safeLimit = Math.max(1, Math.min(HISTORY_LIMIT, Number(limit) || HISTORY_LIMIT));
     return normalizeHistoryIndex(await this.ctx.storage.get(HISTORY_INDEX_KEY)).slice(0, safeLimit);
+  }
+
+  async takeRateLimit(limit, windowMs, now = Date.now()) {
+    const safeLimit = Math.max(1, Math.min(10_000, Number(limit) || 1));
+    const safeWindowMs = Math.max(1_000, Math.min(24 * 60 * 60_000, Number(windowMs) || 60_000));
+    const timestamp = Number(now) || Date.now();
+    const windowIndex = Math.floor(timestamp / safeWindowMs);
+    const resetAt = (windowIndex + 1) * safeWindowMs;
+    const current = await this.ctx.storage.get(RATE_LIMIT_STORAGE_KEY);
+    const count = Number(current?.windowIndex) === windowIndex ? Number(current?.count || 0) : 0;
+    if (count >= safeLimit) {
+      return { allowed: false, limit: safeLimit, remaining: 0, resetAt };
+    }
+    const nextCount = count + 1;
+    await this.ctx.storage.put(RATE_LIMIT_STORAGE_KEY, { windowIndex, count: nextCount, resetAt });
+    return { allowed: true, limit: safeLimit, remaining: Math.max(0, safeLimit - nextCount), resetAt };
   }
 
   async restoreHistory(historyUpdatedAt, expectedUpdatedAt) {

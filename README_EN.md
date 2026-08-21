@@ -19,7 +19,7 @@ A cloud-based 2FA authenticator supporting both Cloudflare Workers and Docker de
 - **Migration**: Imports Google Authenticator, Aegis, 2FAS, andOTP, and OTPAuth URIs
 - **Secure Backups**: Password-encrypted JSON, plaintext JSON, and OTPAuth URI exports with gentle periodic backup reminders
 - **Security Controls**: Auto-lock, background lock, clipboard clearing, copy vibration, password strength, safe re-encryption, and optional five-minute PIN quick unlock
-- **Admin Console**: Separate admin login, user status and notes, recoverable vault reset, permanent user deletion, and 90-day audit-log search
+- **Admin Console**: Separate admin login, user status and notes, restoration of the latest 20 encrypted versions, recoverable vault reset, and 90-day audit-log search; permanent user deletion is not exposed
 
 ## Architecture
 
@@ -121,14 +121,14 @@ npx wrangler secret put ADMIN_PASSWORD
 
 For Cloudflare Builds, you can instead add an encrypted `ADMIN_PASSWORD` Secret under **Settings → Variables and Secrets**. The default admin username is `admin`.
 
-#### Step 3: Configure Cloudflare Access (optional)
+#### Step 3: Configure Cloudflare Access
 
-No Access setup is required by default: `/api/*` endpoints run without any Access identity check. To add a Cloudflare Access login wall in front of the API:
+The repository enables fail-closed Access verification for the current production application with both the real `ACCESS_AUD` and `REQUIRE_ACCESS=true` in `wrangler.jsonc`. For a different Access application:
 
-1. In the Cloudflare dashboard, turn on the one-click **Cloudflare Access** protection for the Worker and create the Access application;
-2. Put the Access application's **AUD tag** into `vars.ACCESS_AUD` in `wrangler.jsonc` (the committed value is a placeholder), or override `ACCESS_AUD` under the Worker's **Settings → Variables** after deployment;
-3. Set the Worker environment variable `REQUIRE_ACCESS=true` to enforce the check;
-4. Once enforced, every device must visit through the **same Access identity**, otherwise login/sync fails with "Cloudflare Access 身份验证失败" or "此保险库属于另一个 Cloudflare Access 用户". Local `wrangler dev` simulates the identity via `access.dev`; add `REQUIRE_ACCESS=true` to `.dev.vars` to exercise the enforced mode locally.
+1. Protect the Worker with **Cloudflare Access** and create an Access application;
+2. Replace `vars.ACCESS_AUD` in `wrangler.jsonc` with the new application's AUD tag;
+3. Keep `REQUIRE_ACCESS=true`. Set it to `false` only in an isolated local-development environment;
+4. Devices must use an identity allowed by the Access policy. A vault is bound to the first verified identity and cannot be read or synchronized by another identity.
 
 #### Step 4: Test and build
 
@@ -155,7 +155,7 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 - The `main` branch is used for production deployments and other branches create previews.
 - The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`2fa`).
 - Keep the `ADMIN_PASSWORD` Secret configured in the Worker environment; GitHub deployments do not overwrite it.
-- The Cloudflare Access login wall is optional: to enforce it, enable Access protection in the dashboard, put the real AUD into `vars.ACCESS_AUD` (or a Worker environment variable), and set the `REQUIRE_ACCESS=true` environment variable. It is off by default and needs no configuration.
+- Cloudflare Access is fail-closed in the production configuration. Update `vars.ACCESS_AUD` when moving to another Access application, and never set `REQUIRE_ACCESS=false` in production.
 
 ## Usage Guide
 
@@ -171,7 +171,7 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 1. Open `/admin.html` and sign in with the separate admin credentials.
 2. Search users, update management labels and notes, suspend or restore online access, and filter logs by action and result.
 3. The server cannot view or directly change a user's master password. “Reset vault” archives the current ciphertext for 30 days and lets the user create a new vault; an admin can restore the archive during that period.
-4. “Permanently delete user” removes the cloud vault, user profile, and recoverable archive while retaining audit logs; an offline device can recreate the user on its next sync.
+4. The regular admin console does not expose permanent user deletion. Suspend a user to block access, or use the recoverable reset workflow when reinitialization is required.
 5. Existing users report their account label on their next online login or save after the upgrade; until then they appear as unidentified users.
 
 ### Login

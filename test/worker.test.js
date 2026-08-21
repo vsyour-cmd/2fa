@@ -69,6 +69,7 @@ class FakeVaultCoordinatorNamespace {
       replace: invoke('replace'),
       listHistory: invoke('listHistory'),
       restoreHistory: invoke('restoreHistory'),
+      takeRateLimit: invoke('takeRateLimit'),
       remove: invoke('remove'),
     };
   }
@@ -117,6 +118,7 @@ describe('Cloudflare Worker API', () => {
 
   it('keeps the Worker Access audience and local identity simulation in Wrangler configuration', () => {
     expect(wranglerConfig.vars.ACCESS_AUD).toBe(ACCESS_AUD);
+    expect(wranglerConfig.vars.REQUIRE_ACCESS).toBe('true');
     expect(wranglerConfig.access.dev).toMatchObject({
       aud: ACCESS_AUD,
       identity: { email: 'developer@example.invalid', user_uuid: 'local-cloudflare-access-user' },
@@ -129,22 +131,22 @@ describe('Cloudflare Worker API', () => {
     });
   });
 
-  it('keeps Access enforcement opt-in and exposes the verified email only when required', async () => {
+  it('fails closed when an Access audience is configured and allows only an explicit local opt-out', async () => {
     const env = { DATA_KV: new FakeKv(), ACCESS_AUD };
-    const anonymous = await worker.fetch(request('/api/access/me'), env, {});
+    const localEnv = { ...env, REQUIRE_ACCESS: 'false' };
+    const anonymous = await worker.fetch(request('/api/access/me'), localEnv, {});
     expect(anonymous.status).toBe(200);
     expect(await anonymous.json()).toEqual({ authenticated: false, email: '' });
 
-    const enforcedEnv = { ...env, REQUIRE_ACCESS: 'true' };
-    const missing = await worker.fetch(request('/api/access/me'), enforcedEnv, {});
+    const missing = await worker.fetch(request('/api/access/me'), env, {});
     expect(missing.status).toBe(403);
     expect(await missing.json()).toMatchObject({ code: 'ACCESS_DENIED' });
 
-    const wrongAudience = await worker.fetch(request('/api/access/me'), enforcedEnv, accessContext('owner@example.com', 'owner-1', 'wrong-aud'));
+    const wrongAudience = await worker.fetch(request('/api/access/me'), env, accessContext('owner@example.com', 'owner-1', 'wrong-aud'));
     expect(wrongAudience.status).toBe(403);
     expect(await wrongAudience.json()).toMatchObject({ code: 'ACCESS_DENIED' });
 
-    const verified = await worker.fetch(request('/api/access/me'), enforcedEnv, accessContext('Owner@Example.com', 'owner-1'));
+    const verified = await worker.fetch(request('/api/access/me'), env, accessContext('Owner@Example.com', 'owner-1'));
     expect(verified.status).toBe(200);
     expect(await verified.json()).toEqual({ authenticated: true, email: 'owner@example.com' });
   });
@@ -279,6 +281,15 @@ describe('Cloudflare Worker API', () => {
     const blocked = await fetchWorker(request(`/api/data?key=${'b'.repeat(64)}`), env);
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get('Retry-After')).toBeTruthy();
+  });
+
+  it('enforces the same limit for concurrent requests', async () => {
+    const env = { DATA_KV: new FakeKv() };
+    const responses = await Promise.all(Array.from({ length: 25 }, () => (
+      fetchWorker(request(`/api/data?key=${'9'.repeat(64)}`), env)
+    )));
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(20);
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(5);
   });
 
   it('keeps the admin console closed until a password secret is configured', async () => {
