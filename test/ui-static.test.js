@@ -216,7 +216,7 @@ describe('static application shell', () => {
     expect(app).toContain('data-workflow-link-action="up"');
     expect(app).toContain('data-workflow-run-key-id=');
     expect(app).toContain('await copyKeyCode(key, null)');
-    expect(app).toContain("const cloudSaved = await saveVault({ silent: true, cloudRetries: 2 })");
+    expect(app).toContain("const cloudSaved = await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 })");
     expect(app).toContain("const action = previous ? '使用场景已更新' : '使用场景已创建'");
     expect(app).toContain('`${action}，已同步到云端`');
     expect(app).toContain("actionLabel: '立即同步'");
@@ -346,6 +346,10 @@ describe('static application shell', () => {
     expect(app).toContain('此操作无法撤销');
     expect(app).toContain('state.deletedWorkflowNotes.unshift({ ...note, deletedAt: Date.now() })');
     expect(app).toContain('data-trash-kind="workflow"');
+    expect(html).toContain('id="trash-clear-all"');
+    expect(app).toContain("$('#trash-clear-all').addEventListener('click', clearTrash)");
+    expect(app).toContain('const snapshot = captureVaultState()');
+    expect(app).toContain('清空失败，回收站内容已完整恢复');
   });
 
   it('shows token and workflow group filters as direct accessible chips', () => {
@@ -570,6 +574,7 @@ describe('static application shell', () => {
     expect(html).toContain('class="toolbar-heading"');
     expect(app).toContain('class="token-badges"');
     expect(styles).toContain('.vault-view-tabs { position: sticky;');
+    expect(styles).toContain('.workflow-filter-bar { position: sticky; top: calc(72px + var(--offline-banner-offset, 0px));');
     expect(styles).toContain('.workflow-heading-actions { display: grid;');
     expect(styles).toContain('@container token-card');
   });

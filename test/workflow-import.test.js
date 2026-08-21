@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyWorkflowImportPlan, createWorkflowImportPlan } from '../src/js/importers.js';
+import { applyWorkflowImportPlan, createWorkflowImportPlan, parseImportContent } from '../src/js/importers.js';
 
 const existing = [{
   id: 'scene-existing',
@@ -25,6 +25,26 @@ const imported = [{
 }];
 
 describe('workflow backup import planning', () => {
+  it('preserves recycle-bin data and workflow protection from a complete backup', async () => {
+    const deletedAt = 1_700_000_000_000;
+    const protection = { salt: 'backup-salt', hash: 'a'.repeat(64), iterations: 210_000 };
+    const parsed = await parseImportContent(JSON.stringify({
+      format: '2fa-authenticator-backup',
+      keys: [],
+      workflowNotes: [],
+      deletedItems: [{ id: 'deleted-key', name: '旧验证码', secret: 'JBSWY3DPEHPK3PXP', deletedAt }],
+      deletedWorkflowNotes: [{ id: 'deleted-scene', title: '旧场景', content: '旧流程', deletedAt }],
+      workflowProtection: protection,
+    }));
+
+    expect(parsed.completeBackup).toMatchObject({
+      hasWorkflowProtection: true,
+      workflowProtection: protection,
+    });
+    expect(parsed.completeBackup.deletedItems).toEqual([expect.objectContaining({ id: 'deleted-key', deletedAt })]);
+    expect(parsed.completeBackup.deletedWorkflowNotes).toEqual([expect.objectContaining({ id: 'deleted-scene', deletedAt })]);
+  });
+
   it('skips a same-name scene when importing the same backup with the default strategy', () => {
     const plan = createWorkflowImportPlan(imported, existing, 'skip');
     expect(plan.stats).toEqual({ add: 0, overwrite: 0, skip: 1, actionable: 0 });

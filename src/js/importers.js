@@ -6,6 +6,7 @@ import {
   generateId,
   normalizeAlgorithm,
   normalizeKey,
+  normalizeVaultData,
   normalizeWorkflowNote,
   uniqueName,
 } from './utils.js';
@@ -245,10 +246,17 @@ export async function parseImportContent(content, password = '') {
   }
   if (Array.isArray(payload?.services)) return { source: '2FAS', items: parse2Fas(payload) };
   if (Array.isArray(payload?.keys)) {
+    const normalizedVault = normalizeVaultData(payload);
     return {
       source: '2FA Authenticator',
-      items: payload.keys.map(normalizeKey),
-      workflowNotes: Array.isArray(payload.workflowNotes) ? payload.workflowNotes.map(normalizeWorkflowNote) : [],
+      items: normalizedVault.keys,
+      workflowNotes: normalizedVault.workflowNotes,
+      completeBackup: payload.format === '2fa-authenticator-backup' ? {
+        deletedItems: normalizedVault.deletedItems,
+        deletedWorkflowNotes: normalizedVault.deletedWorkflowNotes,
+        workflowProtection: normalizedVault.workflowProtection,
+        hasWorkflowProtection: Object.hasOwn(payload, 'workflowProtection'),
+      } : null,
     };
   }
   if (Array.isArray(payload?.entries) && payload.entries.some((item) => item?.info?.secret)) {

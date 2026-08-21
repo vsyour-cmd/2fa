@@ -650,7 +650,10 @@
             <label class="sr-only" for="trash-search">搜索回收站</label>
             <input id="trash-search" type="search" placeholder="搜索已删除的验证码或使用场景…" autocomplete="off" aria-controls="trash-list">
           </div>
-          <span id="trash-list-summary" aria-live="polite">0 条已删除内容</span>
+          <div class="trash-filter-actions">
+            <span id="trash-list-summary" aria-live="polite">0 条已删除内容</span>
+            <button id="trash-clear-all" class="btn btn-danger trash-clear-all" type="button">清空回收站</button>
+          </div>
         </div>
         <div id="trash-list" class="manage-list"></div>
       </div>

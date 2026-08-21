@@ -265,6 +265,27 @@ function readWorkflowDraftPayload() {
   };
 }
 
+function captureVaultState() {
+  return normalizeVaultData(vaultPayload());
+}
+
+function restoreVaultState(snapshot) {
+  state.keys = snapshot.keys;
+  state.deletedItems = snapshot.deletedItems;
+  state.workflowNotes = snapshot.workflowNotes;
+  state.deletedWorkflowNotes = snapshot.deletedWorkflowNotes;
+  state.workflowProtection = snapshot.workflowProtection;
+}
+
+async function saveVaultMutation(snapshot, options = {}) {
+  try {
+    return await saveVault(options);
+  } catch (error) {
+    restoreVaultState(snapshot);
+    throw error;
+  }
+}
+
 function updateWorkflowDraftCount() {
   const count = state.workflowDrafts.length;
   const badge = $('#workflow-drafts-count');
@@ -667,7 +688,11 @@ async function preserveCurrentVaultForManualSync() {
 
 function scheduleSave() {
   clearTimeout(state.saveTimer);
-  state.saveTimer = setTimeout(() => saveVault({ silent: true }), 900);
+  state.saveTimer = setTimeout(() => {
+    saveVault({ silent: true }).catch((error) => {
+      showToast(error.message || '自动保存失败，请保持页面开启并重试');
+    });
+  }, 900);
 }
 
 async function decryptRecord(record, password, iterations) {
@@ -1230,12 +1255,13 @@ async function bulkDeleteSelected() {
   if (!ok) return;
   const button = $('#bulk-delete');
   setBusy(button, true, '正在移动…');
+  const snapshot = captureVaultState();
   try {
     const ids = new Set(keys.map((key) => key.id));
     const deletedAt = Date.now();
     state.keys = state.keys.filter((key) => !ids.has(key.id));
     state.deletedItems.unshift(...keys.map((key) => ({ ...key, deletedAt })));
-    await saveVault();
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
     state.multiSelectMode = false;
     state.selectedKeyIds.clear();
     renderAll();
@@ -1243,14 +1269,23 @@ async function bulkDeleteSelected() {
       actionLabel: '撤销',
       duration: 6_000,
       onAction: async () => {
+        const undoSnapshot = captureVaultState();
         const trashIds = new Set(keys.map((key) => key.id));
         state.deletedItems = state.deletedItems.filter((item) => !trashIds.has(item.id));
         state.keys.push(...keys);
-        await saveVault();
-        renderAll();
-        showToast(`已恢复 ${keys.length} 个密钥`);
+        try {
+          await saveVaultMutation(undoSnapshot, { silent: true, cloudRetries: 2 });
+          renderAll();
+          showToast(`已恢复 ${keys.length} 个密钥`);
+        } catch (error) {
+          renderAll();
+          showToast(error.message || '恢复失败，验证码仍保留在回收站');
+        }
       },
     });
+  } catch (error) {
+    renderAll();
+    showToast(error.message || '批量删除未能保存，验证码已恢复');
   } finally {
     setBusy(button, false);
   }
@@ -1851,12 +1886,13 @@ async function saveWorkflowProtectionFromForm(event) {
       if (!validation.valid) throw new Error(validation.error);
       if (nextPassword !== confirmation) throw new Error('两次输入的场景编辑密码不一致');
       const salt = generateSalt();
+      const snapshot = captureVaultState();
       state.workflowProtection = {
         salt,
         hash: await deriveWorkflowProtectionHash(nextPassword, salt, state.accountName, WORKFLOW_PROTECTION_ITERATIONS),
         iterations: WORKFLOW_PROTECTION_ITERATIONS,
       };
-      await saveVault();
+      await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
     }
     state.workflowEditUnlockedUntil = Date.now() + WORKFLOW_EDIT_UNLOCK_MS;
     const pendingEditorId = state.pendingWorkflowEditorId;
@@ -1878,9 +1914,10 @@ async function disableWorkflowProtection() {
   setBusy(button, true, '正在关闭…');
   try {
     if (!await verifyWorkflowProtectionPassword($('#workflow-protection-current').value)) throw new Error('当前场景编辑密码错误');
+    const snapshot = captureVaultState();
     state.workflowProtection = null;
     state.workflowEditUnlockedUntil = 0;
-    await saveVault();
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
     closeModal('workflow-protection-modal');
     showToast('场景编辑密码已关闭');
   } catch (error) {
@@ -1898,12 +1935,14 @@ async function saveWorkflowNote(event) {
   let index = -1;
   let previous = null;
   let pendingNote = null;
+  let snapshot = null;
   try {
     const id = $('#workflow-id').value;
     const title = $('#workflow-title').value.trim();
     const content = $('#workflow-content').value.trim();
     if (!title) throw new Error('请输入场景名称');
     if (!content) throw new Error('请填写操作内容');
+    snapshot = captureVaultState();
     index = state.workflowNotes.findIndex((note) => note.id === id);
     previous = index >= 0 ? state.workflowNotes[index] : null;
     pendingNote = normalizeWorkflowNote({
@@ -1923,7 +1962,7 @@ async function saveWorkflowNote(event) {
     });
     if (index >= 0) state.workflowNotes[index] = pendingNote;
     else state.workflowNotes.push(pendingNote);
-    const cloudSaved = await saveVault({ silent: true, cloudRetries: 2 });
+    const cloudSaved = await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
     const completedDraftId = state.activeWorkflowDraftId;
     cancelDraftSave('workflow');
     state.activeWorkflowDraftId = '';
@@ -1947,10 +1986,6 @@ async function saveWorkflowNote(event) {
       });
     }
   } catch (error) {
-    if (pendingNote && error.code === 'PERSISTENCE_FAILED') {
-      if (previous && index >= 0) state.workflowNotes[index] = previous;
-      else state.workflowNotes = state.workflowNotes.filter((note) => note.id !== pendingNote.id);
-    }
     showError('#workflow-error', error.message);
   } finally {
     setBusy(button, false);
@@ -1967,20 +2002,33 @@ async function deleteWorkflowNote(id) {
     confirmText: '移入回收站',
   });
   if (!confirmed) return;
-  state.workflowNotes.splice(index, 1);
-  state.deletedWorkflowNotes.unshift({ ...note, deletedAt: Date.now() });
-  await saveVault();
-  renderAll();
+  const snapshot = captureVaultState();
+  try {
+    state.workflowNotes.splice(index, 1);
+    state.deletedWorkflowNotes.unshift({ ...note, deletedAt: Date.now() });
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
+    renderAll();
+  } catch (error) {
+    renderAll();
+    showToast(error.message || '无法保存删除操作，场景已恢复');
+    return;
+  }
   showToast('使用场景已移入回收站', {
     actionLabel: '撤销',
     duration: 6_000,
     onAction: async () => {
+      const undoSnapshot = captureVaultState();
       const trashIndex = state.deletedWorkflowNotes.findIndex((item) => item.id === note.id);
       if (trashIndex >= 0) state.deletedWorkflowNotes.splice(trashIndex, 1);
       state.workflowNotes.push(note);
-      await saveVault();
-      renderAll();
-      showToast('已恢复使用场景');
+      try {
+        await saveVaultMutation(undoSnapshot, { silent: true, cloudRetries: 2 });
+        renderAll();
+        showToast('已恢复使用场景');
+      } catch (error) {
+        renderAll();
+        showToast(error.message || '恢复失败，场景仍保留在回收站');
+      }
     },
   });
 }
@@ -2025,9 +2073,14 @@ async function openWorkflowRun(id) {
     : '<li class="field-hint center">这个场景没有关联 2FA 条目</li>';
   openModal('workflow-run-modal', note.linkedKeys.length ? '[data-workflow-run-key-id]' : '[data-close-modal="workflow-run-modal"]');
   await updateWorkflowRunCodes();
+  const snapshot = captureVaultState();
   note.lastUsed = Date.now();
   note.useCount = Math.max(0, Number(note.useCount || 0)) + 1;
-  scheduleSave();
+  try {
+    await saveVaultMutation(snapshot, { silent: true });
+  } catch (error) {
+    showToast(error.message || '最近使用记录未能保存');
+  }
   renderWorkflowNotes();
 }
 
@@ -2449,20 +2502,33 @@ async function saveEditedKey(event) {
 async function deleteKey(id) {
   const index = state.keys.findIndex((item) => item.id === id);
   if (index < 0) return;
+  const snapshot = captureVaultState();
   const [removed] = state.keys.splice(index, 1);
   state.deletedItems.unshift({ ...removed, deletedAt: Date.now() });
-  await saveVault();
+  try {
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
+  } catch (error) {
+    renderAll();
+    showToast(error.message || '无法保存删除操作，验证码已恢复');
+    return;
+  }
   renderAll();
   showToast('密钥已移入回收站', {
     actionLabel: '撤销',
     duration: 6_000,
     onAction: async () => {
+      const undoSnapshot = captureVaultState();
       const trashIndex = state.deletedItems.findIndex((item) => item.id === removed.id);
       if (trashIndex >= 0) state.deletedItems.splice(trashIndex, 1);
       state.keys.push(removed);
-      await saveVault();
-      renderAll();
-      showToast('已撤销删除');
+      try {
+        await saveVaultMutation(undoSnapshot, { silent: true, cloudRetries: 2 });
+        renderAll();
+        showToast('已撤销删除');
+      } catch (error) {
+        renderAll();
+        showToast(error.message || '撤销失败，验证码仍保留在回收站');
+      }
     },
   });
 }
@@ -2486,6 +2552,8 @@ function renderTrash() {
   const notes = state.deletedWorkflowNotes.filter((note) => matchesWorkflowNoteFilter(note, query));
   const visible = keys.length + notes.length;
   setHidden('#trash-filter-bar', total === 0);
+  $('#trash-clear-all').disabled = total === 0;
+  $('#trash-clear-all').textContent = total ? `清空回收站（${total}）` : '清空回收站';
   $('#trash-list-summary').textContent = query ? `显示 ${visible} / ${total} 条` : `${total} 条已删除内容`;
   if (total === 0) {
     list.innerHTML = '<p class="field-hint center">回收站是空的</p>';
@@ -2521,14 +2589,21 @@ function openTrashModal() {
 async function restoreTrashItem(id) {
   const index = state.deletedItems.findIndex((item) => item.id === id);
   if (index < 0) return;
+  const snapshot = captureVaultState();
   const [item] = state.deletedItems.splice(index, 1);
   const existing = new Set(state.keys.map((key) => key.name.toLocaleLowerCase()));
   item.name = uniqueName(item.name, existing);
   state.keys.push(normalizeKey(item, state.keys.length));
-  await saveVault();
-  renderTrash();
-  renderAll();
-  showToast('密钥已恢复');
+  try {
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
+    renderTrash();
+    renderAll();
+    showToast('密钥已恢复');
+  } catch (error) {
+    renderTrash();
+    renderAll();
+    showToast(error.message || '恢复失败，验证码仍保留在回收站');
+  }
 }
 
 async function purgeTrashItem(id) {
@@ -2544,25 +2619,40 @@ async function purgeTrashItem(id) {
     openModal('trash-modal');
     return;
   }
+  const snapshot = captureVaultState();
   state.deletedItems = state.deletedItems.filter((entry) => entry.id !== id);
-  await saveVault();
-  renderTrash();
-  renderAll();
-  openModal('trash-modal');
-  showToast('已彻底删除');
+  try {
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
+    renderTrash();
+    renderAll();
+    openModal('trash-modal');
+    showToast('已彻底删除；云端旧版本仍可用于灾难恢复');
+  } catch (error) {
+    renderTrash();
+    renderAll();
+    openModal('trash-modal');
+    showToast(error.message || '删除未能保存，验证码仍保留在回收站');
+  }
 }
 
 async function restoreWorkflowTrashItem(id) {
   const index = state.deletedWorkflowNotes.findIndex((note) => note.id === id);
   if (index < 0) return;
+  const snapshot = captureVaultState();
   const [note] = state.deletedWorkflowNotes.splice(index, 1);
   const existing = new Set(state.workflowNotes.map((item) => item.title.toLocaleLowerCase()));
   note.title = uniqueName(note.title, existing);
   state.workflowNotes.push(normalizeWorkflowNote(note));
-  await saveVault();
-  renderTrash();
-  renderAll();
-  showToast('使用场景已恢复');
+  try {
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
+    renderTrash();
+    renderAll();
+    showToast('使用场景已恢复');
+  } catch (error) {
+    renderTrash();
+    renderAll();
+    showToast(error.message || '恢复失败，场景仍保留在回收站');
+  }
 }
 
 async function purgeWorkflowTrashItem(id) {
@@ -2578,12 +2668,57 @@ async function purgeWorkflowTrashItem(id) {
     openModal('trash-modal');
     return;
   }
+  const snapshot = captureVaultState();
   state.deletedWorkflowNotes = state.deletedWorkflowNotes.filter((item) => item.id !== id);
-  await saveVault();
-  renderTrash();
-  renderAll();
-  openModal('trash-modal');
-  showToast('使用场景已彻底删除');
+  try {
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
+    renderTrash();
+    renderAll();
+    openModal('trash-modal');
+    showToast('使用场景已彻底删除；云端旧版本仍可用于灾难恢复');
+  } catch (error) {
+    renderTrash();
+    renderAll();
+    openModal('trash-modal');
+    showToast(error.message || '删除未能保存，场景仍保留在回收站');
+  }
+}
+
+async function clearTrash() {
+  const keyCount = state.deletedItems.length;
+  const workflowCount = state.deletedWorkflowNotes.length;
+  const total = keyCount + workflowCount;
+  if (!total) return;
+  const confirmed = await askConfirm({
+    title: '清空回收站',
+    message: `确定彻底删除回收站中的 ${keyCount} 个验证码和 ${workflowCount} 个使用场景？当前云端版本会先进入历史记录，但回收站内将无法直接恢复。`,
+    confirmText: `彻底删除 ${total} 条`,
+  });
+  if (!confirmed) {
+    renderTrash();
+    openModal('trash-modal', '#trash-clear-all');
+    return;
+  }
+  const snapshot = captureVaultState();
+  state.deletedItems = [];
+  state.deletedWorkflowNotes = [];
+  try {
+    const cloudSaved = await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
+    renderTrash();
+    renderAll();
+    openModal('trash-modal');
+    if (cloudSaved) showToast(`回收站已清空，共删除 ${total} 条`);
+    else showToast(`回收站已在本机清空，共 ${total} 条；云端待同步`, {
+      actionLabel: '立即同步',
+      onAction: manualSync,
+      duration: 10_000,
+    });
+  } catch (error) {
+    renderTrash();
+    renderAll();
+    openModal('trash-modal', '#trash-clear-all');
+    showToast(error.message || '清空失败，回收站内容已完整恢复');
+  }
 }
 
 function renderGroups() {
@@ -2651,7 +2786,9 @@ function updateImportSubmitState() {
     button.disabled = false;
     return;
   }
-  const count = state.importPreview.plan.stats.actionable + state.importPreview.workflowPlan.stats.actionable;
+  const count = state.importPreview.plan.stats.actionable
+    + state.importPreview.workflowPlan.stats.actionable
+    + Number(state.importPreview.completeBackupPlan?.stats.actionable || 0);
   button.textContent = count > 0 ? `确认导入 ${count} 条` : '没有可导入条目';
   button.disabled = count === 0;
 }
@@ -2678,7 +2815,7 @@ function importSecretHint(secret) {
   return normalized.length > 4 ? `密钥尾号 ${normalized.slice(-4)}` : '密钥已隐藏';
 }
 
-function renderImportPreview(source, plan, workflowPlan) {
+function renderImportPreview(source, plan, workflowPlan, completeBackupPlan = null) {
   const actionMeta = {
     add: { label: '新增', detail: '将新增到保险库' },
     overwrite: { label: '覆盖', detail: '将覆盖同名条目' },
@@ -2730,16 +2867,32 @@ function renderImportPreview(source, plan, workflowPlan) {
         <span class="import-action-badge ${item.action}">${meta.label}</span>
       </li>`;
   }).join('');
-  const rows = `${keyRows}${workflowRows}`;
-  const totalCount = plan.items.length + workflowPlan.items.length;
-  const skipped = plan.stats.skip + plan.stats.invalid + workflowPlan.stats.skip;
-  const added = plan.stats.add + workflowPlan.stats.add;
-  const overwritten = plan.stats.overwrite + workflowPlan.stats.overwrite;
+  const deletedKeyRows = (completeBackupPlan?.deletedKeyPlan.items || []).map((item) => {
+    const meta = actionMeta[item.action];
+    return `<li class="import-preview-row" data-import-action="${item.action}"><div class="import-preview-entry"><div class="token-icon import-preview-icon initial avatar-tone-4" aria-hidden="true">R</div><div class="import-preview-main"><strong>${escapeHtml(item.candidate.name)}</strong><span>回收站 · 验证码</span><small>${item.action === 'skip' ? '已存在或与当前验证码相同，不重复导入' : item.action === 'overwrite' ? '更新回收站中的同一条目' : '恢复到回收站'}</small></div></div><span class="import-action-badge ${item.action}">${meta.label}</span></li>`;
+  }).join('');
+  const deletedWorkflowRows = (completeBackupPlan?.deletedWorkflowPlan.items || []).map((item) => {
+    const meta = actionMeta[item.action];
+    return `<li class="import-preview-row" data-import-action="${item.action}"><div class="import-preview-entry"><div class="token-icon import-preview-icon initial avatar-tone-3" aria-hidden="true">R</div><div class="import-preview-main"><strong>${escapeHtml(item.candidate.title)}</strong><span>回收站 · 使用场景</span><small>${item.action === 'skip' ? '已存在或与当前场景相同，不重复导入' : item.action === 'overwrite' ? '更新回收站中的同一场景' : '恢复到回收站'}</small></div></div><span class="import-action-badge ${item.action}">${meta.label}</span></li>`;
+  }).join('');
+  const protectionRow = completeBackupPlan?.protectionChanges
+    ? '<li class="import-preview-row" data-import-action="overwrite"><div class="import-preview-entry"><div class="token-icon import-preview-icon initial avatar-tone-2" aria-hidden="true">P</div><div class="import-preview-main"><strong>场景编辑保护</strong><span>安全设置</span><small>恢复备份中的场景二次密码设置</small></div></div><span class="import-action-badge overwrite">覆盖</span></li>'
+    : '';
+  const rows = `${keyRows}${workflowRows}${deletedKeyRows}${deletedWorkflowRows}${protectionRow}`;
+  const totalCount = plan.items.length + workflowPlan.items.length
+    + Number(completeBackupPlan?.deletedKeyPlan.items.length || 0)
+    + Number(completeBackupPlan?.deletedWorkflowPlan.items.length || 0)
+    + Number(completeBackupPlan?.protectionChanges || 0);
+  const skipped = plan.stats.skip + plan.stats.invalid + workflowPlan.stats.skip + Number(completeBackupPlan?.stats.skip || 0);
+  const added = plan.stats.add + workflowPlan.stats.add + Number(completeBackupPlan?.stats.add || 0);
+  const overwritten = plan.stats.overwrite + workflowPlan.stats.overwrite + Number(completeBackupPlan?.stats.overwrite || 0) + Number(completeBackupPlan?.protectionChanges || 0);
+  const recoveredCount = Number(completeBackupPlan?.deletedKeyPlan.stats.actionable || 0)
+    + Number(completeBackupPlan?.deletedWorkflowPlan.stats.actionable || 0);
   const preview = $('#import-preview');
   preview.innerHTML = `
     <div class="import-preview-header">
       <div><p>${escapeHtml(source)} · 解析完成</p><strong>确认导入内容</strong></div>
-      <span>确认前保险库不会改变${workflowPlan.items.length ? ` · 含 ${workflowPlan.items.length} 个使用场景` : ''}</span>
+      <span>确认前保险库不会改变${workflowPlan.items.length ? ` · 含 ${workflowPlan.items.length} 个使用场景` : ''}${recoveredCount ? ` · 恢复 ${recoveredCount} 条回收站数据` : ''}${completeBackupPlan?.protectionChanges ? ' · 恢复场景保护设置' : ''}</span>
     </div>
     <div class="import-preview-stats" aria-label="导入统计">
       <span class="total">共 <strong>${totalCount}</strong> 条</span>
@@ -2772,12 +2925,15 @@ async function importKeysFromForm(event) {
       const { valid, invalid } = await validateImportedItems(parsed.items, generateTOTP);
       const workflowNotes = parsed.workflowNotes || [];
       if (revision !== state.importRevision) return;
-      if (valid.length === 0 && workflowNotes.length === 0) throw new Error(`没有有效的可导入条目，已跳过 ${invalid.length} 个`);
       const strategy = $('#import-strategy').value;
       const plan = createImportPlan(valid, state.keys, strategy, invalid);
       const workflowPlan = createWorkflowImportPlan(workflowNotes, state.workflowNotes, strategy);
-      state.importPreview = { source: parsed.source, plan, workflowPlan };
-      renderImportPreview(parsed.source, plan, workflowPlan);
+      const completeBackupPlan = createCompleteBackupPlan(parsed.completeBackup, strategy);
+      if (valid.length === 0 && workflowNotes.length === 0 && !completeBackupPlan?.stats.actionable) {
+        throw new Error(`没有有效的可导入条目，已跳过 ${invalid.length} 个`);
+      }
+      state.importPreview = { source: parsed.source, plan, workflowPlan, completeBackupPlan };
+      renderImportPreview(parsed.source, plan, workflowPlan, completeBackupPlan);
     } catch (error) {
       showError('#import-error', error.code === 'PASSWORD_REQUIRED' ? `${error.message}，然后重试` : error.message);
     } finally {
@@ -2789,6 +2945,7 @@ async function importKeysFromForm(event) {
 
   const pending = state.importPreview;
   let completed = false;
+  const snapshot = captureVaultState();
   setBusy(button, true, '正在导入…');
   try {
     const result = applyImportPlan(pending.plan, state.keys, generateId);
@@ -2798,15 +2955,22 @@ async function importKeysFromForm(event) {
       result,
       generateId,
     );
-    if (result.stats.actionable + workflowResult.stats.actionable === 0) throw new Error('没有可导入的条目，请更改同名处理方式');
+    if (result.stats.actionable + workflowResult.stats.actionable + Number(pending.completeBackupPlan?.stats.actionable || 0) === 0) throw new Error('没有可导入的条目，请更改同名处理方式');
     state.keys = result.keys;
     state.workflowNotes = workflowResult.workflowNotes;
-    await saveVault();
+    applyCompleteBackupPlan(pending.completeBackupPlan);
+    await saveVaultMutation(snapshot, { silent: true, cloudRetries: 2 });
     renderAll();
     const skipped = result.stats.skip + result.stats.invalid + workflowResult.stats.skip;
-    showToast(`导入完成：验证码新增 ${result.stats.add}、覆盖 ${result.stats.overwrite}；场景新增 ${workflowResult.stats.add}、覆盖 ${workflowResult.stats.overwrite}；跳过 ${skipped}`);
+    const restoredTrash = Number(pending.completeBackupPlan?.deletedKeyPlan.stats.actionable || 0)
+      + Number(pending.completeBackupPlan?.deletedWorkflowPlan.stats.actionable || 0);
+    showToast(`导入完成：验证码新增 ${result.stats.add}、覆盖 ${result.stats.overwrite}；场景新增 ${workflowResult.stats.add}、覆盖 ${workflowResult.stats.overwrite}${restoredTrash ? `；回收站恢复 ${restoredTrash}` : ''}；跳过 ${skipped + Number(pending.completeBackupPlan?.stats.skip || 0)}`);
     completed = true;
   } catch (error) {
+    if (error.code === 'PERSISTENCE_FAILED') {
+      restoreVaultState(snapshot);
+      renderAll();
+    }
     if (error.code === 'STALE_IMPORT') resetImportPreview({ clearError: false });
     showError('#import-error', error.message);
   } finally {
@@ -3823,8 +3987,13 @@ function setupEvents() {
     if (action === 'favorite') {
       const note = state.workflowNotes.find((item) => item.id === card.dataset.workflowId);
       if (!note) return;
+      const snapshot = captureVaultState();
       note.favorite = !note.favorite;
-      await saveVault({ silent: true });
+      try {
+        await saveVaultMutation(snapshot, { silent: true, cloudRetries: 1 });
+      } catch (error) {
+        showToast(error.message || '收藏状态未能保存');
+      }
       renderWorkflowNotes();
     } else if (action === 'run') await openWorkflowRun(card.dataset.workflowId);
     else if (action === 'edit') void openWorkflowEditor(card.dataset.workflowId);
@@ -4049,6 +4218,7 @@ function setupEvents() {
 
   for (const button of $$('.trash-open')) button.addEventListener('click', openTrashModal);
   $('#trash-search').addEventListener('input', renderTrash);
+  $('#trash-clear-all').addEventListener('click', clearTrash);
   $('#trash-list').addEventListener('click', (event) => {
     const action = event.target.closest('[data-trash-action]')?.dataset.trashAction;
     if (action === 'clear-search') {
@@ -4195,6 +4365,78 @@ function setupEvents() {
     flushPendingFormDrafts();
   });
   window.addEventListener('pagehide', () => { flushPendingFormDrafts(); });
+}
+
+function deletedBackupIdentity(item, kind) {
+  if (kind === 'workflow') return `${String(item.title || '').toLocaleLowerCase()}\n${String(item.content || '')}`;
+  return [item.name, item.issuer, item.account, item.secret].map((value) => String(value || '').toLocaleLowerCase()).join('\n');
+}
+
+function createDeletedBackupPlan(imported, existing, active, strategy, kind) {
+  const existingById = new Map(existing.map((item) => [String(item.id), item]));
+  const existingByIdentity = new Map(existing.map((item) => [deletedBackupIdentity(item, kind), item]));
+  const activeIds = new Set(active.map((item) => String(item.id)));
+  const plannedIds = new Set();
+  const plannedIdentities = new Set();
+  const items = [];
+  const stats = { add: 0, overwrite: 0, skip: 0, actionable: 0 };
+  for (const candidate of imported || []) {
+    const id = String(candidate.id);
+    const identity = deletedBackupIdentity(candidate, kind);
+    const target = existingById.get(id) || existingByIdentity.get(identity);
+    let action = 'add';
+    if (activeIds.has(id) || plannedIds.has(id) || plannedIdentities.has(identity)) action = 'skip';
+    else if (target) action = strategy === 'overwrite' ? 'overwrite' : 'skip';
+    items.push({ action, candidate, targetId: target?.id || '' });
+    stats[action] += 1;
+    if (action !== 'skip') stats.actionable += 1;
+    plannedIds.add(id);
+    plannedIdentities.add(identity);
+  }
+  return { items, stats };
+}
+
+function createCompleteBackupPlan(backup, strategy) {
+  if (!backup) return null;
+  const deletedKeyPlan = createDeletedBackupPlan(backup.deletedItems, state.deletedItems, state.keys, strategy, 'key');
+  const deletedWorkflowPlan = createDeletedBackupPlan(backup.deletedWorkflowNotes, state.deletedWorkflowNotes, state.workflowNotes, strategy, 'workflow');
+  const protectionChanges = backup.hasWorkflowProtection
+    && (strategy === 'overwrite' || (!state.workflowProtection && backup.workflowProtection));
+  return {
+    deletedKeyPlan,
+    deletedWorkflowPlan,
+    workflowProtection: backup.workflowProtection,
+    protectionChanges,
+    stats: {
+      actionable: deletedKeyPlan.stats.actionable + deletedWorkflowPlan.stats.actionable + Number(protectionChanges),
+      add: deletedKeyPlan.stats.add + deletedWorkflowPlan.stats.add,
+      overwrite: deletedKeyPlan.stats.overwrite + deletedWorkflowPlan.stats.overwrite,
+      skip: deletedKeyPlan.stats.skip + deletedWorkflowPlan.stats.skip,
+    },
+  };
+}
+
+function applyDeletedBackupPlan(plan, current) {
+  const result = [...current];
+  for (const item of plan.items) {
+    if (item.action === 'skip') continue;
+    if (item.action === 'overwrite') {
+      const index = result.findIndex((entry) => entry.id === item.targetId);
+      if (index >= 0) result[index] = item.candidate;
+      else result.push(item.candidate);
+    } else result.push(item.candidate);
+  }
+  return result;
+}
+
+function applyCompleteBackupPlan(plan) {
+  if (!plan) return;
+  state.deletedItems = applyDeletedBackupPlan(plan.deletedKeyPlan, state.deletedItems);
+  state.deletedWorkflowNotes = applyDeletedBackupPlan(plan.deletedWorkflowPlan, state.deletedWorkflowNotes);
+  if (plan.protectionChanges) {
+    state.workflowProtection = plan.workflowProtection;
+    state.workflowEditUnlockedUntil = 0;
+  }
 }
 
 function setupQrScanner() {
