@@ -86,6 +86,7 @@ describe('static application shell', () => {
     expect(ui).toContain("button.dataset.modalWindowAction === 'minimize'");
     expect(ui).toContain("activeModal.classList.contains('modal-minimized')");
     expect(styles).toContain('.modal-overlay.modal-fullscreen .modal {');
+    expect(styles).toContain('#workflow-edit-modal.modal-fullscreen .modal {');
     expect(styles).toContain('.modal-overlay.modal-minimized .modal {');
     expect(styles).toContain('width: 100vw;');
     expect(styles).toContain('height: 100dvh;');

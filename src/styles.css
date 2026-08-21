@@ -913,6 +913,7 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
 .modal-window-button .modal-restore-icon, .modal-window-button .modal-contract-icon { display: none; }
 .modal-overlay.modal-fullscreen { padding: 0; }
 .modal-overlay.modal-fullscreen .modal { width: 100vw; max-width: none; height: 100dvh; max-height: none; min-width: 0; min-height: 0; resize: none; border-radius: 0; }
+#workflow-edit-modal.modal-fullscreen .modal { width: 100vw; max-width: none; height: 100dvh; max-height: none; min-width: 0; min-height: 0; resize: none; border-radius: 0; }
 .modal-overlay.modal-fullscreen .modal-expand-icon { display: none; }
 .modal-overlay.modal-fullscreen .modal-contract-icon { display: block; }
 .modal-overlay.modal-minimized { align-items: end; justify-items: end; padding: max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-right)); background: transparent; pointer-events: none; backdrop-filter: none; }
