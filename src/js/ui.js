@@ -8,6 +8,94 @@ let offlineBannerObserver = null;
 let backdropPointer = null;
 const BACKDROP_DRAG_TOLERANCE = 6;
 
+function updateModalWindowControls(modal) {
+  const minimized = modal.classList.contains('modal-minimized');
+  const fullscreen = modal.classList.contains('modal-fullscreen');
+  const minimizeButton = $('[data-modal-window-action="minimize"]', modal);
+  const fullscreenButton = $('[data-modal-window-action="fullscreen"]', modal);
+  if (minimizeButton) {
+    minimizeButton.setAttribute('aria-pressed', String(minimized));
+    minimizeButton.setAttribute('aria-label', minimized ? '还原窗口' : '最小化窗口');
+    minimizeButton.title = minimized ? '还原窗口' : '最小化窗口';
+  }
+  if (fullscreenButton) {
+    fullscreenButton.setAttribute('aria-pressed', String(fullscreen));
+    fullscreenButton.setAttribute('aria-label', fullscreen ? '退出全屏' : '全屏显示');
+    fullscreenButton.title = fullscreen ? '退出全屏' : '全屏显示';
+  }
+}
+
+function resetModalWindowState(modal) {
+  modal.classList.remove('modal-minimized', 'modal-fullscreen');
+  modal.setAttribute('aria-modal', 'true');
+  updateModalWindowControls(modal);
+}
+
+function setModalMinimized(modal, minimized) {
+  modal.classList.toggle('modal-minimized', minimized);
+  modal.setAttribute('aria-modal', minimized ? 'false' : 'true');
+  document.body.classList.toggle('modal-open', !minimized);
+  updateModalWindowControls(modal);
+  requestAnimationFrame(() => $('[data-modal-window-action="minimize"]', modal)?.focus());
+}
+
+function toggleModalFullscreen(modal) {
+  if (modal.classList.contains('modal-minimized')) {
+    setModalMinimized(modal, false);
+    modal.classList.add('modal-fullscreen');
+  } else modal.classList.toggle('modal-fullscreen');
+  updateModalWindowControls(modal);
+  requestAnimationFrame(() => $('[data-modal-window-action="fullscreen"]', modal)?.focus());
+}
+
+function createModalWindowButton(action, label, markup) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'icon-btn modal-window-button';
+  button.dataset.modalWindowAction = action;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-pressed', 'false');
+  button.title = label;
+  button.innerHTML = markup;
+  return button;
+}
+
+function setupModalWindowControls() {
+  for (const modal of $$('.modal-overlay')) {
+    const dialog = $('.modal-wide', modal);
+    const header = dialog && $('.modal-header', dialog);
+    const closeButton = header && $('[data-close-modal]', header);
+    if (!dialog || !header || !closeButton || modal.dataset.dismissible === 'false' || modal.dataset.windowControlsReady === 'true') continue;
+    const controls = document.createElement('div');
+    controls.className = 'modal-window-controls';
+    controls.setAttribute('role', 'group');
+    controls.setAttribute('aria-label', '窗口控制');
+    const minimizeButton = createModalWindowButton('minimize', '最小化窗口', `
+      <svg class="modal-minimize-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14"></path></svg>
+      <svg class="modal-restore-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"></path></svg>`);
+    const fullscreenButton = createModalWindowButton('fullscreen', '全屏显示', `
+      <svg class="modal-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"></path></svg>
+      <svg class="modal-contract-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v5H3M16 3v5h5M21 16h-5v5M3 16h5v5"></path></svg>`);
+    controls.append(minimizeButton, fullscreenButton, closeButton);
+    header.append(controls);
+    controls.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-modal-window-action]');
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (button.dataset.modalWindowAction === 'minimize') {
+        setModalMinimized(modal, !modal.classList.contains('modal-minimized'));
+      } else toggleModalFullscreen(modal);
+    });
+    header.addEventListener('click', (event) => {
+      if (!modal.classList.contains('modal-minimized') || event.target.closest('button')) return;
+      setModalMinimized(modal, false);
+    });
+    modal.dataset.windowControlsReady = 'true';
+    updateModalWindowControls(modal);
+  }
+}
+
 export function setHidden(target, hidden) {
   const element = typeof target === 'string' ? $(target) : target;
   if (!element) return;
@@ -32,6 +120,7 @@ export function openModal(id, focusSelector = 'input:not([type="hidden"]), butto
   const modal = typeof id === 'string' ? document.getElementById(id) : id;
   if (!modal) return;
   if (activeModal) closeModal(activeModal, false);
+  resetModalWindowState(modal);
   modalTrigger = document.activeElement;
   activeModal = modal;
   modal.inert = false;
@@ -58,6 +147,7 @@ export function closeModal(id, restoreFocus = true) {
   modal.inert = true;
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
+  resetModalWindowState(modal);
   if (activeModal === modal) activeModal = null;
   if (!activeModal) document.body.classList.remove('modal-open');
   if (restoreTarget && document.activeElement !== restoreTarget) restoreTarget.focus({ preventScroll: true });
@@ -141,6 +231,7 @@ export function askText({ title, label, defaultValue = '', validate = () => null
 }
 
 export function setupModalAccessibility() {
+  setupModalWindowControls();
   for (const modal of $$('.modal-overlay')) modal.inert = modal.classList.contains('hidden');
   document.addEventListener('keydown', (event) => {
     if (!activeModal || activeModal.classList.contains('hidden')) return;
@@ -149,6 +240,7 @@ export function setupModalAccessibility() {
       closeModal(activeModal);
       return;
     }
+    if (activeModal.classList.contains('modal-minimized')) return;
     if (event.key !== 'Tab') return;
     const focusable = $$('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', activeModal)
       .filter((element) => element.offsetParent !== null);

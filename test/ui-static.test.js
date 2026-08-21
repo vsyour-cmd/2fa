@@ -82,6 +82,13 @@ describe('static application shell', () => {
     expect(styles).toContain('@media (min-width: 721px) and (pointer: fine)');
     expect(styles).toContain('resize: both;');
     expect(styles).toContain('resize: none;');
+    expect(ui).toContain('function setupModalWindowControls()');
+    expect(ui).toContain("button.dataset.modalWindowAction === 'minimize'");
+    expect(ui).toContain("activeModal.classList.contains('modal-minimized')");
+    expect(styles).toContain('.modal-overlay.modal-fullscreen .modal {');
+    expect(styles).toContain('.modal-overlay.modal-minimized .modal {');
+    expect(styles).toContain('width: 100vw;');
+    expect(styles).toContain('height: 100dvh;');
   });
 
   it('offers accessible item-level choices for multi-device conflicts', () => {

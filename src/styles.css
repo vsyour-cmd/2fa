@@ -908,6 +908,28 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .workflow-copy-code, .workflow-unavailable-label { grid-column: 2; width: 100%; }
 }
 
+.modal-window-controls { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin-left: auto; }
+.modal-window-button svg { pointer-events: none; }
+.modal-window-button .modal-restore-icon, .modal-window-button .modal-contract-icon { display: none; }
+.modal-overlay.modal-fullscreen { padding: 0; }
+.modal-overlay.modal-fullscreen .modal { width: 100vw; max-width: none; height: 100dvh; max-height: none; min-width: 0; min-height: 0; resize: none; border-radius: 0; }
+.modal-overlay.modal-fullscreen .modal-expand-icon { display: none; }
+.modal-overlay.modal-fullscreen .modal-contract-icon { display: block; }
+.modal-overlay.modal-minimized { align-items: end; justify-items: end; padding: max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-right)); background: transparent; pointer-events: none; backdrop-filter: none; }
+.modal-overlay.modal-minimized .modal { width: min(420px, calc(100vw - 24px)); max-width: calc(100vw - 24px); height: auto; min-width: 0; min-height: 0; max-height: none; padding: 10px 12px; overflow: hidden; resize: none; border: 1px solid var(--border-strong); border-radius: 14px; pointer-events: auto; }
+.modal-overlay.modal-minimized .modal-header { align-items: center; margin: 0; cursor: pointer; }
+.modal-overlay.modal-minimized .modal-header > :first-child { min-width: 0; }
+.modal-overlay.modal-minimized .modal-header .eyebrow { display: none; }
+.modal-overlay.modal-minimized .modal-header h2 { overflow: hidden; font-size: 0.98rem; text-overflow: ellipsis; white-space: nowrap; }
+.modal-overlay.modal-minimized .modal > :not(.modal-header) { display: none !important; }
+.modal-overlay.modal-minimized .modal-minimize-icon { display: none; }
+.modal-overlay.modal-minimized .modal-restore-icon { display: block; }
+
+@media (max-width: 520px) {
+  .modal-overlay.modal-minimized { padding: 8px; }
+  .modal-overlay.modal-minimized .modal { width: 100%; max-width: 100%; }
+}
+
 @supports not (backdrop-filter: blur(10px)) {
   .card, .card-subtle, .modal, .token-item, .workflow-note-card, .account-switcher, .header-actions, .vault-view-tabs, .workflow-heading-actions { background: var(--surface-solid); }
 }
