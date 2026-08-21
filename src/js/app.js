@@ -18,7 +18,9 @@ import {
 } from './crypto.js';
 import {
   applyImportPlan,
+  applyWorkflowImportPlan,
   createImportPlan,
+  createWorkflowImportPlan,
   parseGoogleMigrationUri,
   parseImportContent,
   validateImportedItems,
@@ -2516,7 +2518,7 @@ function updateImportSubmitState() {
     button.disabled = false;
     return;
   }
-  const count = state.importPreview.plan.stats.actionable + state.importPreview.workflowNotes.length;
+  const count = state.importPreview.plan.stats.actionable + state.importPreview.workflowPlan.stats.actionable;
   button.textContent = count > 0 ? `确认导入 ${count} 条` : '没有可导入条目';
   button.disabled = count === 0;
 }
@@ -2543,7 +2545,7 @@ function importSecretHint(secret) {
   return normalized.length > 4 ? `密钥尾号 ${normalized.slice(-4)}` : '密钥已隐藏';
 }
 
-function renderImportPreview(source, plan, workflowNotes = []) {
+function renderImportPreview(source, plan, workflowPlan) {
   const actionMeta = {
     add: { label: '新增', detail: '将新增到保险库' },
     overwrite: { label: '覆盖', detail: '将覆盖同名条目' },
@@ -2575,35 +2577,41 @@ function renderImportPreview(source, plan, workflowNotes = []) {
         <span class="import-action-badge ${item.action}">${meta.label}</span>
       </li>`;
   }).join('');
-  const workflowRows = workflowNotes.map((rawNote) => {
-    const note = normalizeWorkflowNote(rawNote);
+  const workflowRows = workflowPlan.items.map((item) => {
+    const note = item.candidate;
+    const meta = actionMeta[item.action];
+    let detail = meta.detail;
+    if (item.action === 'overwrite') detail = item.target.kind === 'planned' ? '覆盖本批同名场景' : `将覆盖“${item.target.name}”`;
+    if (item.action === 'skip') detail = `与“${item.target.name}”相同或同名`;
+    if (item.action === 'add' && item.originalTitle) detail = `重名时自动重命名：原名“${item.originalTitle}”`;
     return `
-      <li class="import-preview-row" data-import-action="add">
+      <li class="import-preview-row" data-import-action="${item.action}">
         <div class="import-preview-entry">
           <div class="token-icon import-preview-icon initial avatar-tone-3" aria-hidden="true">S</div>
           <div class="import-preview-main">
             <strong>${escapeHtml(note.title)}</strong>
             <span>${escapeHtml(note.group || '未分组')} · ${note.linkedKeys.length} 个关联验证码</span>
-            <small>将作为新场景导入；重名时自动重命名</small>
+            <small>${escapeHtml(detail)}</small>
           </div>
         </div>
-        <span class="import-action-badge add">场景</span>
+        <span class="import-action-badge ${item.action}">${meta.label}</span>
       </li>`;
   }).join('');
   const rows = `${keyRows}${workflowRows}`;
-  const totalCount = plan.items.length + workflowNotes.length;
-  const skipped = plan.stats.skip + plan.stats.invalid;
+  const totalCount = plan.items.length + workflowPlan.items.length;
+  const skipped = plan.stats.skip + plan.stats.invalid + workflowPlan.stats.skip;
+  const added = plan.stats.add + workflowPlan.stats.add;
+  const overwritten = plan.stats.overwrite + workflowPlan.stats.overwrite;
   const preview = $('#import-preview');
   preview.innerHTML = `
     <div class="import-preview-header">
       <div><p>${escapeHtml(source)} · 解析完成</p><strong>确认导入内容</strong></div>
-      <span>确认前保险库不会改变${workflowNotes.length ? ` · 含 ${workflowNotes.length} 个使用场景` : ''}</span>
+      <span>确认前保险库不会改变${workflowPlan.items.length ? ` · 含 ${workflowPlan.items.length} 个使用场景` : ''}</span>
     </div>
     <div class="import-preview-stats" aria-label="导入统计">
       <span class="total">共 <strong>${totalCount}</strong> 条</span>
-      <span class="add"><strong>${plan.stats.add}</strong> 新增</span>
-      <span class="overwrite"><strong>${plan.stats.overwrite}</strong> 覆盖</span>
-      ${workflowNotes.length ? `<span class="add"><strong>${workflowNotes.length}</strong> 场景</span>` : ''}
+      <span class="add"><strong>${added}</strong> 新增</span>
+      <span class="overwrite"><strong>${overwritten}</strong> 覆盖</span>
       <span class="skip"><strong>${skipped}</strong> 跳过</span>
     </div>
     <ul class="import-preview-list" aria-label="导入条目预览">${rows}</ul>`;
@@ -2632,9 +2640,11 @@ async function importKeysFromForm(event) {
       const workflowNotes = parsed.workflowNotes || [];
       if (revision !== state.importRevision) return;
       if (valid.length === 0 && workflowNotes.length === 0) throw new Error(`没有有效的可导入条目，已跳过 ${invalid.length} 个`);
-      const plan = createImportPlan(valid, state.keys, $('#import-strategy').value, invalid);
-      state.importPreview = { source: parsed.source, plan, workflowNotes };
-      renderImportPreview(parsed.source, plan, workflowNotes);
+      const strategy = $('#import-strategy').value;
+      const plan = createImportPlan(valid, state.keys, strategy, invalid);
+      const workflowPlan = createWorkflowImportPlan(workflowNotes, state.workflowNotes, strategy);
+      state.importPreview = { source: parsed.source, plan, workflowPlan };
+      renderImportPreview(parsed.source, plan, workflowPlan);
     } catch (error) {
       showError('#import-error', error.code === 'PASSWORD_REQUIRED' ? `${error.message}，然后重试` : error.message);
     } finally {
@@ -2649,30 +2659,19 @@ async function importKeysFromForm(event) {
   setBusy(button, true, '正在导入…');
   try {
     const result = applyImportPlan(pending.plan, state.keys, generateId);
-    const existingNoteNames = new Set(state.workflowNotes.map((note) => note.title.toLocaleLowerCase()));
-    const importedNotes = pending.workflowNotes.map((rawNote) => {
-      const note = normalizeWorkflowNote(rawNote);
-      const linkedKeys = note.linkedKeys.map((link) => {
-        const keyId = result.importedKeyIds.get(link.keyId) || link.keyId;
-        const key = result.keys.find((item) => item.id === keyId) || result.keys.find((item) => (
-          link.name
-          && item.name.toLocaleLowerCase() === link.name.toLocaleLowerCase()
-          && (!link.issuer || item.issuer.toLocaleLowerCase() === link.issuer.toLocaleLowerCase())
-          && (!link.account || item.account.toLocaleLowerCase() === link.account.toLocaleLowerCase())
-        ));
-        return key ? workflowLinkSnapshot(key) : { ...link, keyId };
-      });
-      const title = uniqueName(note.title, existingNoteNames);
-      existingNoteNames.add(title.toLocaleLowerCase());
-      return normalizeWorkflowNote({ ...note, id: generateId(), title, linkedKeys, updatedAt: Date.now() });
-    });
-    if (result.stats.actionable + importedNotes.length === 0) throw new Error('没有可导入的条目，请更改同名处理方式');
+    const workflowResult = applyWorkflowImportPlan(
+      pending.workflowPlan,
+      state.workflowNotes,
+      result,
+      generateId,
+    );
+    if (result.stats.actionable + workflowResult.stats.actionable === 0) throw new Error('没有可导入的条目，请更改同名处理方式');
     state.keys = result.keys;
-    state.workflowNotes.push(...importedNotes);
+    state.workflowNotes = workflowResult.workflowNotes;
     await saveVault();
     renderAll();
-    const skipped = result.stats.skip + result.stats.invalid;
-    showToast(`导入完成：新增 ${result.stats.add}，覆盖 ${result.stats.overwrite}，场景 ${importedNotes.length}，跳过 ${skipped}`);
+    const skipped = result.stats.skip + result.stats.invalid + workflowResult.stats.skip;
+    showToast(`导入完成：验证码新增 ${result.stats.add}、覆盖 ${result.stats.overwrite}；场景新增 ${workflowResult.stats.add}、覆盖 ${workflowResult.stats.overwrite}；跳过 ${skipped}`);
     completed = true;
   } catch (error) {
     if (error.code === 'STALE_IMPORT') resetImportPreview({ clearError: false });

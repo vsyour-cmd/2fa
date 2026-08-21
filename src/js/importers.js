@@ -377,3 +377,120 @@ export function applyImportPlan(plan, existingKeys = [], createId = generateId) 
 
   return { keys, importedKeyIds, stats: { ...plan.stats } };
 }
+
+export function createWorkflowImportPlan(workflowNotes = [], existingNotes = [], strategy = 'skip') {
+  if (!['skip', 'overwrite', 'all'].includes(strategy)) throw importError('不支持的同名处理方式');
+
+  const occupiedNames = new Set(existingNotes.map((note) => importName(note.title)));
+  const targetsById = new Map(existingNotes
+    .filter((note) => note?.id)
+    .map((note) => [String(note.id), { kind: 'existing', id: note.id, name: note.title }]));
+  const targetsByName = new Map(existingNotes.map((note) => [importName(note.title), {
+    kind: 'existing',
+    id: note.id,
+    name: note.title,
+  }]));
+  const items = [];
+
+  for (const [index, rawCandidate] of workflowNotes.entries()) {
+    const original = normalizeWorkflowNote(rawCandidate);
+    const target = targetsById.get(original.id) || targetsByName.get(importName(original.title));
+
+    if (target && strategy === 'skip') {
+      items.push({ action: 'skip', candidate: original, target });
+      continue;
+    }
+    if (target && strategy === 'overwrite') {
+      items.push({ action: 'overwrite', candidate: original, target });
+      continue;
+    }
+
+    const finalTitle = strategy === 'all' ? uniqueName(original.title, occupiedNames) : original.title;
+    const resultRef = `workflow-import-${index}`;
+    const candidate = { ...original, title: finalTitle };
+    items.push({
+      action: 'add',
+      candidate,
+      originalTitle: finalTitle === original.title ? '' : original.title,
+      resultRef,
+    });
+    occupiedNames.add(importName(finalTitle));
+    if (strategy !== 'all') {
+      const plannedTarget = { kind: 'planned', ref: resultRef, name: finalTitle };
+      targetsByName.set(importName(finalTitle), plannedTarget);
+      if (original.id) targetsById.set(original.id, plannedTarget);
+    }
+  }
+
+  const stats = {
+    add: items.filter((item) => item.action === 'add').length,
+    overwrite: items.filter((item) => item.action === 'overwrite').length,
+    skip: items.filter((item) => item.action === 'skip').length,
+  };
+  stats.actionable = stats.add + stats.overwrite;
+  return { strategy, items, stats };
+}
+
+function remapWorkflowLinks(links, keys, importedKeyIds) {
+  return links.map((link) => {
+    const keyId = importedKeyIds.get(link.keyId) || link.keyId;
+    const key = keys.find((item) => item.id === keyId) || keys.find((item) => (
+      link.name
+      && importName(item.name) === importName(link.name)
+      && (!link.issuer || importName(item.issuer) === importName(link.issuer))
+      && (!link.account || importName(item.account) === importName(link.account))
+    ));
+    return key ? {
+      keyId: key.id,
+      name: key.name,
+      issuer: key.issuer,
+      account: key.account,
+    } : { ...link, keyId };
+  });
+}
+
+export function applyWorkflowImportPlan(
+  plan,
+  existingNotes = [],
+  { keys = [], importedKeyIds = new Map() } = {},
+  createId = generateId,
+  now = Date.now(),
+) {
+  const workflowNotes = existingNotes.map((note) => normalizeWorkflowNote(note));
+  const createdIds = new Map();
+
+  for (const item of plan?.items || []) {
+    if (item.action === 'skip') continue;
+    const linkedKeys = remapWorkflowLinks(item.candidate.linkedKeys, keys, importedKeyIds);
+
+    if (item.action === 'add') {
+      const added = normalizeWorkflowNote({
+        ...item.candidate,
+        id: createId(),
+        linkedKeys,
+        updatedAt: now,
+      });
+      workflowNotes.push(added);
+      createdIds.set(item.resultRef, added.id);
+      continue;
+    }
+    if (item.action !== 'overwrite') continue;
+
+    const targetId = item.target.kind === 'planned' ? createdIds.get(item.target.ref) : item.target.id;
+    const existingIndex = workflowNotes.findIndex((note) => note.id === targetId);
+    if (existingIndex < 0) throw importError('导入目标已变化，请重新预览后再确认', 'STALE_IMPORT');
+    const previous = workflowNotes[existingIndex];
+    workflowNotes[existingIndex] = normalizeWorkflowNote({
+      ...item.candidate,
+      id: previous.id,
+      linkedKeys,
+      favorite: item.candidate.favorite || previous.favorite,
+      lastUsed: Math.max(item.candidate.lastUsed, previous.lastUsed),
+      useCount: Math.max(item.candidate.useCount, previous.useCount),
+      createdAt: previous.createdAt,
+      updatedAt: now,
+    });
+  }
+
+  return { workflowNotes, stats: { ...plan.stats } };
+}
