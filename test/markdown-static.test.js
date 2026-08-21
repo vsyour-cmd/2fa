@@ -56,4 +56,11 @@ describe('safe Markdown rendering', () => {
     expect(markdown).not.toContain('data-secret-copy');
     expect(markdown).not.toContain('encodeURIComponent(raw)');
   });
+
+  it('adds an accessible copy action to every sanitized code block', () => {
+    expect(markdown).toContain('function injectCodeCopyMarkup(html)');
+    expect(markdown).toContain('class="markdown-code-copy"');
+    expect(markdown).toContain('aria-label="复制代码块"');
+    expect(markdown).toContain('return injectCodeCopyMarkup(withSecrets)');
+  });
 });

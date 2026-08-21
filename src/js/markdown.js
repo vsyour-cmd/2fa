@@ -56,6 +56,18 @@ function injectSecretRevealMarkup(html, values, tokenPrefix, secretStore) {
   return rendered;
 }
 
+function injectCodeCopyMarkup(html) {
+  return html.replace(/<pre(?:\s[^>]*)?>[\s\S]*?<\/pre>/g, (codeBlock) => `
+    <div class="markdown-code-block">
+      <button type="button" class="markdown-code-copy" aria-label="复制代码块" title="复制代码">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>
+        <span>复制</span>
+      </button>
+      ${codeBlock}
+    </div>
+  `);
+}
+
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if (node.tagName === 'A' && node.hasAttribute('href')) {
     node.setAttribute('target', '_blank');
@@ -79,5 +91,6 @@ export function renderMarkdown(value, secretStore = null) {
     ALLOW_DATA_ATTR: false,
     SANITIZE_NAMED_PROPS: true,
   });
-  return injectSecretRevealMarkup(sanitized, values, tokenPrefix, secretStore);
+  const withSecrets = injectSecretRevealMarkup(sanitized, values, tokenPrefix, secretStore);
+  return injectCodeCopyMarkup(withSecrets);
 }

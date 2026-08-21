@@ -2169,6 +2169,32 @@ function handleWorkflowSecretCopy(event) {
   return true;
 }
 
+function handleMarkdownCodeCopy(event) {
+  const trigger = event.target.closest('.markdown-code-copy');
+  if (!trigger) return;
+  event.preventDefault();
+  const code = trigger.closest('.markdown-code-block')?.querySelector('pre code, pre');
+  if (!code) return true;
+  const safeCopy = code.cloneNode(true);
+  safeCopy.querySelectorAll('.markdown-secret-copy').forEach((button) => button.remove());
+  copyText(safeCopy.textContent, '代码已复制')
+    .then(() => {
+      const label = $('span', trigger);
+      if (!label) return;
+      label.textContent = '已复制';
+      trigger.classList.add('copied');
+      trigger.setAttribute('aria-label', '代码已复制');
+      setTimeout(() => {
+        if (!trigger.isConnected) return;
+        label.textContent = '复制';
+        trigger.classList.remove('copied');
+        trigger.setAttribute('aria-label', '复制代码块');
+      }, 1_500);
+    })
+    .catch(() => showToast('代码复制失败'));
+  return true;
+}
+
 function waitForNextCodePeriod(key, startedAt) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -3734,6 +3760,9 @@ function setupEvents() {
       return;
     }
     if (handleWorkflowSecretCopy(event)) {
+      return;
+    }
+    if (handleMarkdownCodeCopy(event)) {
       return;
     }
     if (!event.composedPath().includes($('#workflow-key-combobox'))) closeWorkflowKeyDropdown();

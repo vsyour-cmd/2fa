@@ -228,6 +228,10 @@ describe('static application shell', () => {
     expect(styles).toContain('.workflow-note-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.workflow-markdown-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.markdown-body code {');
+    expect(styles).toContain('.markdown-code-copy {');
+    expect(app).toContain("event.target.closest('.markdown-code-copy')");
+    expect(app).toContain("safeCopy.querySelectorAll('.markdown-secret-copy')");
+    expect(app).toContain("copyText(safeCopy.textContent, '代码已复制')");
     expect(styles).toContain('.workflow-order-button { display: inline-grid; width: 44px; height: 44px;');
     expect(html).toContain('id="workflow-sort"');
     expect(app).toContain('compareSmartWorkflowNotes(left, right, now)');
