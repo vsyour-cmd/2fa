@@ -107,7 +107,7 @@ import {
 
 const offline = new OfflineManager();
 const encryptedDrafts = new EncryptedDraftStore();
-const DRAFT_SAVE_DELAY_MS = 500;
+const DRAFT_SAVE_DELAY_MS = 150;
 const draftTimers = { token: null, workflow: null };
 const draftRevisions = { token: 0, workflow: 0 };
 const LAST_EXPORT_KEY = '2fa_last_export_v1';
@@ -248,6 +248,23 @@ function readWorkflowDraftPayload() {
   };
 }
 
+async function persistFormDraft(type, revision, keyHash, masterKey) {
+  const payload = type === 'token' ? readTokenDraftPayload() : readWorkflowDraftPayload();
+  try {
+    const record = await encryptedDrafts.save(keyHash, type, payload, masterKey, () => (
+      revision === draftRevisions[type]
+      && state.keyHash === keyHash
+      && state.masterKey === masterKey
+    ));
+    if (record && revision === draftRevisions[type]) {
+      setDraftStatus(type, `草稿已加密保存 · ${formatDateTime(record.updatedAt)}`);
+    }
+  } catch (error) {
+    console.warn('Unable to save encrypted form draft', error);
+    if (revision === draftRevisions[type]) setDraftStatus(type, '草稿暂时无法保存，请勿关闭页面');
+  }
+}
+
 function scheduleFormDraft(type) {
   if (!state.masterKey || !state.keyHash) return;
   if (type === 'workflow' && $('#workflow-id').value) return;
@@ -256,23 +273,21 @@ function scheduleFormDraft(type) {
   const keyHash = state.keyHash;
   const masterKey = state.masterKey;
   setDraftStatus(type, '正在加密保存草稿…');
-  draftTimers[type] = setTimeout(async () => {
+  draftTimers[type] = setTimeout(() => {
     draftTimers[type] = null;
-    const payload = type === 'token' ? readTokenDraftPayload() : readWorkflowDraftPayload();
-    try {
-      const record = await encryptedDrafts.save(keyHash, type, payload, masterKey, () => (
-        revision === draftRevisions[type]
-        && state.keyHash === keyHash
-        && state.masterKey === masterKey
-      ));
-      if (record && revision === draftRevisions[type]) {
-        setDraftStatus(type, `草稿已加密保存 · ${formatDateTime(record.updatedAt)}`);
-      }
-    } catch (error) {
-      console.warn('Unable to save encrypted form draft', error);
-      if (revision === draftRevisions[type]) setDraftStatus(type, '草稿暂时无法保存，请勿关闭页面');
-    }
+    persistFormDraft(type, revision, keyHash, masterKey);
   }, DRAFT_SAVE_DELAY_MS);
+}
+
+function flushFormDraft(type) {
+  if (!draftTimers[type] || !state.masterKey || !state.keyHash) return Promise.resolve();
+  clearTimeout(draftTimers[type]);
+  draftTimers[type] = null;
+  return persistFormDraft(type, draftRevisions[type], state.keyHash, state.masterKey);
+}
+
+function flushPendingFormDrafts() {
+  return Promise.allSettled(['token', 'workflow'].map((type) => flushFormDraft(type)));
 }
 
 async function restoreTokenDraft() {
@@ -617,10 +632,13 @@ async function migrateLegacyVault(password, legacyHash) {
   const verification = await loadCloudRecord(newHash);
   if (!verification.exists) throw new Error('新账户数据验证失败');
   await decryptJson(verification.encryptedData, newKey);
+  let draftMigration = null;
 
   try {
+    draftMigration = await encryptedDrafts.prepareMigration(legacyHash, newHash, state.masterKey, newKey);
     await apiDelete(legacyHash, legacyUpdatedAt);
   } catch (error) {
+    try { draftMigration?.rollback(); } catch (draftError) { console.warn('Unable to roll back migrated drafts:', draftError); }
     try { await apiDelete(newHash, Number(result.updatedAt)); } catch (cleanupError) {
       console.warn('Unable to clean up cancelled legacy migration copy:', cleanupError);
     }
@@ -629,6 +647,7 @@ async function migrateLegacyVault(password, legacyHash) {
     }
     throw error;
   }
+  try { draftMigration?.commit(); } catch (draftError) { console.warn('Unable to remove old encrypted drafts:', draftError); }
 
   state.keyHash = newHash;
   state.salt = newSalt;
@@ -3089,9 +3108,12 @@ async function changeMasterPassword(event) {
     const verification = await loadCloudRecord(nextHash);
     if (!verification.exists) throw new Error('新密码数据验证失败，旧数据已保留');
     await decryptJson(verification.encryptedData, nextKey);
+    let draftMigration = null;
     try {
+      draftMigration = await encryptedDrafts.prepareMigration(oldHash, nextHash, state.masterKey, nextKey);
       await apiDelete(oldHash, oldUpdatedAt);
     } catch (error) {
+      try { draftMigration?.rollback(); } catch (draftError) { console.warn('Unable to roll back re-encrypted drafts:', draftError); }
       try { await apiDelete(nextHash, Number(result.updatedAt)); } catch (cleanupError) {
         console.warn('Unable to clean up cancelled password change copy:', cleanupError);
       }
@@ -3100,6 +3122,7 @@ async function changeMasterPassword(event) {
       }
       throw error;
     }
+    try { draftMigration?.commit(); } catch (draftError) { console.warn('Unable to remove old encrypted drafts:', draftError); }
     const passwordHistoryPreserved = await reencryptPasswordHistory(nextKey);
 
     state.keyHash = nextHash;
@@ -3555,6 +3578,8 @@ function setupEvents() {
   $('#workflow-form').addEventListener('change', () => scheduleFormDraft('workflow'));
   $('#add-form').addEventListener('input', () => scheduleFormDraft('token'));
   $('#add-form').addEventListener('change', () => scheduleFormDraft('token'));
+  $('#add-modal').addEventListener('modal:close', () => { flushFormDraft('token'); });
+  $('#workflow-edit-modal').addEventListener('modal:close', () => { flushFormDraft('workflow'); });
   $('#add-draft-clear').addEventListener('click', clearTokenDraftAndForm);
   $('#workflow-draft-clear').addEventListener('click', clearWorkflowDraftAndForm);
   $('#workflow-protection-form').addEventListener('submit', saveWorkflowProtectionFromForm);
@@ -3993,6 +4018,7 @@ function setupEvents() {
     clearTimeout(state.hiddenLockTimer);
     state.hiddenLockTimer = null;
     if (!document.hidden) return;
+    flushPendingFormDrafts();
     qrScanner?.stop();
     if (state.masterKey && state.settings.lockOnHidden) {
       // Refresh/navigation also emits visibilitychange. Delay the lock so an
@@ -4009,7 +4035,9 @@ function setupEvents() {
     clearTimeout(state.hiddenLockTimer);
     state.hiddenLockTimer = null;
     qrScanner?.stop();
+    flushPendingFormDrafts();
   });
+  window.addEventListener('pagehide', () => { flushPendingFormDrafts(); });
 }
 
 function setupQrScanner() {

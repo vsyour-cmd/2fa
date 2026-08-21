@@ -36,4 +36,41 @@ export class EncryptedDraftStore {
   remove(keyHash, type) {
     this.storage.removeItem(this.key(keyHash, type));
   }
+
+  async prepareMigration(sourceHash, targetHash, sourceKey, targetKey, types = ['token', 'workflow']) {
+    const previousTargets = new Map();
+    const copiedTypes = [];
+    try {
+      for (const type of types) {
+        const sourceRaw = this.storage.getItem(this.key(sourceHash, type));
+        if (!sourceRaw) continue;
+        const restored = await this.load(sourceHash, type, sourceKey);
+        if (!restored) throw new Error(`Unable to decrypt ${type} draft`);
+        previousTargets.set(type, this.storage.getItem(this.key(targetHash, type)));
+        await this.save(targetHash, type, restored.payload, targetKey);
+        const verified = await this.load(targetHash, type, targetKey);
+        if (!verified) throw new Error(`Unable to verify ${type} draft`);
+        copiedTypes.push(type);
+      }
+    } catch (error) {
+      for (const [type, previous] of previousTargets) {
+        if (previous === null) this.remove(targetHash, type);
+        else this.storage.setItem(this.key(targetHash, type), previous);
+      }
+      throw error;
+    }
+    return {
+      copiedTypes: [...copiedTypes],
+      commit: () => {
+        for (const type of copiedTypes) this.remove(sourceHash, type);
+      },
+      rollback: () => {
+        for (const type of copiedTypes) {
+          const previous = previousTargets.get(type);
+          if (previous === null) this.remove(targetHash, type);
+          else this.storage.setItem(this.key(targetHash, type), previous);
+        }
+      },
+    };
+  }
 }

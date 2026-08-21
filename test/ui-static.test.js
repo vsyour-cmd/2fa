@@ -643,6 +643,9 @@ describe('static application shell', () => {
     expect(app).toContain("if (!previous) clearFormDraft('workflow')");
     expect(app).toContain("clearFormDraft('token')");
     expect(app).toContain("if (type === 'workflow' && $('#workflow-id').value) return");
+    expect(app).toContain("encryptedDrafts.prepareMigration(oldHash, nextHash, state.masterKey, nextKey)");
+    expect(app).toContain("$('#add-modal').addEventListener('modal:close', () => { flushFormDraft('token'); })");
+    expect(app).toContain("window.addEventListener('pagehide', () => { flushPendingFormDrafts(); })");
     expect(styles).toContain('.draft-status {');
     expect(styles).toContain('.draft-status button:focus-visible');
   });

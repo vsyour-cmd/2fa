@@ -40,4 +40,25 @@ describe('encrypted form drafts', () => {
     store.remove('vault-a', 'workflow');
     expect(await store.load('vault-a', 'workflow', key)).toBeNull();
   });
+
+  it('re-encrypts drafts for a new vault key and supports commit or rollback', async () => {
+    const storage = new MemoryStorage();
+    const store = new EncryptedDraftStore(storage);
+    const oldKey = await aesKey();
+    const nextKey = await aesKey();
+    await store.save('old-vault', 'token', { secret: 'TOKEN-DRAFT' }, oldKey);
+    await store.save('old-vault', 'workflow', { content: 'WORKFLOW-DRAFT' }, oldKey);
+
+    const rollbackMigration = await store.prepareMigration('old-vault', 'next-vault', oldKey, nextKey);
+    expect((await store.load('next-vault', 'token', nextKey)).payload.secret).toBe('TOKEN-DRAFT');
+    rollbackMigration.rollback();
+    expect(await store.load('next-vault', 'token', nextKey)).toBeNull();
+    expect((await store.load('old-vault', 'token', oldKey)).payload.secret).toBe('TOKEN-DRAFT');
+
+    const committedMigration = await store.prepareMigration('old-vault', 'next-vault', oldKey, nextKey);
+    committedMigration.commit();
+    expect(await store.load('old-vault', 'token', oldKey)).toBeNull();
+    expect(await store.load('old-vault', 'workflow', oldKey)).toBeNull();
+    expect((await store.load('next-vault', 'workflow', nextKey)).payload.content).toBe('WORKFLOW-DRAFT');
+  });
 });
