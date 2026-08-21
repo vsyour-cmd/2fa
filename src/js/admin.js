@@ -27,7 +27,6 @@ const actionLabels = {
   'admin.login': '管理员登录',
   'admin.logout': '管理员退出',
   'admin.user.update': '更新用户',
-  'admin.user.delete': '删除用户',
   'admin.vault.reset': '重置保险库',
   'admin.vault.restore': '恢复保险库',
   'vault.read': '读取保险库',
@@ -254,7 +253,6 @@ function openUserDialog(user) {
   $('#dialog-note').value = user.adminNote || '';
   $('#reset-confirmation').value = '';
   $('#restore-confirmation').value = '';
-  $('#delete-user-confirmation').value = '';
   showError('#user-form-error');
   renderDangerControls();
   const dialog = $('#user-dialog');
@@ -269,7 +267,6 @@ function renderDangerControls() {
   setHidden('#restore-controls', !canRestore);
   $('#reset-vault').disabled = !canReset || $('#reset-confirmation').value !== '重置保险库';
   $('#restore-vault').disabled = !canRestore || $('#restore-confirmation').value !== '恢复保险库';
-  $('#delete-user').disabled = !user || $('#delete-user-confirmation').value !== '删除用户';
   $('#archive-expiry').textContent = canRestore
     ? `重置前的旧密文保留至 ${formatDateTime(user.archivedUntil)}，恢复不会绕过原主密码。`
     : '';
@@ -340,32 +337,6 @@ async function restoreSelectedVault() {
     $('#restore-confirmation').value = '';
     renderDangerControls();
     showToast('旧保险库已恢复');
-    await loadUsers();
-    if (state.logsLoaded) await loadLogs();
-  } catch (error) {
-    if (error.status !== 401) showError('#user-form-error', error.message);
-  } finally {
-    setBusy(button, false);
-    renderDangerControls();
-  }
-}
-
-async function deleteSelectedUser() {
-  if (!state.selectedUser || $('#delete-user-confirmation').value !== '删除用户') return;
-  const button = $('#delete-user');
-  const keyHash = state.selectedUser.keyHash;
-  setBusy(button, true, '正在删除…');
-  showError('#user-form-error');
-  try {
-    await api(`/api/admin/users/${keyHash}`, {
-      method: 'DELETE', body: { confirmation: '删除用户' },
-    });
-    if (state.userOffset > 0 && state.users.length === 1) {
-      state.userOffset = Math.max(0, state.userOffset - state.userLimit);
-    }
-    state.selectedUser = null;
-    $('#user-dialog').close();
-    showToast('用户及云端数据已永久删除');
     await loadUsers();
     if (state.logsLoaded) await loadLogs();
   } catch (error) {
@@ -553,7 +524,5 @@ $('#user-dialog').addEventListener('pointercancel', () => { userDialogBackdropPo
 
 $('#reset-confirmation').addEventListener('input', renderDangerControls);
 $('#restore-confirmation').addEventListener('input', renderDangerControls);
-$('#delete-user-confirmation').addEventListener('input', renderDangerControls);
 $('#reset-vault').addEventListener('click', resetSelectedVault);
 $('#restore-vault').addEventListener('click', restoreSelectedVault);
-$('#delete-user').addEventListener('click', deleteSelectedUser);

@@ -559,24 +559,9 @@ app.patch('/api/admin/users/:key', (req, res) => {
   return res.json({ success: true, user: next });
 });
 
-app.delete('/api/admin/users/:key', (req, res) => {
-  const keyHash = String(req.params.key || '').toLowerCase();
-  if (!isValidKey(keyHash)) return res.status(400).json({ error: 'Invalid key' });
-  if (req.body?.confirmation !== '删除用户') return res.status(400).json({ error: '确认文字不正确' });
-  const profile = getUserOrLegacyProfile(keyHash);
-  if (!profile) return res.status(404).json({ error: '用户不存在' });
-  db.transaction(() => {
-    db.prepare('DELETE FROM data_store WHERE key = ?').run(keyHash);
-    db.prepare('DELETE FROM user_profiles WHERE key = ?').run(keyHash);
-    db.prepare('DELETE FROM vault_archives WHERE key = ?').run(keyHash);
-  })();
-  writeAudit(req, {
-    actor: req.admin.name, action: 'admin.user.delete', targetKey: keyHash,
-    targetLabel: profile.accountName || profile.displayName, result: 'success',
-    details: '永久删除用户、云端保险库及可恢复备份；审计日志保留',
-  });
-  return res.json({ success: true });
-});
+app.delete('/api/admin/users/:key', (req, res) => (
+  res.status(405).set('Allow', 'PATCH').json({ error: '管理后台不提供永久删除用户功能' })
+));
 
 app.post('/api/admin/users/:key/reset', (req, res) => {
   const keyHash = String(req.params.key || '').toLowerCase();

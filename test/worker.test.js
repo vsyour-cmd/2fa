@@ -331,24 +331,14 @@ describe('Cloudflare Worker API', () => {
     }), env);
     const { user: resetUser } = await resetForDelete.json();
     expect(resetForDelete.status).toBe(200);
-    expect((await fetchWorker(request(`/api/admin/users/${key}`, {
-      method: 'DELETE', headers: adminHeaders, body: JSON.stringify({ confirmation: '错误文字' }),
-    }), env)).status).toBe(400);
-
     const deleted = await fetchWorker(request(`/api/admin/users/${key}`, {
       method: 'DELETE', headers: adminHeaders, body: JSON.stringify({ confirmation: '删除用户' }),
     }), env);
-    expect(deleted.status).toBe(200);
-    expect(await deleted.json()).toEqual({ success: true });
+    expect(deleted.status).toBe(405);
+    expect(await deleted.json()).toEqual({ error: '管理后台不提供永久删除用户功能' });
     expect(await env.DATA_KV.get(key)).toBeNull();
-    expect(await env.DATA_KV.get(`$user$:${key}`)).toBeNull();
-    expect(await env.DATA_KV.get(resetUser.archiveKey)).toBeNull();
-    expect((await (await fetchWorker(request('/api/admin/users', { headers: adminHeaders }), env)).json()).summary.total).toBe(0);
-
-    const logs = await fetchWorker(request('/api/admin/logs?action=admin.user.delete', { headers: adminHeaders }), env);
-    expect(logs.status).toBe(200);
-    expect((await logs.json()).logs[0]).toMatchObject({
-      action: 'admin.user.delete', result: 'success', targetKey: key, ipAddress: '203.0.113.10',
-    });
+    expect(await env.DATA_KV.get(`$user$:${key}`)).not.toBeNull();
+    expect(await env.DATA_KV.get(resetUser.archiveKey)).not.toBeNull();
+    expect((await (await fetchWorker(request('/api/admin/users', { headers: adminHeaders }), env)).json()).summary.total).toBe(1);
   });
 });

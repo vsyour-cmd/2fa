@@ -130,26 +130,15 @@ describe('Express admin API', () => {
     const archiveKey = resetForDelete.body.user.archiveKey;
     expect(db.prepare('SELECT 1 FROM vault_archives WHERE id = ?').get(archiveKey)).toBeTruthy();
 
-    const rejectedDelete = await request(`/api/admin/users/${key}`, {
-      method: 'DELETE', headers, body: JSON.stringify({ confirmation: '错误文字' }),
-    });
-    expect(rejectedDelete.response.status).toBe(400);
-
     const deleted = await request(`/api/admin/users/${key}`, {
       method: 'DELETE', headers, body: JSON.stringify({ confirmation: '删除用户' }),
     });
-    expect(deleted.response.status).toBe(200);
-    expect(deleted.body).toEqual({ success: true });
+    expect(deleted.response.status).toBe(405);
+    expect(deleted.body).toEqual({ error: '管理后台不提供永久删除用户功能' });
     expect(db.prepare('SELECT 1 FROM data_store WHERE key = ?').get(key)).toBeUndefined();
-    expect(db.prepare('SELECT 1 FROM user_profiles WHERE key = ?').get(key)).toBeUndefined();
-    expect(db.prepare('SELECT 1 FROM vault_archives WHERE key = ?').get(key)).toBeUndefined();
-    expect((await request('/api/admin/users', { headers })).body.summary.total).toBe(0);
-
-    const logs = await request('/api/admin/logs?action=admin.user.delete', { headers });
-    expect(logs.response.status).toBe(200);
-    expect(logs.body.logs[0]).toMatchObject({
-      action: 'admin.user.delete', result: 'success', targetKey: key, ipAddress: '127.0.0.1',
-    });
+    expect(db.prepare('SELECT 1 FROM user_profiles WHERE key = ?').get(key)).toBeTruthy();
+    expect(db.prepare('SELECT 1 FROM vault_archives WHERE key = ?').get(key)).toBeTruthy();
+    expect((await request('/api/admin/users', { headers })).body.summary.total).toBe(1);
   });
 
   it('rejects missing or invalid admin sessions', async () => {

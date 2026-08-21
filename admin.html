@@ -95,7 +95,7 @@
           <div><h2>操作日志</h2><p id="logs-result-summary">日志保留 90 天并记录来源 IP，不记录密码和验证码内容。</p></div>
           <form id="log-filters" class="filter-bar" role="search">
             <label class="search-field"><span class="sr-only">搜索日志</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.2-3.2"></path></svg><input id="log-query" type="search" maxlength="100" placeholder="搜索用户、操作、IP 或来源标识"></label>
-            <div class="filter-select-control log-action-filter"><label class="sr-only" for="log-action">操作类型</label><select id="log-action" data-searchable-filter data-filter-label="操作类型" data-search-placeholder="筛选操作类型…" data-options-label="操作类型"><option value="">全部操作</option><option value="admin.login">管理员登录</option><option value="admin.logout">管理员退出</option><option value="admin.user.update">更新用户</option><option value="admin.user.delete">删除用户</option><option value="admin.vault.reset">重置保险库</option><option value="admin.vault.restore">恢复保险库</option><option value="vault.read">读取保险库</option><option value="vault.save">保存保险库</option><option value="vault.delete">删除旧保险库</option><option value="vault.access_blocked">阻止访问</option><option value="vault.save_blocked">阻止同步</option></select></div>
+          <div class="filter-select-control log-action-filter"><label class="sr-only" for="log-action">操作类型</label><select id="log-action" data-searchable-filter data-filter-label="操作类型" data-search-placeholder="筛选操作类型…" data-options-label="操作类型"><option value="">全部操作</option><option value="admin.login">管理员登录</option><option value="admin.logout">管理员退出</option><option value="admin.user.update">更新用户</option><option value="admin.vault.reset">重置保险库</option><option value="admin.vault.restore">恢复保险库</option><option value="vault.read">读取保险库</option><option value="vault.save">保存保险库</option><option value="vault.delete">删除旧保险库</option><option value="vault.access_blocked">阻止访问</option><option value="vault.save_blocked">阻止同步</option></select></div>
             <div class="filter-select-control"><label class="sr-only" for="log-result">操作结果</label><select id="log-result" data-searchable-filter data-filter-label="操作结果" data-search-placeholder="筛选操作结果…" data-options-label="结果选项"><option value="" data-description="显示所有执行结果">全部结果</option><option value="success" data-description="操作已经成功完成">成功</option><option value="failure" data-description="操作执行失败">失败</option><option value="blocked" data-description="操作被安全策略阻止">已阻止</option></select></div>
           </form>
         </div>
@@ -144,13 +144,6 @@
           <p id="archive-expiry" class="archive-note"></p>
           <label>输入“恢复保险库”确认<input id="restore-confirmation" type="text" autocomplete="off"></label>
           <button id="restore-vault" class="button button-warning" type="button" disabled>恢复旧保险库</button>
-        </div>
-      </div>
-      <div class="danger-section delete-user-section">
-        <div><h3>永久删除用户</h3><p>删除云端保险库、用户资料及可恢复备份，无法撤销；审计日志仍会保留。用户设备中的离线副本不会被远程清除，再次同步时可能重新创建用户。</p></div>
-        <div class="confirmation-row">
-          <label>输入“删除用户”确认<input id="delete-user-confirmation" type="text" autocomplete="off"></label>
-          <button id="delete-user" class="button button-danger" type="button" disabled>永久删除用户</button>
         </div>
       </div>
     </section>

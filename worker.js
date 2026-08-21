@@ -127,7 +127,7 @@ async function handleAdminRequest(request, url, env, accessUser) {
     return handleAdminUserUpdate(request, env, session, userRoute[1].toLowerCase());
   }
   if (userRoute && !userRoute[2] && request.method === 'DELETE') {
-    return handleAdminUserDelete(request, env, session, userRoute[1].toLowerCase());
+    return jsonResponse({ error: '管理后台不提供永久删除用户功能' }, 405, { Allow: 'PATCH' });
   }
   if (userRoute?.[2] === 'reset' && request.method === 'POST') {
     return handleAdminVaultReset(request, env, session, userRoute[1].toLowerCase());
@@ -496,28 +496,6 @@ async function handleAdminUserUpdate(request, env, session, keyHash) {
     targetLabel: next.accountName || next.displayName, result: 'success', details: `状态：${next.status}；管理信息已更新`,
   });
   return jsonResponse({ success: true, user: next }, 200);
-}
-
-async function handleAdminUserDelete(request, env, session, keyHash) {
-  const body = await readJsonWithLimit(request, 2048);
-  if (body?.confirmation !== '删除用户') return jsonResponse({ error: '确认文字不正确' }, 400);
-  const profile = await getUserOrLegacyProfile(env, keyHash);
-  if (!profile) return jsonResponse({ error: '用户不存在' }, 404);
-  const archiveKey = typeof profile.archiveKey === 'string' && profile.archiveKey.startsWith(`${ARCHIVE_PREFIX}${keyHash}:`)
-    ? profile.archiveKey
-    : '';
-  await Promise.all([
-    vaultCoordinator(env, keyHash).remove(),
-    env.DATA_KV.delete(keyHash),
-    env.DATA_KV.delete(`${USER_PREFIX}${keyHash}`),
-    ...(archiveKey ? [env.DATA_KV.delete(archiveKey)] : []),
-  ]);
-  await writeAudit(env, request, {
-    actor: adminAuditActor(session, session.adminName), action: 'admin.user.delete', targetKey: keyHash,
-    targetLabel: profile.accountName || profile.displayName, result: 'success',
-    details: '永久删除用户、云端保险库及可恢复备份；审计日志保留',
-  });
-  return jsonResponse({ success: true }, 200);
 }
 
 async function handleAdminVaultReset(request, env, session, keyHash) {
