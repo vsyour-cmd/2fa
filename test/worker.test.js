@@ -194,7 +194,7 @@ describe('Cloudflare Worker API', () => {
     expect(await wrongAudience.json()).toMatchObject({ code: 'ACCESS_DENIED' });
   });
 
-  it('binds a legacy vault to its first verified Access user and blocks other Access users', async () => {
+  it('keeps Access authorization separate from vault accounts and records multiple verified identities', async () => {
     const env = { DATA_KV: new FakeKv(), REQUIRE_ACCESS: 'true' };
     const key = 'e'.repeat(64);
     await env.DATA_KV.put(key, JSON.stringify({
@@ -211,6 +211,9 @@ describe('Cloudflare Worker API', () => {
     const profile = JSON.parse(await env.DATA_KV.get(`$user$:${key}`));
     expect(profile).toMatchObject({ accessEmail: 'owner@example.com', hasVault: true });
     expect(profile.accessOwnerId).toMatch(/^[a-f0-9]{64}$/);
+    expect(profile.accessIdentities).toEqual([
+      expect.objectContaining({ ownerId: profile.accessOwnerId, email: 'owner@example.com' }),
+    ]);
 
     const migratedSave = await fetchWorker(request('/api/data', {
       method: 'PUT',
@@ -226,17 +229,39 @@ describe('Cloudflare Worker API', () => {
     expect(migratedSave.status).toBe(200);
 
     const otherContext = accessContext('other@example.com', 'owner-2');
-    const blocked = await fetchWorker(request(`/api/data?key=${key}`), env, otherContext);
-    expect(blocked.status).toBe(403);
-    expect(await blocked.json()).toMatchObject({ code: 'ACCESS_OWNER_MISMATCH' });
+    const otherRead = await fetchWorker(request(`/api/data?key=${key}`), env, otherContext);
+    expect(otherRead.status).toBe(200);
+    const otherPayload = await otherRead.json();
+    const otherSave = await fetchWorker(request('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key,
+        data: 'other-access-user-encrypted-payload',
+        salt: 'base64-salt-value',
+        version: 3,
+        expectedUpdatedAt: otherPayload.updatedAt,
+      }),
+    }), env, otherContext);
+    expect(otherSave.status).toBe(200);
     expect((await fetchWorker(request(`/api/data?key=${key}`), env, ownerContext)).status).toBe(200);
+
+    const sharedProfile = JSON.parse(await env.DATA_KV.get(`$user$:${key}`));
+    expect(sharedProfile.accessIdentities.map((identity) => identity.email).sort()).toEqual([
+      'other@example.com',
+      'owner@example.com',
+    ]);
 
     const audits = [...env.DATA_KV.values.entries()]
       .filter(([auditKey]) => auditKey.startsWith('$audit$:'))
       .map(([, value]) => JSON.parse(value));
     expect(audits).toEqual(expect.arrayContaining([
       expect.objectContaining({ actor: 'owner@example.com', action: 'vault.read', result: 'success' }),
-      expect.objectContaining({ actor: 'other@example.com', action: 'vault.access_denied', result: 'blocked' }),
+      expect.objectContaining({ actor: 'other@example.com', action: 'vault.read', result: 'success' }),
+      expect.objectContaining({ actor: 'other@example.com', action: 'vault.save', result: 'success' }),
+    ]));
+    expect(audits).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'vault.access_denied' }),
     ]));
   });
 
@@ -385,6 +410,9 @@ describe('Cloudflare Worker API', () => {
     expect(users.summary).toMatchObject({ total: 1, active: 1, disabled: 0 });
     expect(users.users[0]).toMatchObject({ keyHash: key, accountName: '财务账户', hasVault: true });
     expect(users.users[0]).toMatchObject({ accessEmail: 'owner@example.com' });
+    expect(users.users[0].accessIdentities).toEqual([
+      expect.objectContaining({ email: 'owner@example.com' }),
+    ]);
 
     const otherAccessUser = await fetchWorker(request('/api/admin/users', { headers: adminHeaders }), env, accessContext('other@example.com', 'access-user-2'));
     expect(otherAccessUser.status).toBe(401);

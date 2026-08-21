@@ -55,9 +55,10 @@ describe('static application shell', () => {
     expect(html.match(/data-access-identity/g)).toHaveLength(2);
     expect(html.match(/data-access-email/g)).toHaveLength(2);
     expect(html).toContain('Cloudflare Access 已验证');
-    expect(html).toContain('保险库仍需主密码解密');
+    expect(html).toContain('保险库仍需账户名称和主密码解密');
     expect(app).toContain('apiGetAccessIdentity');
     expect(app).toContain('function renderAccessIdentity()');
+    expect(html).toContain('无需与 Cloudflare Access 邮箱一致');
     expect(app).toContain("$$('[data-access-identity]')");
     expect(styles).toContain('.access-identity-card { display: flex;');
     expect(styles).toContain('.access-identity-inline { display: flex;');

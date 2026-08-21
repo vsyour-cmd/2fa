@@ -161,6 +161,14 @@ function userPrimaryName(user) {
   return user.displayName || user.accountName || '待识别用户';
 }
 
+function userAccessEmails(user) {
+  const emails = Array.isArray(user.accessIdentities)
+    ? user.accessIdentities.map((identity) => String(identity?.email || '').trim()).filter(Boolean)
+    : [];
+  if (user.accessEmail) emails.push(String(user.accessEmail).trim());
+  return [...new Set(emails)];
+}
+
 function renderUsers(payload) {
   state.users = payload.users || [];
   state.userTotal = Number(payload.total || 0);
@@ -245,7 +253,10 @@ async function loadUsers({ resetOffset = false } = {}) {
 function openUserDialog(user) {
   state.selectedUser = { ...user };
   $('#dialog-account').textContent = user.accountName || '尚未识别（用户下次在线登录后自动补全）';
-  $('#dialog-access-email').textContent = user.accessEmail || '尚未绑定（首次成功访问旧保险库后自动绑定）';
+  const accessEmails = userAccessEmails(user);
+  $('#dialog-access-email').textContent = accessEmails.length
+    ? accessEmails.join('、')
+    : '尚无记录（Access 身份与保险库账户相互独立）';
   $('#dialog-key').textContent = shortKey(user.keyHash);
   $('#dialog-key').title = user.keyHash;
   $('#dialog-created').textContent = `创建：${formatDateTime(user.createdAt)}`;

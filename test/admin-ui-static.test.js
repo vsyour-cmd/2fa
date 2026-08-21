@@ -18,7 +18,10 @@ describe('admin console static shell', () => {
     expect(html).toContain('id="logs-panel"');
     expect(html).toContain('id="user-dialog"');
     expect(html).toContain('id="dialog-access-email"');
-    expect(script).toContain("user.accessEmail || '尚未绑定");
+    expect(html).toContain('最近访问的 Cloudflare Access 身份');
+    expect(script).toContain('function userAccessEmails(user)');
+    expect(script).toContain("accessEmails.join('、')");
+    expect(script).toContain('Access 身份与保险库账户相互独立');
     expect(html).toContain('输入“重置保险库”确认');
     expect(html).toContain('输入“恢复保险库”确认');
     expect(html).toContain('id="vault-history-list"');

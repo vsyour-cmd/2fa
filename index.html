@@ -43,7 +43,7 @@
             <div>
               <span>Cloudflare Access 已验证</span>
               <strong data-access-email></strong>
-              <small>网站身份已验证；保险库仍需主密码解密。</small>
+              <small>仅验证网站访问权限，不与保险库账户强制绑定；保险库仍需账户名称和主密码解密。</small>
             </div>
           </div>
           <div class="segmented" role="tablist" aria-label="账户操作">
@@ -55,7 +55,7 @@
             <div class="form-group">
               <label for="login-account">账户名称</label>
               <input id="login-account" type="text" list="known-accounts" autocomplete="username" aria-describedby="login-account-hint" placeholder="默认账户">
-              <p id="login-account-hint" class="field-hint">用来定位对应的加密保险库；旧版用户保持“默认账户”即可兼容登录。</p>
+              <p id="login-account-hint" class="field-hint">用来定位对应的加密保险库，无需与 Cloudflare Access 邮箱一致；旧版用户保持“默认账户”即可兼容登录。</p>
             </div>
             <div class="form-group">
               <label for="login-password">主密码</label>

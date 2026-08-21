@@ -14,6 +14,7 @@ const MAX_BODY_BYTES = 256 * 1024;
 const ADMIN_SESSION_SECONDS = 30 * 60;
 const AUDIT_RETENTION_SECONDS = 90 * 24 * 60 * 60;
 const ARCHIVE_RETENTION_SECONDS = 30 * 24 * 60 * 60;
+const MAX_ACCESS_IDENTITIES = 20;
 const encoder = new TextEncoder();
 const accessJwksByUrl = new Map();
 
@@ -306,14 +307,60 @@ async function requireAccessIdentity(request, env, ctx) {
   return { email, ownerId: await sha256Hex(`cloudflare-access:${subject}`) };
 }
 
-function profileBelongsToAnotherAccessUser(profile, accessUser) {
-  if (!accessUser.ownerId) return false;
-  return isValidKey(profile?.accessOwnerId) && profile.accessOwnerId.toLowerCase() !== accessUser.ownerId;
+function profileAccessIdentities(profile = {}) {
+  profile = profile && typeof profile === 'object' ? profile : {};
+  const timestamp = (value) => {
+    const parsed = Number(value || 0);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
+  };
+  const byOwner = new Map();
+  const entries = Array.isArray(profile.accessIdentities) ? profile.accessIdentities : [];
+  const legacyOwnerId = isValidKey(profile.accessOwnerId) ? profile.accessOwnerId.toLowerCase() : '';
+  const legacyEmail = cleanSingleLine(profile.accessEmail, 254).toLocaleLowerCase('en-US');
+  const legacySeenAt = timestamp(profile.lastSeenAt || profile.createdAt);
+  const candidates = legacyOwnerId
+    ? [...entries, { ownerId: legacyOwnerId, email: legacyEmail, firstSeenAt: legacySeenAt, lastSeenAt: legacySeenAt }]
+    : entries;
+  for (const entry of candidates) {
+    const ownerId = isValidKey(entry?.ownerId) ? entry.ownerId.toLowerCase() : '';
+    if (!ownerId) continue;
+    const email = cleanSingleLine(entry?.email, 254).toLocaleLowerCase('en-US');
+    const firstSeenAt = timestamp(entry?.firstSeenAt);
+    const lastSeenAt = Math.max(firstSeenAt, timestamp(entry?.lastSeenAt));
+    const current = byOwner.get(ownerId);
+    if (!current) {
+      byOwner.set(ownerId, { ownerId, email, firstSeenAt, lastSeenAt });
+      continue;
+    }
+    current.email = email || current.email;
+    current.firstSeenAt = current.firstSeenAt && firstSeenAt
+      ? Math.min(current.firstSeenAt, firstSeenAt)
+      : Math.max(current.firstSeenAt, firstSeenAt);
+    current.lastSeenAt = Math.max(current.lastSeenAt, lastSeenAt);
+  }
+  return [...byOwner.values()]
+    .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
+    .slice(0, MAX_ACCESS_IDENTITIES);
 }
 
-function accessProfileFields(accessUser) {
+function accessProfileFields(accessUser, profile = {}) {
   if (!accessUser.ownerId) return {};
-  return { accessOwnerId: accessUser.ownerId, accessEmail: accessUser.email };
+  const now = Date.now();
+  const identities = profileAccessIdentities(profile);
+  const existing = identities.find((identity) => identity.ownerId === accessUser.ownerId);
+  if (existing) {
+    existing.email = accessUser.email || existing.email;
+    existing.firstSeenAt ||= now;
+    existing.lastSeenAt = now;
+  } else {
+    identities.push({ ownerId: accessUser.ownerId, email: accessUser.email, firstSeenAt: now, lastSeenAt: now });
+  }
+  identities.sort((left, right) => right.lastSeenAt - left.lastSeenAt);
+  return {
+    accessOwnerId: accessUser.ownerId,
+    accessEmail: accessUser.email,
+    accessIdentities: identities.slice(0, MAX_ACCESS_IDENTITIES),
+  };
 }
 
 function adminAuditActor(accessUser, adminName) {
@@ -322,26 +369,11 @@ function adminAuditActor(accessUser, adminName) {
   return email ? `${label} · ${email}` : label;
 }
 
-async function accessOwnerDenied(env, request, profile, accessUser, action, keyHash) {
-  await writeAudit(env, request, {
-    actor: accessUser.email,
-    action,
-    targetKey: keyHash,
-    targetLabel: profile?.accountName || profile?.displayName || '',
-    result: 'blocked',
-    details: '当前 Cloudflare Access 用户与保险库绑定身份不一致',
-  });
-  return jsonResponse({ error: '此保险库属于另一个 Cloudflare Access 用户', code: 'ACCESS_OWNER_MISMATCH' }, 403);
-}
-
 async function handleGet(request, url, env, accessUser) {
   const key = url.searchParams.get('key');
   if (!isValidKey(key)) return jsonResponse({ error: 'Invalid key' }, 400);
   const normalizedKey = key.toLowerCase();
   const profile = await getUserProfile(env, normalizedKey);
-  if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
-    return accessOwnerDenied(env, request, profile, accessUser, 'vault.access_denied', normalizedKey);
-  }
   if (profile?.status === 'disabled') {
     await writeAudit(env, request, {
       actor: accessUser.email, action: 'vault.access_blocked', targetKey: normalizedKey,
@@ -356,7 +388,7 @@ async function handleGet(request, url, env, accessUser) {
   const accountName = accountNameFromRequest(request, url);
   const nextProfile = await upsertUserProfile(env, normalizedKey, {
     accountName: accountName || profile?.accountName || '', lastSeenAt: Date.now(), updatedAt, hasVault: true,
-    ...accessProfileFields(accessUser),
+    ...accessProfileFields(accessUser, profile),
   });
   await writeAudit(env, request, {
     actor: accessUser.email, action: 'vault.read', targetKey: normalizedKey,
@@ -382,9 +414,6 @@ async function handlePut(request, env, accessUser) {
     return jsonResponse({ error: '请刷新页面后再保存', code: 'VERSION_REQUIRED' }, 428);
   }
   const profile = await getUserProfile(env, normalizedKey);
-  if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
-    return accessOwnerDenied(env, request, profile, accessUser, 'vault.save_denied', normalizedKey);
-  }
   if (profile?.status === 'disabled') {
     await writeAudit(env, request, {
       actor: accessUser.email, action: 'vault.save_blocked', targetKey: normalizedKey,
@@ -423,7 +452,7 @@ async function handlePut(request, env, accessUser) {
     updatedAt,
     hasVault: true,
     status: profile?.status === 'reset_required' ? 'active' : (profile?.status || 'active'),
-    ...accessProfileFields(accessUser),
+    ...accessProfileFields(accessUser, profile),
   });
   await writeAudit(env, request, {
     actor: accessUser.email, action: 'vault.save', targetKey: normalizedKey,
@@ -466,9 +495,6 @@ async function handleDelete(request, url, env, accessUser) {
     return jsonResponse({ error: '删除前必须确认云端版本', code: 'VERSION_REQUIRED' }, 428);
   }
   const profile = await getUserProfile(env, normalizedKey);
-  if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
-    return accessOwnerDenied(env, request, profile, accessUser, 'vault.delete_denied', normalizedKey);
-  }
   const coordinated = await vaultCoordinator(env, normalizedKey).remove(
     expectedUpdatedAt,
     await legacyVaultRecord(env, normalizedKey),
@@ -513,7 +539,14 @@ async function handleAdminUsers(url, env) {
   const filtered = allUsers.filter((profile) => {
     if (status && profile.status !== status) return false;
     if (!query) return true;
-    return [profile.accountName, profile.displayName, profile.accessEmail, profile.adminNote, profile.keyHash]
+    return [
+      profile.accountName,
+      profile.displayName,
+      profile.accessEmail,
+      ...profileAccessIdentities(profile).map((identity) => identity.email),
+      profile.adminNote,
+      profile.keyHash,
+    ]
       .some((value) => String(value || '').toLocaleLowerCase().includes(query));
   });
   const summary = {
@@ -680,7 +713,7 @@ function defaultProfile(keyHash, overrides = {}) {
   const now = Date.now();
   return {
     keyHash,
-    accountName: '', displayName: '', status: 'active', adminNote: '', accessOwnerId: '', accessEmail: '',
+    accountName: '', displayName: '', status: 'active', adminNote: '', accessOwnerId: '', accessEmail: '', accessIdentities: [],
     createdAt: Number(overrides.createdAt || now), updatedAt: Number(overrides.updatedAt || 0),
     lastSeenAt: Number(overrides.lastSeenAt || 0), hasVault: overrides.hasVault !== false,
     resetAt: Number(overrides.resetAt || 0), archiveKey: String(overrides.archiveKey || ''),
@@ -719,6 +752,7 @@ async function putUserProfile(env, profile) {
     adminNote: cleanNote(profile.adminNote),
     accessOwnerId: isValidKey(profile.accessOwnerId) ? profile.accessOwnerId.toLowerCase() : '',
     accessEmail: cleanSingleLine(profile.accessEmail, 254).toLocaleLowerCase('en-US'),
+    accessIdentities: profileAccessIdentities(profile),
   });
   await env.DATA_KV.put(`${USER_PREFIX}${normalized.keyHash}`, JSON.stringify(normalized));
   return normalized;
