@@ -77,6 +77,10 @@ describe('static application shell', () => {
     }
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('role="dialog"');
+    expect(styles).toContain('.modal-wide { width: min(96vw, 860px); }');
+    expect(styles).toContain('@media (min-width: 721px) and (pointer: fine)');
+    expect(styles).toContain('resize: both;');
+    expect(styles).toContain('resize: none;');
   });
 
   it('offers accessible item-level choices for multi-device conflicts', () => {
