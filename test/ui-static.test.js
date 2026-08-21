@@ -630,8 +630,8 @@ describe('static application shell', () => {
     expect(html).toContain('id="rename-group-modal"');
   });
 
-  it('autosaves encrypted drafts for new tokens and usage scenarios', () => {
-    for (const id of ['add-draft-status', 'add-draft-status-text', 'add-draft-clear', 'workflow-draft-status', 'workflow-draft-status-text', 'workflow-draft-clear']) {
+  it('autosaves encrypted drafts for new tokens and multiple new or edited usage scenarios', () => {
+    for (const id of ['add-draft-status', 'add-draft-status-text', 'add-draft-clear', 'workflow-draft-status', 'workflow-draft-status-text', 'workflow-draft-clear', 'workflow-drafts-open', 'workflow-drafts-count', 'workflow-drafts-modal', 'workflow-drafts-list']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html.match(/class="draft-status hidden" role="status" aria-live="polite"/g)).toHaveLength(2);
@@ -640,9 +640,11 @@ describe('static application shell', () => {
     expect(app).toContain("scheduleFormDraft('workflow')");
     expect(app).toContain("await encryptedDrafts.load(state.keyHash, 'token', state.masterKey)");
     expect(app).toContain("await encryptedDrafts.load(state.keyHash, 'workflow', state.masterKey)");
-    expect(app).toContain("if (!previous) clearFormDraft('workflow')");
+    expect(app).toContain('parseWorkflowDraftCollection(restored?.payload)');
+    expect(app).toContain('state.workflowDrafts = removeWorkflowDraft(state.workflowDrafts, completedDraftId)');
     expect(app).toContain("clearFormDraft('token')");
-    expect(app).toContain("if (type === 'workflow' && $('#workflow-id').value) return");
+    expect(app).toContain("workflowId: $('#workflow-id').value");
+    expect(app).toContain("if (type === 'workflow' && !state.activeWorkflowDraftId) return");
     expect(app).toContain("encryptedDrafts.prepareMigration(oldHash, nextHash, state.masterKey, nextKey)");
     expect(app).toContain("$('#add-modal').addEventListener('modal:close', () => { flushFormDraft('token'); })");
     expect(app).toContain("window.addEventListener('pagehide', () => { flushPendingFormDrafts(); })");

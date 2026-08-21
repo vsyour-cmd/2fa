@@ -243,6 +243,7 @@
               <label for="workflow-columns"><span>每行显示</span><select id="workflow-columns" title="小屏幕会自动减少列数"><option value="auto">自动</option><option value="1">1 个</option><option value="2">2 个</option><option value="3">3 个</option><option value="4">4 个</option></select></label>
               <div class="workflow-heading-buttons">
                 <button id="workflow-trash-open" class="btn btn-secondary trash-open" type="button">回收站 <span id="workflow-trash-count" class="badge trash-count">0</span></button>
+                <button id="workflow-drafts-open" class="btn btn-secondary" type="button" aria-label="打开场景草稿箱，当前 0 条草稿">草稿箱 <span id="workflow-drafts-count" class="badge">0</span></button>
                 <button id="workflow-add-open" class="btn btn-primary" type="button">新建场景</button>
               </div>
             </div>
@@ -486,6 +487,16 @@
           <div id="workflow-protection-error" class="error hidden" role="alert"></div>
           <div class="modal-actions"><button id="workflow-protection-disable" class="btn btn-danger hidden" type="button">关闭保护</button><button class="btn btn-secondary" type="button" data-close-modal="workflow-protection-modal">取消</button><button id="workflow-protection-submit" class="btn btn-primary" type="submit">验证并编辑</button></div>
         </form>
+      </div>
+    </div>
+
+    <div id="workflow-drafts-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-drafts-title" aria-describedby="workflow-drafts-description">
+      <div class="modal modal-wide">
+        <div class="modal-header"><div><p class="eyebrow">本机加密保存</p><h2 id="workflow-drafts-title">场景草稿箱</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-drafts-modal" aria-label="关闭">×</button></div>
+        <p id="workflow-drafts-description" class="dialog-message">新建和编辑中的内容会分别保存；继续草稿仍需验证场景编辑密码。</p>
+        <div id="workflow-drafts-list" class="workflow-draft-list" role="list"></div>
+        <div id="workflow-drafts-empty" class="empty-state compact hidden"><div aria-hidden="true">✎</div><h3>暂无未提交草稿</h3><p>开始新建或编辑场景后，输入内容会自动加密保存到当前浏览器。</p></div>
+        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="workflow-drafts-modal">关闭</button><button id="workflow-drafts-new" class="btn btn-primary" type="button">新建场景</button></div>
       </div>
     </div>
 

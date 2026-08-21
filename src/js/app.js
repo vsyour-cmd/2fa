@@ -33,6 +33,12 @@ import { encodeWorkflowSecretMarker } from './workflow-secrets.js';
 import { createConflictPlan, mergeConflictPlan } from './conflict.js';
 import { EncryptedDraftStore } from './drafts.js';
 import {
+  parseWorkflowDraftCollection,
+  removeWorkflowDraft,
+  serializeWorkflowDraftCollection,
+  upsertWorkflowDraft,
+} from './workflow-drafts.js';
+import {
   ApiError,
   OfflineManager,
   apiDelete,
@@ -162,6 +168,10 @@ const state = {
   workflowGroupFilter: '__all',
   editingWorkflowLinks: [],
   workflowAddKeyReturn: false,
+  workflowDrafts: [],
+  workflowDraftsLoaded: false,
+  activeWorkflowDraftId: '',
+  pendingWorkflowDraftId: '',
   editingTokenWorkflowKeyId: '',
   editingTokenWorkflowNoteIds: new Set(),
   accessIdentity: null,
@@ -195,6 +205,7 @@ function useVaultData(raw) {
   state.workflowProtection = normalized.workflowProtection;
   state.workflowEditUnlockedUntil = 0;
   state.pendingWorkflowEditorId = null;
+  state.pendingWorkflowDraftId = '';
 }
 
 const TOKEN_DRAFT_FIELD_IDS = [
@@ -236,8 +247,10 @@ function readTokenDraftPayload() {
 }
 
 function readWorkflowDraftPayload() {
+  const existing = state.workflowDrafts.find((draft) => draft.id === state.activeWorkflowDraftId);
   return {
-    version: 1,
+    id: state.activeWorkflowDraftId || generateId(),
+    workflowId: $('#workflow-id').value,
     title: $('#workflow-title').value,
     group: $('#workflow-group').value,
     content: $('#workflow-content').value,
@@ -247,11 +260,54 @@ function readWorkflowDraftPayload() {
       issuer: String(link.issuer || ''),
       account: String(link.account || ''),
     })),
+    createdAt: existing?.createdAt || Date.now(),
+    updatedAt: Date.now(),
   };
 }
 
+function updateWorkflowDraftCount() {
+  const count = state.workflowDrafts.length;
+  const badge = $('#workflow-drafts-count');
+  if (badge) badge.textContent = String(count);
+  const button = $('#workflow-drafts-open');
+  if (button) button.setAttribute('aria-label', `打开场景草稿箱，当前 ${count} 条草稿`);
+}
+
+async function ensureWorkflowDraftsLoaded() {
+  if (state.workflowDraftsLoaded || !state.masterKey || !state.keyHash) return state.workflowDrafts;
+  const restored = await encryptedDrafts.load(state.keyHash, 'workflow', state.masterKey);
+  state.workflowDrafts = parseWorkflowDraftCollection(restored?.payload);
+  state.workflowDraftsLoaded = true;
+  updateWorkflowDraftCount();
+  return state.workflowDrafts;
+}
+
+async function saveWorkflowDraftCollection({ announce = false } = {}) {
+  if (!state.masterKey || !state.keyHash) return null;
+  cancelDraftSave('workflow');
+  const revision = ++draftRevisions.workflow;
+  const keyHash = state.keyHash;
+  const masterKey = state.masterKey;
+  const payload = serializeWorkflowDraftCollection(state.workflowDrafts);
+  const record = await encryptedDrafts.save(keyHash, 'workflow', payload, masterKey, () => (
+    revision === draftRevisions.workflow
+    && state.keyHash === keyHash
+    && state.masterKey === masterKey
+  ));
+  updateWorkflowDraftCount();
+  if (announce && record) setDraftStatus('workflow', `草稿已加密保存 · ${formatDateTime(record.updatedAt)}`);
+  return record;
+}
+
 async function persistFormDraft(type, revision, keyHash, masterKey) {
-  const payload = type === 'token' ? readTokenDraftPayload() : readWorkflowDraftPayload();
+  if (type === 'workflow' && !state.activeWorkflowDraftId) return null;
+  let payload;
+  if (type === 'workflow') {
+    const draft = readWorkflowDraftPayload();
+    state.workflowDrafts = upsertWorkflowDraft(state.workflowDrafts, draft);
+    payload = serializeWorkflowDraftCollection(state.workflowDrafts);
+    updateWorkflowDraftCount();
+  } else payload = readTokenDraftPayload();
   try {
     const record = await encryptedDrafts.save(keyHash, type, payload, masterKey, () => (
       revision === draftRevisions[type]
@@ -269,7 +325,7 @@ async function persistFormDraft(type, revision, keyHash, masterKey) {
 
 function scheduleFormDraft(type) {
   if (!state.masterKey || !state.keyHash) return;
-  if (type === 'workflow' && $('#workflow-id').value) return;
+  if (type === 'workflow' && !state.activeWorkflowDraftId) return;
   clearTimeout(draftTimers[type]);
   const revision = ++draftRevisions[type];
   const keyHash = state.keyHash;
@@ -305,25 +361,17 @@ async function restoreTokenDraft() {
   return true;
 }
 
-async function restoreWorkflowDraft() {
+async function restoreWorkflowDraft(draftId) {
   setDraftStatus('workflow');
-  if (!state.masterKey || !state.keyHash) return false;
-  const restored = await encryptedDrafts.load(state.keyHash, 'workflow', state.masterKey);
-  const payload = restored?.payload;
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
-  $('#workflow-title').value = typeof payload.title === 'string' ? payload.title.slice(0, 100) : '';
-  $('#workflow-group').value = typeof payload.group === 'string' ? payload.group.slice(0, 100) : '';
-  $('#workflow-content').value = typeof payload.content === 'string' ? payload.content.slice(0, 5000) : '';
-  state.editingWorkflowLinks = Array.isArray(payload.linkedKeys)
-    ? payload.linkedKeys.slice(0, 50).map((link) => ({
-      keyId: String(link?.keyId || '').slice(0, 200),
-      name: String(link?.name || '').slice(0, 200),
-      issuer: String(link?.issuer || '').slice(0, 200),
-      account: String(link?.account || '').slice(0, 320),
-    })).filter((link) => link.keyId)
-    : [];
-  setDraftStatus('workflow', `已恢复未提交的使用场景草稿 · ${formatDateTime(restored.updatedAt)}`);
-  return true;
+  await ensureWorkflowDraftsLoaded();
+  const draft = state.workflowDrafts.find((item) => item.id === draftId);
+  if (!draft) return null;
+  $('#workflow-title').value = draft.title;
+  $('#workflow-group').value = draft.group;
+  $('#workflow-content').value = draft.content;
+  state.editingWorkflowLinks = draft.linkedKeys.map((link) => ({ ...link }));
+  setDraftStatus('workflow', `已恢复未提交的使用场景草稿 · ${formatDateTime(draft.updatedAt)}`);
+  return draft;
 }
 
 async function openNewKeyModal() {
@@ -338,12 +386,21 @@ function clearTokenDraftAndForm() {
   $('#add-name').focus();
 }
 
-function clearWorkflowDraftAndForm() {
-  clearFormDraft('workflow');
+async function clearWorkflowDraftAndForm() {
+  const draftId = state.activeWorkflowDraftId;
+  const workflowId = $('#workflow-id').value;
+  cancelDraftSave('workflow');
+  state.workflowDrafts = removeWorkflowDraft(state.workflowDrafts, draftId);
+  state.activeWorkflowDraftId = generateId();
+  await saveWorkflowDraftCollection();
+  const note = state.workflowNotes.find((item) => item.id === workflowId);
   $('#workflow-form').reset();
-  $('#workflow-id').value = '';
-  $('#workflow-group').value = selectedWorkflowGroupForNewNote();
-  state.editingWorkflowLinks = [];
+  $('#workflow-id').value = note?.id || '';
+  $('#workflow-title').value = note?.title || '';
+  $('#workflow-group').value = note ? note.group : selectedWorkflowGroupForNewNote();
+  $('#workflow-content').value = note?.content || '';
+  state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
+  setDraftStatus('workflow', note ? '草稿已清除，已恢复云端保存的内容' : '草稿已清除');
   renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
   $('#workflow-title').focus();
@@ -366,6 +423,7 @@ function clearSensitiveState() {
   state.workflowProtection = null;
   state.workflowEditUnlockedUntil = 0;
   state.pendingWorkflowEditorId = null;
+  state.pendingWorkflowDraftId = '';
   state.keyIterations = PBKDF2_ITERATIONS.CURRENT;
   state.search = '';
   state.groupFilter = '__all';
@@ -379,6 +437,9 @@ function clearSensitiveState() {
   state.workflowGroupFilter = '__all';
   state.editingWorkflowLinks = [];
   state.workflowAddKeyReturn = false;
+  state.workflowDrafts = [];
+  state.workflowDraftsLoaded = false;
+  state.activeWorkflowDraftId = '';
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
   passwordGeneratorReady = false;
@@ -1330,6 +1391,55 @@ function renderWorkflowGroupFilters() {
   $('#workflow-group-options').innerHTML = groups.map((group) => `<option value="${escapeHtml(group)}"></option>`).join('');
 }
 
+function renderWorkflowDraftInbox() {
+  updateWorkflowDraftCount();
+  const list = $('#workflow-drafts-list');
+  const empty = $('#workflow-drafts-empty');
+  if (!list || !empty) return;
+  setHidden(empty, state.workflowDrafts.length !== 0);
+  setHidden(list, state.workflowDrafts.length === 0);
+  list.innerHTML = state.workflowDrafts.map((draft) => {
+    const source = draft.workflowId ? state.workflowNotes.find((note) => note.id === draft.workflowId) : null;
+    const kind = source ? '编辑草稿' : draft.workflowId ? '恢复草稿' : '新建草稿';
+    const title = draft.title || source?.title || '未命名场景';
+    const meta = [draft.group || '未分组', `${draft.content.length} 个字符`, `${draft.linkedKeys.length} 个验证码`].join(' · ');
+    return `
+      <article class="workflow-draft-card" role="listitem" data-workflow-draft-id="${escapeHtml(draft.id)}">
+        <div class="workflow-draft-main">
+          <div class="workflow-draft-title-line"><strong title="${escapeHtml(title)}">${escapeHtml(title)}</strong><span class="workflow-draft-kind">${kind}</span></div>
+          <p>${escapeHtml(meta)} · 保存于 ${escapeHtml(formatDateTime(draft.updatedAt))}</p>
+        </div>
+        <div class="workflow-draft-actions"><button class="small-btn" type="button" data-workflow-draft-action="resume">继续编辑</button><button class="small-btn delete" type="button" data-workflow-draft-action="delete">删除草稿</button></div>
+      </article>`;
+  }).join('');
+}
+
+async function openWorkflowDraftInbox() {
+  await ensureWorkflowDraftsLoaded();
+  renderWorkflowDraftInbox();
+  openModal('workflow-drafts-modal', state.workflowDrafts.length ? '[data-workflow-draft-action="resume"]' : '#workflow-drafts-new');
+}
+
+async function deleteWorkflowDraftFromInbox(draftId) {
+  const draft = state.workflowDrafts.find((item) => item.id === draftId);
+  if (!draft) return;
+  closeModal('workflow-drafts-modal', false);
+  const confirmed = await askConfirm({
+    title: '删除场景草稿',
+    message: `确定删除“${draft.title || '未命名场景'}”草稿？草稿删除后无法恢复，已提交的场景不会受影响。`,
+    confirmText: '删除草稿',
+  });
+  if (!confirmed) {
+    await openWorkflowDraftInbox();
+    return;
+  }
+  state.workflowDrafts = removeWorkflowDraft(state.workflowDrafts, draftId);
+  await saveWorkflowDraftCollection();
+  renderWorkflowDraftInbox();
+  showToast('场景草稿已删除');
+  await openWorkflowDraftInbox();
+}
+
 function focusActiveGroupChip(container) {
   $('.group-filter-chip.active', container)?.focus({ preventScroll: true });
 }
@@ -1353,6 +1463,7 @@ function setVaultView(view, focus = false) {
     document.body.classList.remove('bulk-mode');
   }
   if (state.vaultView === 'password' && !passwordGeneratorReady) void preparePasswordGeneratorView();
+  if (state.vaultView === 'workflow' && state.masterKey) void ensureWorkflowDraftsLoaded().then(renderWorkflowDraftInbox);
   if (focus) document.getElementById(`${state.vaultView === 'password' ? 'password-generator' : state.vaultView}-view`)?.focus({ preventScroll: true });
 }
 
@@ -1596,10 +1707,11 @@ function workflowEditAccessActive() {
   return Boolean(state.workflowProtection && state.workflowEditUnlockedUntil > Date.now());
 }
 
-function openWorkflowProtectionModal(mode, pendingEditorId = null) {
+function openWorkflowProtectionModal(mode, pendingEditorId = null, pendingDraftId = '') {
   const configured = Boolean(state.workflowProtection);
   const effectiveMode = mode === 'manage' && !configured ? 'setup' : mode;
   state.pendingWorkflowEditorId = pendingEditorId;
+  state.pendingWorkflowDraftId = pendingDraftId;
   const modal = $('#workflow-protection-modal');
   modal.dataset.mode = effectiveMode;
   $('#workflow-protection-form').reset();
@@ -1633,20 +1745,25 @@ function openWorkflowProtectionModal(mode, pendingEditorId = null) {
   else requestAnimationFrame(() => $(focusSelector, modal)?.focus());
 }
 
-async function openWorkflowEditor(id = '') {
+async function openWorkflowEditor(id = '', draftId = '') {
   if (workflowEditAccessActive()) {
-    await showWorkflowEditor(id);
+    await showWorkflowEditor(id, draftId);
     return;
   }
-  openWorkflowProtectionModal(state.workflowProtection ? 'unlock' : 'setup', id);
+  openWorkflowProtectionModal(state.workflowProtection ? 'unlock' : 'setup', id, draftId);
 }
 
 function selectedWorkflowGroupForNewNote() {
   return ['__all', '__ungrouped'].includes(state.workflowGroupFilter) ? '' : state.workflowGroupFilter;
 }
 
-async function showWorkflowEditor(id = '') {
-  const note = state.workflowNotes.find((item) => item.id === id);
+async function showWorkflowEditor(id = '', requestedDraftId = '') {
+  await ensureWorkflowDraftsLoaded();
+  const draft = requestedDraftId
+    ? state.workflowDrafts.find((item) => item.id === requestedDraftId)
+    : (id ? state.workflowDrafts.find((item) => item.workflowId === id) : null);
+  const workflowId = draft?.workflowId || id;
+  const note = state.workflowNotes.find((item) => item.id === workflowId);
   $('#workflow-form').reset();
   closeWorkflowKeyDropdown();
   hideError('#workflow-error');
@@ -1654,13 +1771,19 @@ async function showWorkflowEditor(id = '') {
   $('#workflow-title').value = note?.title || '';
   $('#workflow-group').value = note ? (note.group || '') : selectedWorkflowGroupForNewNote();
   $('#workflow-content').value = note?.content || '';
-  $('#workflow-edit-title').textContent = note ? '编辑使用场景' : '新建使用场景';
+  $('#workflow-edit-title').textContent = note ? '编辑使用场景' : draft ? '继续场景草稿' : '新建使用场景';
   state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
-  if (note) setDraftStatus('workflow');
-  else await restoreWorkflowDraft();
+  state.activeWorkflowDraftId = draft?.id || generateId();
+  if (draft) await restoreWorkflowDraft(draft.id);
+  else setDraftStatus('workflow');
   renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
   openModal('workflow-edit-modal', '#workflow-title');
+}
+
+async function openWorkflowDraftEditor(draftId) {
+  closeModal('workflow-drafts-modal', false);
+  await openWorkflowEditor('', draftId);
 }
 
 async function openAddKeyFromWorkflow() {
@@ -1737,8 +1860,10 @@ async function saveWorkflowProtectionFromForm(event) {
     }
     state.workflowEditUnlockedUntil = Date.now() + WORKFLOW_EDIT_UNLOCK_MS;
     const pendingEditorId = state.pendingWorkflowEditorId;
+    const pendingDraftId = state.pendingWorkflowDraftId;
     closeModal('workflow-protection-modal', false);
-    if (pendingEditorId !== null) await showWorkflowEditor(pendingEditorId);
+    if (pendingDraftId) await showWorkflowEditor('', pendingDraftId);
+    else if (pendingEditorId !== null) await showWorkflowEditor(pendingEditorId);
     else showToast(mode === 'manage' || mode === 'recover' ? '场景编辑密码已更新' : '场景编辑密码已设置');
   } catch (error) {
     showError('#workflow-protection-error', error.message || '场景编辑密码处理失败');
@@ -1799,7 +1924,15 @@ async function saveWorkflowNote(event) {
     if (index >= 0) state.workflowNotes[index] = pendingNote;
     else state.workflowNotes.push(pendingNote);
     const cloudSaved = await saveVault({ silent: true, cloudRetries: 2 });
-    if (!previous) clearFormDraft('workflow');
+    const completedDraftId = state.activeWorkflowDraftId;
+    cancelDraftSave('workflow');
+    state.activeWorkflowDraftId = '';
+    state.workflowDrafts = removeWorkflowDraft(state.workflowDrafts, completedDraftId);
+    try {
+      await saveWorkflowDraftCollection();
+    } catch (draftError) {
+      console.warn('Unable to remove completed workflow draft', draftError);
+    }
     closeModal('workflow-edit-modal');
     state.editingWorkflowLinks = [];
     renderAll();
@@ -3578,6 +3711,18 @@ function setupEvents() {
   $('[data-action="open-add"]').addEventListener('click', () => { void openNewKeyModal(); });
   $('#workflow-add-open').addEventListener('click', () => { void openWorkflowEditor(); });
   $('[data-action="open-workflow-add"]').addEventListener('click', () => { void openWorkflowEditor(); });
+  $('#workflow-drafts-open').addEventListener('click', () => { void openWorkflowDraftInbox(); });
+  $('#workflow-drafts-new').addEventListener('click', () => {
+    closeModal('workflow-drafts-modal', false);
+    void openWorkflowEditor();
+  });
+  $('#workflow-drafts-list').addEventListener('click', (event) => {
+    const card = event.target.closest('[data-workflow-draft-id]');
+    const action = event.target.closest('[data-workflow-draft-action]')?.dataset.workflowDraftAction;
+    if (!card || !action) return;
+    if (action === 'resume') void openWorkflowDraftEditor(card.dataset.workflowDraftId);
+    else if (action === 'delete') void deleteWorkflowDraftFromInbox(card.dataset.workflowDraftId);
+  });
   $('#workflow-sort').addEventListener('change', (event) => applyWorkflowSortMode(event.target.value, true));
   $('#workflow-columns').addEventListener('change', (event) => {
     state.settings = saveSettings({ ...state.settings, workflowColumnsPerRow: event.target.value });
@@ -3589,19 +3734,21 @@ function setupEvents() {
   $('#add-form').addEventListener('input', () => scheduleFormDraft('token'));
   $('#add-form').addEventListener('change', () => scheduleFormDraft('token'));
   $('#add-modal').addEventListener('modal:close', () => { flushFormDraft('token'); });
-  $('#workflow-edit-modal').addEventListener('modal:close', () => { flushFormDraft('workflow'); });
+  $('#workflow-edit-modal').addEventListener('modal:close', () => { void flushFormDraft('workflow'); });
   $('#add-draft-clear').addEventListener('click', clearTokenDraftAndForm);
-  $('#workflow-draft-clear').addEventListener('click', clearWorkflowDraftAndForm);
+  $('#workflow-draft-clear').addEventListener('click', () => { void clearWorkflowDraftAndForm(); });
   $('#workflow-protection-form').addEventListener('submit', saveWorkflowProtectionFromForm);
   $('#workflow-protection-disable').addEventListener('click', disableWorkflowProtection);
-  $('#workflow-protection-recover').addEventListener('click', () => openWorkflowProtectionModal('recover', state.pendingWorkflowEditorId));
+  $('#workflow-protection-recover').addEventListener('click', () => openWorkflowProtectionModal('recover', state.pendingWorkflowEditorId, state.pendingWorkflowDraftId));
   $('#workflow-protection-modal').addEventListener('modal:close', () => {
     state.pendingWorkflowEditorId = null;
+    state.pendingWorkflowDraftId = '';
     $('#workflow-protection-form').reset();
     hideError('#workflow-protection-error');
   });
   $('#workflow-edit-modal').addEventListener('modal:close', () => {
     if (state.workflowAddKeyReturn) return;
+    state.activeWorkflowDraftId = '';
     state.editingWorkflowLinks = [];
     workflowSecretStores.editor.clear();
     $('#workflow-key-filter').value = '';
