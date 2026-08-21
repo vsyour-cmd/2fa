@@ -119,6 +119,15 @@ export function hideError(target) {
 export function openModal(id, focusSelector = 'input:not([type="hidden"]), button, select, textarea') {
   const modal = typeof id === 'string' ? document.getElementById(id) : id;
   if (!modal) return;
+  if (activeModal === modal && !modal.classList.contains('hidden')) {
+    if (modal.classList.contains('modal-minimized')) setModalMinimized(modal, false);
+    modal.inert = false;
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    const focusTarget = $(focusSelector, modal);
+    requestAnimationFrame(() => focusTarget?.focus());
+    return;
+  }
   if (activeModal) closeModal(activeModal, false);
   resetModalWindowState(modal);
   modalTrigger = document.activeElement;

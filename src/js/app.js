@@ -187,6 +187,7 @@ let noteResizeFrame = 0;
 let quickUnlockCache = null;
 let quickUnlockTimer = null;
 let passwordGeneratorReady = false;
+const minimizedWorkflowWindows = new Map();
 
 function vaultPayload() {
   return {
@@ -528,6 +529,7 @@ function clearSensitiveState() {
   workflowSecretStores.list.clear();
   workflowSecretStores.editor.clear();
   workflowSecretStores.run.clear();
+  clearMinimizedWorkflowWindows();
   document.body.classList.remove('bulk-mode');
   clearTimeout(state.saveTimer);
   clearTimeout(state.clipboardTimer);
@@ -1510,6 +1512,41 @@ function renderWorkflowDraftInbox() {
   }).join('');
 }
 
+function workflowWindowTaskKey(type, id) {
+  return `${type}:${id}`;
+}
+
+function renderMinimizedWorkflowWindows() {
+  const dock = $('#workflow-window-dock');
+  if (!dock) return;
+  setHidden(dock, minimizedWorkflowWindows.size === 0);
+  dock.innerHTML = [...minimizedWorkflowWindows.values()].map((task) => `
+    <div class="workflow-window-task" data-workflow-window-type="${escapeHtml(task.type)}" data-workflow-window-id="${escapeHtml(task.id)}">
+      <button class="workflow-window-restore" type="button" aria-label="恢复${task.type === 'edit' ? '编辑' : '查看'}使用场景：${escapeHtml(task.title)}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z"></path><path d="M5 16V5h11"></path></svg>
+        <span><small>${task.type === 'edit' ? '编辑草稿' : '使用场景'}</small><strong>${escapeHtml(task.title)}</strong></span>
+      </button>
+      <button class="workflow-window-task-close" type="button" aria-label="从停靠栏移除 ${escapeHtml(task.title)}" title="从停靠栏移除">×</button>
+    </div>`).join('');
+}
+
+function addMinimizedWorkflowWindow(type, id, title) {
+  if (!id) return;
+  const key = workflowWindowTaskKey(type, id);
+  minimizedWorkflowWindows.set(key, { type, id, title: title.trim() || '未命名场景' });
+  renderMinimizedWorkflowWindows();
+}
+
+function removeMinimizedWorkflowWindow(type, id) {
+  minimizedWorkflowWindows.delete(workflowWindowTaskKey(type, id));
+  renderMinimizedWorkflowWindows();
+}
+
+function clearMinimizedWorkflowWindows() {
+  minimizedWorkflowWindows.clear();
+  renderMinimizedWorkflowWindows();
+}
+
 async function openWorkflowDraftInbox() {
   await ensureWorkflowDraftsLoaded();
   renderWorkflowDraftInbox();
@@ -1842,11 +1879,49 @@ function openWorkflowProtectionModal(mode, pendingEditorId = null, pendingDraftI
 }
 
 async function openWorkflowEditor(id = '', draftId = '') {
+  const editorReady = await prepareWorkflowEditorOpen(id, draftId);
+  if (!editorReady) return;
   if (workflowEditAccessActive()) {
     await showWorkflowEditor(id, draftId);
     return;
   }
   openWorkflowProtectionModal(state.workflowProtection ? 'unlock' : 'setup', id, draftId);
+}
+
+function parkCurrentWorkflowRunWindow() {
+  const modal = $('#workflow-run-modal');
+  if (modal.classList.contains('hidden')) return;
+  const current = state.workflowNotes.find((item) => item.id === modal.dataset.workflowId);
+  if (current) addMinimizedWorkflowWindow('run', current.id, current.title);
+  closeModal('workflow-run-modal', false);
+}
+
+async function parkCurrentWorkflowEditorWindow() {
+  const modal = $('#workflow-edit-modal');
+  if (modal.classList.contains('hidden')) return;
+  const parkedDraftId = state.activeWorkflowDraftId;
+  const parkedTitle = $('#workflow-title').value;
+  await flushFormDraft('workflow', { force: true });
+  addMinimizedWorkflowWindow('edit', parkedDraftId, parkedTitle);
+  closeModal('workflow-edit-modal', false);
+}
+
+async function prepareWorkflowEditorOpen(id = '', draftId = '') {
+  parkCurrentWorkflowRunWindow();
+  const modal = $('#workflow-edit-modal');
+  if (modal.classList.contains('hidden')) return true;
+  const currentWorkflowId = $('#workflow-id').value;
+  const sameEditor = draftId
+    ? draftId === state.activeWorkflowDraftId
+    : id
+      ? id === currentWorkflowId
+      : !currentWorkflowId;
+  if (sameEditor) {
+    openModal('workflow-edit-modal', '#workflow-title');
+    return false;
+  }
+  await parkCurrentWorkflowEditorWindow();
+  return true;
 }
 
 function selectedWorkflowGroupForNewNote() {
@@ -1884,6 +1959,7 @@ async function showWorkflowEditor(id = '', requestedDraftId = '') {
   renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
   openModal('workflow-edit-modal', '#workflow-title');
+  removeMinimizedWorkflowWindow('edit', state.activeWorkflowDraftId);
 }
 
 async function openWorkflowDraftEditor(draftId) {
@@ -2131,7 +2207,23 @@ async function updateWorkflowRunCodes(now = Date.now()) {
 
 async function openWorkflowRun(id) {
   const note = state.workflowNotes.find((item) => item.id === id);
-  if (!note) return;
+  if (!note) {
+    removeMinimizedWorkflowWindow('run', id);
+    showToast('这个使用场景已不存在');
+    return;
+  }
+  await parkCurrentWorkflowEditorWindow();
+  const modal = $('#workflow-run-modal');
+  if (!modal.classList.contains('hidden')) {
+    const currentId = modal.dataset.workflowId || '';
+    if (currentId === id) {
+      openModal('workflow-run-modal', note.linkedKeys.length ? '[data-workflow-run-key-id]' : '[data-close-modal="workflow-run-modal"]');
+      return;
+    }
+    const current = state.workflowNotes.find((item) => item.id === currentId);
+    if (current) addMinimizedWorkflowWindow('run', current.id, current.title);
+    closeModal('workflow-run-modal', false);
+  }
   $('#workflow-run-modal').dataset.workflowId = note.id;
   $('#workflow-run-title').textContent = note.title;
   workflowSecretStores.run = new Map();
@@ -2142,6 +2234,7 @@ async function openWorkflowRun(id) {
     ? note.linkedKeys.map(renderWorkflowRunKey).join('')
     : '<li class="field-hint center">这个场景没有关联 2FA 条目</li>';
   openModal('workflow-run-modal', note.linkedKeys.length ? '[data-workflow-run-key-id]' : '[data-close-modal="workflow-run-modal"]');
+  removeMinimizedWorkflowWindow('run', note.id);
   await updateWorkflowRunCodes();
   const snapshot = captureVaultState();
   note.lastUsed = Date.now();
@@ -3985,6 +4078,19 @@ function setupEvents() {
     if (!card || !action) return;
     if (action === 'resume') void openWorkflowDraftEditor(card.dataset.workflowDraftId);
     else if (action === 'delete') void deleteWorkflowDraftFromInbox(card.dataset.workflowDraftId);
+  });
+  $('#workflow-window-dock').addEventListener('click', (event) => {
+    const task = event.target.closest('[data-workflow-window-type]');
+    if (!task) return;
+    const { workflowWindowType: type, workflowWindowId: id } = task.dataset;
+    if (event.target.closest('.workflow-window-task-close')) {
+      removeMinimizedWorkflowWindow(type, id);
+      if (type === 'edit') showToast('已从停靠栏移除，草稿仍保留在草稿箱');
+      return;
+    }
+    if (!event.target.closest('.workflow-window-restore')) return;
+    if (type === 'edit') void openWorkflowEditor('', id);
+    else void openWorkflowRun(id);
   });
   $('#workflow-sort').addEventListener('change', (event) => applyWorkflowSortMode(event.target.value, true));
   $('#workflow-columns').addEventListener('change', (event) => {

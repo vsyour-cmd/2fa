@@ -90,6 +90,10 @@ describe('static application shell', () => {
     expect(styles).toContain('.modal-overlay.modal-minimized .modal {');
     expect(styles).toContain('width: 100vw;');
     expect(styles).toContain('height: 100dvh;');
+    expect(html).toContain('id="workflow-window-dock"');
+    expect(app).toContain('async function prepareWorkflowEditorOpen');
+    expect(app).toContain("addMinimizedWorkflowWindow('run', current.id, current.title)");
+    expect(styles).toContain('.workflow-window-task {');
   });
 
   it('offers accessible item-level choices for multi-device conflicts', () => {

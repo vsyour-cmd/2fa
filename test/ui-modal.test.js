@@ -75,4 +75,36 @@ describe('modal focus management', () => {
   });
 });
 
+describe('modal window state', () => {
+  it('restores the current minimized modal instead of closing it', async () => {
+    const log = [];
+    const body = new FakeElement('body', log);
+    const closeButton = new FakeElement('close', log);
+    const modal = new FakeElement('modal', log, ['hidden']);
+    modal.focusTarget = closeButton;
+    modal.dispatchCount = 0;
+    modal.dispatchEvent = () => { modal.dispatchCount += 1; };
+
+    vi.stubGlobal('HTMLElement', FakeElement);
+    vi.stubGlobal('CustomEvent', class CustomEvent {});
+    vi.stubGlobal('requestAnimationFrame', (callback) => callback());
+    vi.stubGlobal('document', {
+      activeElement: body,
+      body,
+      getElementById: () => modal,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+    });
+
+    const { openModal } = await import('../src/js/ui.js');
+    openModal(modal, 'button');
+    modal.classList.add('modal-minimized');
+    openModal(modal, 'button');
+
+    expect(modal.classList.contains('modal-minimized')).toBe(false);
+    expect(modal.classList.contains('hidden')).toBe(false);
+    expect(modal.dispatchCount).toBe(0);
+  });
+});
+
 afterAll(() => vi.unstubAllGlobals());
