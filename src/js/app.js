@@ -154,6 +154,7 @@ const state = {
   workflowSearch: '',
   workflowGroupFilter: '__all',
   editingWorkflowLinks: [],
+  workflowAddKeyReturn: false,
   editingTokenWorkflowKeyId: '',
   editingTokenWorkflowNoteIds: new Set(),
   accessIdentity: null,
@@ -214,6 +215,7 @@ function clearSensitiveState() {
   state.workflowSearch = '';
   state.workflowGroupFilter = '__all';
   state.editingWorkflowLinks = [];
+  state.workflowAddKeyReturn = false;
   state.editingTokenWorkflowKeyId = '';
   state.editingTokenWorkflowNoteIds.clear();
   passwordGeneratorReady = false;
@@ -1459,6 +1461,14 @@ function showWorkflowEditor(id = '') {
   openModal('workflow-edit-modal', '#workflow-title');
 }
 
+function openAddKeyFromWorkflow() {
+  hideError('#workflow-error');
+  closeWorkflowKeyDropdown();
+  state.workflowAddKeyReturn = true;
+  resetAddForm();
+  openModal('add-modal', '#add-name');
+}
+
 function insertGeneratedWorkflowPassword() {
   hideError('#workflow-error');
   try {
@@ -1898,6 +1908,9 @@ function openOtpAuthValue(value, source = 'qr') {
     .replace(/^otpauth-migration:\/\//i, 'otpauth-migration://')
     .replace(/^otpauth:\/\//i, 'otpauth://');
   if (text.startsWith('otpauth-migration://')) {
+    if (state.workflowAddKeyReturn) {
+      throw new Error('场景编辑中只能新增单个验证码；批量迁移请在验证码页面的设置中导入');
+    }
     parseGoogleMigrationUri(text);
     if (!$('#add-modal').classList.contains('hidden')) closeModal('add-modal', false);
     openImportDialog('#import-strategy');
@@ -1939,11 +1952,15 @@ async function addKeyFromForm(event) {
     await validateKeyInput(key);
     key.order = Math.max(-1, ...state.keys.map((item) => Number(item.order || 0))) + 1;
     state.keys.push(key);
+    const linkToWorkflow = state.workflowAddKeyReturn;
+    if (linkToWorkflow && !state.editingWorkflowLinks.some((link) => link.keyId === key.id)) {
+      state.editingWorkflowLinks.push(workflowLinkSnapshot(key));
+    }
     await saveVault();
     closeModal('add-modal');
     resetAddForm();
     renderAll();
-    showToast('密钥已添加');
+    showToast(linkToWorkflow ? '验证码已创建并关联到当前场景' : '密钥已添加');
   } catch (error) {
     showError('#add-error', error.message);
   } finally {
@@ -3337,14 +3354,23 @@ function setupEvents() {
     hideError('#workflow-protection-error');
   });
   $('#workflow-edit-modal').addEventListener('modal:close', () => {
+    if (state.workflowAddKeyReturn) return;
     state.editingWorkflowLinks = [];
     workflowSecretStores.editor.clear();
     $('#workflow-key-filter').value = '';
     closeWorkflowKeyDropdown();
   });
+  $('#add-modal').addEventListener('modal:close', () => {
+    qrScanner?.stop();
+    if (!state.workflowAddKeyReturn) return;
+    state.workflowAddKeyReturn = false;
+    renderWorkflowKeyPicker();
+    openModal('workflow-edit-modal', '#workflow-create-key');
+  });
   $('#workflow-run-modal').addEventListener('modal:close', () => workflowSecretStores.run.clear());
   $('#workflow-content').addEventListener('input', renderWorkflowMarkdownPreview);
   $('#workflow-generate-secret').addEventListener('click', insertGeneratedWorkflowPassword);
+  $('#workflow-create-key').addEventListener('click', openAddKeyFromWorkflow);
   $('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker);
   $('#workflow-key-select').addEventListener('click', () => {
     if ($('#workflow-key-select').getAttribute('aria-expanded') === 'true') closeWorkflowKeyDropdown({ restoreFocus: true });

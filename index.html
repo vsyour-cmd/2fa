@@ -516,7 +516,10 @@
             <p id="workflow-content-hint" class="field-hint">支持标题、列表、勾选项、粗体、链接和代码块；换行不再自动变成步骤。“生成并插入密码”会在光标处写入安全标记，预览和使用时显示为星号且可复制。也可手动使用 <code>{{secret:你的密码}}</code> 或 <code>{{pwd:你的密码}}</code>。内容会随保险库加密保存，最多 5000 个字符。</p>
           </div>
           <div class="form-group">
-            <label for="workflow-key-select">关联 2FA 条目（可选）</label>
+            <div class="workflow-link-heading">
+              <label for="workflow-key-select">关联 2FA 条目（可选）</label>
+              <button id="workflow-create-key" class="small-btn workflow-create-key" type="button" aria-describedby="workflow-key-hint">＋ 新建验证码</button>
+            </div>
             <div id="workflow-key-combobox" class="workflow-key-combobox">
               <button id="workflow-key-select" class="workflow-key-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="workflow-key-dropdown" aria-describedby="workflow-key-hint">
                 <span id="workflow-key-select-label">选择要关联的 2FA 条目…</span>

@@ -93,6 +93,17 @@ describe('static application shell', () => {
     expect(sideSummary).not.toContain('item.content');
   });
 
+  it('creates and automatically links a new token without discarding the workflow draft', () => {
+    expect(html).toContain('id="workflow-create-key"');
+    expect(html).toContain('aria-describedby="workflow-key-hint"');
+    expect(app).toContain('workflowAddKeyReturn: false');
+    expect(app).toContain('function openAddKeyFromWorkflow()');
+    expect(app).toContain('state.editingWorkflowLinks.push(workflowLinkSnapshot(key))');
+    expect(app).toMatch(/#workflow-edit-modal'[\s\S]*?if \(state\.workflowAddKeyReturn\) return;/);
+    expect(app).toContain("openModal('workflow-edit-modal', '#workflow-create-key')");
+    expect(app).toContain('验证码已创建并关联到当前场景');
+  });
+
   it('requires a hashed secondary password before editing workflow content', () => {
     expect(html).toContain('id="workflow-protection-modal"');
     expect(html).toContain('id="workflow-password-manage"');
