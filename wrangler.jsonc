@@ -9,6 +9,7 @@
   },
   "vars": {
     "ACCESS_AUD": "ec0202c941bf8f8a55c97d07071a01df8de0f57ad288a178e4daab58b4338274",
+    "ACCESS_TEAM_DOMAIN": "https://socket.cloudflareaccess.com",
     "REQUIRE_ACCESS": "true"
   },
   "access": {

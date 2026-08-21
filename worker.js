@@ -1,3 +1,4 @@
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { VaultCoordinator } from './src/worker/vault-coordinator.js';
 
 export { VaultCoordinator };
@@ -14,6 +15,7 @@ const ADMIN_SESSION_SECONDS = 30 * 60;
 const AUDIT_RETENTION_SECONDS = 90 * 24 * 60 * 60;
 const ARCHIVE_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 const encoder = new TextEncoder();
+const accessJwksByUrl = new Map();
 
 export default {
   async fetch(request, env, ctx) {
@@ -31,7 +33,7 @@ export default {
     }
 
     try {
-      const accessUser = await requireAccessIdentity(env, ctx);
+      const accessUser = await requireAccessIdentity(request, env, ctx);
       if (url.pathname === '/api/access/me') {
         if (request.method !== 'GET') return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'GET' });
         return jsonResponse({ authenticated: Boolean(accessUser.email), email: accessUser.email || '' }, 200);
@@ -231,7 +233,37 @@ function accessAudienceMatches(actual, expected) {
   return false;
 }
 
-async function requireAccessIdentity(env, ctx) {
+function accessTeamDomain(env) {
+  const raw = cleanSingleLine(env.ACCESS_TEAM_DOMAIN, 512);
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return '';
+    return url.origin;
+  } catch {
+    return '';
+  }
+}
+
+function accessJwks(teamDomain) {
+  const url = `${teamDomain}/cdn-cgi/access/certs`;
+  if (!accessJwksByUrl.has(url)) accessJwksByUrl.set(url, createRemoteJWKSet(new URL(url)));
+  return accessJwksByUrl.get(url);
+}
+
+async function verifyAccessJwt(request, env, expectedAudience) {
+  const token = request.headers.get('CF-Access-Jwt-Assertion');
+  const teamDomain = accessTeamDomain(env);
+  if (!token || token.length > 32_768 || !teamDomain) throw new Error('Access JWT fallback unavailable');
+  const { payload } = await jwtVerify(token, accessJwks(teamDomain), {
+    algorithms: ['RS256'],
+    audience: expectedAudience,
+    issuer: teamDomain,
+  });
+  return payload;
+}
+
+async function requireAccessIdentity(request, env, ctx) {
   if (env.REQUIRE_ACCESS === 'false' || !env.ACCESS_AUD) {
     // Explicit opt-out is reserved for standalone/local development. Any
     // deployment carrying an Access audience fails closed by default.
@@ -242,15 +274,31 @@ async function requireAccessIdentity(env, ctx) {
     throw httpError('Cloudflare Access 尚未配置', 503, 'ACCESS_NOT_CONFIGURED');
   }
   const access = ctx?.access;
-  if (!access || !accessAudienceMatches(access.aud, expectedAudience) || typeof access.getIdentity !== 'function') {
-    throw httpError('Cloudflare Access 身份验证失败', 403, 'ACCESS_DENIED');
-  }
-
   let identity;
-  try {
-    identity = await access.getIdentity();
-  } catch {
-    throw httpError('无法读取 Cloudflare Access 身份', 403, 'ACCESS_IDENTITY_UNAVAILABLE');
+  const usableAccessContext = Boolean(access
+    && accessAudienceMatches(access.aud, expectedAudience)
+    && typeof access.getIdentity === 'function');
+  if (usableAccessContext) {
+    try {
+      identity = await access.getIdentity();
+    } catch (error) {
+      console.warn(JSON.stringify({ event: 'access_context_identity_failed', message: error?.message || 'unknown' }));
+    }
+  }
+  if (!identity) {
+    try {
+      identity = await verifyAccessJwt(request, env, expectedAudience);
+      console.info(JSON.stringify({ event: 'access_jwt_fallback_used' }));
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: 'access_identity_denied',
+        hasAccessContext: Boolean(access),
+        accessAudienceMatched: Boolean(access && accessAudienceMatches(access.aud, expectedAudience)),
+        hasAccessJwt: Boolean(request.headers.get('CF-Access-Jwt-Assertion')),
+        message: error?.code || error?.message || 'unknown',
+      }));
+      throw httpError('Cloudflare Access 身份验证失败', 403, 'ACCESS_DENIED');
+    }
   }
   const email = cleanSingleLine(identity?.email, 254).toLocaleLowerCase('en-US');
   const subject = cleanSingleLine(identity?.user_uuid || identity?.sub || identity?.id || email, 512);

@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import worker, { VaultCoordinator } from '../worker.js';
 
 const ACCESS_AUD = 'ec0202c941bf8f8a55c97d07071a01df8de0f57ad288a178e4daab58b4338274';
+const ACCESS_TEAM_DOMAIN = 'https://socket.cloudflareaccess.com';
 const wranglerConfig = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+
+afterEach(() => vi.unstubAllGlobals());
 
 class FakeKv {
   constructor() {
@@ -118,6 +122,7 @@ describe('Cloudflare Worker API', () => {
 
   it('keeps the Worker Access audience and local identity simulation in Wrangler configuration', () => {
     expect(wranglerConfig.vars.ACCESS_AUD).toBe(ACCESS_AUD);
+    expect(wranglerConfig.vars.ACCESS_TEAM_DOMAIN).toBe(ACCESS_TEAM_DOMAIN);
     expect(wranglerConfig.vars.REQUIRE_ACCESS).toBe('true');
     expect(wranglerConfig.access.dev).toMatchObject({
       aud: ACCESS_AUD,
@@ -149,6 +154,44 @@ describe('Cloudflare Worker API', () => {
     const verified = await worker.fetch(request('/api/access/me'), env, accessContext('Owner@Example.com', 'owner-1'));
     expect(verified.status).toBe(200);
     expect(await verified.json()).toEqual({ authenticated: true, email: 'owner@example.com' });
+  });
+
+  it('validates the Access JWT when an authenticated legacy Access route does not provide ctx.access', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true });
+    const publicJwk = await exportJWK(publicKey);
+    Object.assign(publicJwk, { alg: 'RS256', kid: 'access-test-key', use: 'sig' });
+    const fetchMock = vi.fn(async () => Response.json({ keys: [publicJwk] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const makeToken = (audience) => new SignJWT({
+      email: 'Fallback@Example.com',
+      sub: 'access-user-fallback',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'access-test-key' })
+      .setIssuer(ACCESS_TEAM_DOMAIN)
+      .setAudience(audience)
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey);
+    const env = {
+      ACCESS_AUD,
+      ACCESS_TEAM_DOMAIN,
+      REQUIRE_ACCESS: 'true',
+      DATA_KV: new FakeKv(),
+      VAULT_COORDINATOR: new FakeVaultCoordinatorNamespace(),
+    };
+
+    const valid = await worker.fetch(request('/api/access/me', {
+      headers: { 'CF-Access-Jwt-Assertion': await makeToken(ACCESS_AUD) },
+    }), env, {});
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toEqual({ authenticated: true, email: 'fallback@example.com' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const wrongAudience = await worker.fetch(request('/api/access/me', {
+      headers: { 'CF-Access-Jwt-Assertion': await makeToken('wrong-audience') },
+    }), env, {});
+    expect(wrongAudience.status).toBe(403);
+    expect(await wrongAudience.json()).toMatchObject({ code: 'ACCESS_DENIED' });
   });
 
   it('binds a legacy vault to its first verified Access user and blocks other Access users', async () => {
