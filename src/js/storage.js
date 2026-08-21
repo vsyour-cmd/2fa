@@ -5,6 +5,9 @@ const ACTIVE_ACCOUNT_KEY = '2fa_active_account_v3';
 const KNOWN_ACCOUNTS_KEY = '2fa_known_accounts_v3';
 const SETTINGS_KEY = '2fa_settings_v3';
 const QUICK_UNLOCK_KEY = '2fa_quick_unlock_v1';
+const SESSION_KEY_DB = '2fa-session-keys-v1';
+const SESSION_KEY_STORE = 'session-keys';
+const SESSION_KEY_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system',
@@ -213,32 +216,171 @@ function sessionId(accountName) {
   return normalizeAccountName(accountName).normalize('NFKC').toLocaleLowerCase('en-US');
 }
 
-export function getSessions() {
-  const sessions = parseJsonStorage(sessionStorage, SESSION_KEY, {});
-  return sessions && typeof sessions === 'object' ? sessions : {};
+function openSessionKeyDatabase() {
+  if (!('indexedDB' in globalThis)) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(SESSION_KEY_DB, 1);
+    request.onerror = () => reject(request.error || new Error('会话密钥数据库不可用'));
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const database = event.target.result;
+      if (!database.objectStoreNames.contains(SESSION_KEY_STORE)) {
+        database.createObjectStore(SESSION_KEY_STORE, { keyPath: 'id' });
+      }
+    };
+  });
 }
 
-export function saveSession(session) {
+async function sessionKeyRequest(mode, createRequest) {
+  const database = await openSessionKeyDatabase();
+  if (!database) throw new Error('当前浏览器不支持安全会话恢复');
+  return new Promise((resolve, reject) => {
+    let result;
+    const transaction = database.transaction([SESSION_KEY_STORE], mode);
+    transaction.oncomplete = () => {
+      database.close?.();
+      resolve(result);
+    };
+    transaction.onerror = () => {
+      database.close?.();
+      reject(transaction.error || new Error('会话密钥操作失败'));
+    };
+    transaction.onabort = transaction.onerror;
+    const request = createRequest(transaction.objectStore(SESSION_KEY_STORE));
+    request.onsuccess = () => { result = request.result; };
+    request.onerror = () => {
+      try { transaction.abort(); } catch { /* transaction may already be aborting */ }
+    };
+  });
+}
+
+function validStoredAesKey(key) {
+  return Boolean(key
+    && key.type === 'secret'
+    && key.extractable === false
+    && key.algorithm?.name === 'AES-GCM'
+    && key.algorithm?.length === 256
+    && Array.isArray(key.usages)
+    && key.usages.includes('encrypt')
+    && key.usages.includes('decrypt'));
+}
+
+async function deleteSessionKey(keyRef) {
+  if (!keyRef) return;
+  try {
+    await sessionKeyRequest('readwrite', (store) => store.delete(keyRef));
+  } catch (error) {
+    console.warn('Unable to remove secure session key:', error);
+  }
+}
+
+async function purgeExpiredSessionKeys() {
+  const database = await openSessionKeyDatabase();
+  if (!database) return;
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction([SESSION_KEY_STORE], 'readwrite');
+    const store = transaction.objectStore(SESSION_KEY_STORE);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      for (const record of request.result || []) {
+        if (Number(record?.expiresAt || 0) <= Date.now()) store.delete(record.id);
+      }
+    };
+    request.onerror = () => {
+      try { transaction.abort(); } catch { /* transaction may already be aborting */ }
+    };
+    transaction.oncomplete = () => {
+      database.close?.();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close?.();
+      reject(transaction.error || request.error || new Error('过期会话密钥清理失败'));
+    };
+    transaction.onabort = transaction.onerror;
+  });
+}
+
+export function getSessions() {
+  const sessions = parseJsonStorage(sessionStorage, SESSION_KEY, {});
+  if (!sessions || typeof sessions !== 'object') return {};
+  let changed = false;
+  for (const [id, session] of Object.entries(sessions)) {
+    if (!session || typeof session !== 'object' || (session.keyRef && Number(session.expiresAt || 0) <= Date.now())) {
+      delete sessions[id];
+      changed = true;
+    }
+  }
+  if (changed) sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessions));
+  return sessions;
+}
+
+export async function saveSession(session, masterKey) {
+  if (!validStoredAesKey(masterKey)) throw new Error('保险库密钥不符合安全会话要求');
+  try { await purgeExpiredSessionKeys(); } catch (error) { console.warn('Unable to purge expired session keys:', error); }
   const sessions = getSessions();
-  sessions[sessionId(session.accountName)] = { ...session, accountName: normalizeAccountName(session.accountName) };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessions));
-  setActiveAccount(session.accountName);
-  rememberAccount(session.accountName);
+  const id = sessionId(session.accountName);
+  const previousKeyRef = sessions[id]?.keyRef;
+  const keyRef = crypto.randomUUID();
+  const expiresAt = Date.now() + SESSION_KEY_TTL_MS;
+  await sessionKeyRequest('readwrite', (store) => store.put({
+    id: keyRef,
+    accountId: id,
+    key: masterKey,
+    expiresAt,
+  }));
+  try {
+    const { keyStr: _legacyKey, ...safeSession } = session;
+    sessions[id] = {
+      ...safeSession,
+      accountName: normalizeAccountName(session.accountName),
+      keyRef,
+      expiresAt,
+    };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessions));
+    setActiveAccount(session.accountName);
+    rememberAccount(session.accountName);
+  } catch (error) {
+    await deleteSessionKey(keyRef);
+    throw error;
+  }
+  if (previousKeyRef && previousKeyRef !== keyRef) await deleteSessionKey(previousKeyRef);
 }
 
 export function getSession(accountName) {
   return getSessions()[sessionId(accountName)] || null;
 }
 
-export function removeSession(accountName) {
-  const sessions = getSessions();
-  delete sessions[sessionId(accountName)];
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessions));
+export async function loadSessionKey(session) {
+  if (!session?.keyRef || Number(session.expiresAt || 0) <= Date.now()) return null;
+  const record = await sessionKeyRequest('readonly', (store) => store.get(session.keyRef));
+  if (!record
+    || record.accountId !== sessionId(session.accountName)
+    || Number(record.expiresAt || 0) <= Date.now()
+    || !validStoredAesKey(record.key)) {
+    await deleteSessionKey(session.keyRef);
+    return null;
+  }
+  return record.key;
 }
 
-export function clearAllSessions() {
+export async function removeSession(accountName) {
+  const sessions = getSessions();
+  const id = sessionId(accountName);
+  const keyRef = sessions[id]?.keyRef;
+  delete sessions[id];
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessions));
+  await deleteSessionKey(keyRef);
+}
+
+export async function clearAllSessions() {
   sessionStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+  try {
+    await sessionKeyRequest('readwrite', (store) => store.clear());
+  } catch (error) {
+    console.warn('Unable to clear secure session keys:', error);
+  }
 }
 
 export function setActiveAccount(accountName) {

@@ -15,6 +15,8 @@ import {
 describe('vault cryptography', () => {
   it('encrypts and decrypts JSON with AES-GCM', async () => {
     const key = await deriveKey('correct horse 123', generateSalt());
+    expect(key.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey('raw', key)).rejects.toThrow();
     const payload = { keys: [{ name: 'GitHub', secret: 'JBSWY3DPEHPK3PXP' }] };
     const encrypted = await encryptJson(payload, key);
     expect(encrypted).not.toContain('GitHub');

@@ -183,7 +183,7 @@ After connecting this GitHub repository under the Worker's **Settings → Builds
 
 - Click the moon icon in the top right to switch quickly between light and dark themes; open the gear menu to select "Follow system"
 - Settings also control sorting, inactivity auto-lock, immediate background lock, automatic clipboard clearing, copy vibration, and trash retention
-- The optional six-digit PIN only restores the current tab for five minutes after locking; refreshes, other tabs, and expiry still require the master password
+- The optional six-digit PIN only restores the current tab for five minutes after locking; an ordinary refresh uses the secure local session, while a new tab or expired PIN still requires the master password
 - "Manage Groups," "Change Master Password," and PWA installation are available in Settings; shortcuts are `/` for search, `N` for add, and `Esc` to clear or exit multi-select
 
 ### Add 2FA Key
@@ -228,7 +228,7 @@ Use "Lock Current Vault" in Settings to return to login; when PIN quick unlock i
 
 1. **Password Cannot Be Recovered**: Forgetting password means losing all data - remember your master password
 2. **Vault Identity**: Use the same account name and master password on each device to sync the same vault
-3. **Session Security**: Unlock keys live only in the current tab's session storage; configure auto-lock or lock all sessions immediately
+3. **Session Security**: `sessionStorage` no longer contains the raw unlock key, only session metadata and a random reference. The key is a non-extractable `CryptoKey` in IndexedDB, expires within 24 hours, and is cleared on lock. Auto-lock is still recommended
 4. **Offline Mode**: A vault must be unlocked online successfully once before its local cache can be used
 5. **Data Sync**: Offline changes sync automatically when online; conflicts prompt user to choose
 

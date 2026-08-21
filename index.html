@@ -575,7 +575,7 @@
               <div class="form-group"><label for="quick-unlock-new-pin">6 位 PIN</label><div class="input-with-action"><input id="quick-unlock-new-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"><button class="input-action" type="button" data-toggle-password="quick-unlock-new-pin" aria-label="显示 PIN" aria-pressed="false">显示</button></div></div>
               <div class="form-group"><label for="quick-unlock-confirm-pin">确认 PIN</label><div class="input-with-action"><input id="quick-unlock-confirm-pin" class="mono pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="new-password"><button class="input-action" type="button" data-toggle-password="quick-unlock-confirm-pin" aria-label="显示 PIN" aria-pressed="false">显示</button></div></div>
             </div>
-            <p class="field-hint">PIN 只用于当前标签页锁定后的短时恢复；刷新、跨标签页或超过 5 分钟仍需主密码。</p>
+            <p class="field-hint">PIN 只用于当前标签页锁定后的短时恢复；普通刷新会使用本机安全会话自动恢复，新标签页或 PIN 超时后仍需主密码。</p>
           </div>
           <div id="settings-error" class="error hidden" role="alert"></div>
           <section class="settings-backup-panel" aria-labelledby="settings-backup-title">

@@ -81,7 +81,7 @@ export async function deriveKey(password, salt, iterations = PBKDF2_ITERATIONS.C
     salt: saltBytes,
     iterations,
     hash: 'SHA-256',
-  }, material, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
 export async function deriveQuickUnlockHash(pin, salt, accountName, iterations = QUICK_UNLOCK_ITERATIONS) {
@@ -122,26 +122,29 @@ export async function decryptJson(encryptedData, key) {
   return JSON.parse(decoder.decode(decrypted));
 }
 
-export async function exportAesKey(key) {
-  return bytesToBase64(new Uint8Array(await crypto.subtle.exportKey('raw', key)));
-}
-
 export async function importAesKey(value) {
   return crypto.subtle.importKey(
     'raw',
     base64ToBytes(value),
     { name: 'AES-GCM', length: 256 },
-    true,
+    false,
     ['encrypt', 'decrypt'],
   );
 }
 
 export async function aesKeysEqual(left, right) {
-  const leftBytes = new Uint8Array(await crypto.subtle.exportKey('raw', left));
-  const rightBytes = new Uint8Array(await crypto.subtle.exportKey('raw', right));
-  if (leftBytes.length !== rightBytes.length) return false;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  let decrypted;
+  try {
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, left, challenge);
+    decrypted = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, right, encrypted));
+  } catch {
+    return false;
+  }
+  if (challenge.length !== decrypted.length) return false;
   let difference = 0;
-  for (let index = 0; index < leftBytes.length; index += 1) difference |= leftBytes[index] ^ rightBytes[index];
+  for (let index = 0; index < challenge.length; index += 1) difference |= challenge[index] ^ decrypted[index];
   return difference === 0;
 }
 

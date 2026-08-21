@@ -1,5 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, DEFAULT_SETTINGS, OfflineManager, apiDelete, apiGet, apiGetAccessIdentity, apiSave, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
+import { aesKeysEqual, deriveKey, generateSalt } from '../src/js/crypto.js';
+import {
+  ApiError,
+  DEFAULT_SETTINGS,
+  OfflineManager,
+  apiDelete,
+  apiGet,
+  apiGetAccessIdentity,
+  apiSave,
+  getQuickUnlockConfig,
+  getSession,
+  loadSessionKey,
+  loadSettings,
+  removeQuickUnlockConfig,
+  removeSession,
+  saveQuickUnlockConfig,
+  saveSession,
+  saveSettings,
+} from '../src/js/storage.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -33,6 +51,60 @@ function fakeIndexedDb(initial = {}) {
         delete: (key) => request(() => values.delete(key)),
       }),
     }),
+  };
+}
+
+function fakeSessionIndexedDb() {
+  const values = new Map();
+  let storeCreated = false;
+  const request = (transaction, operation) => {
+    const pending = {};
+    queueMicrotask(() => {
+      try {
+        pending.result = operation();
+        pending.onsuccess?.();
+        queueMicrotask(() => transaction.oncomplete?.());
+      } catch (error) {
+        pending.error = error;
+        pending.onerror?.();
+        transaction.error = error;
+        transaction.onerror?.();
+      }
+    });
+    return pending;
+  };
+  const database = {
+    objectStoreNames: { contains: () => storeCreated },
+    createObjectStore: () => { storeCreated = true; },
+    close: () => {},
+    transaction: () => {
+      const transaction = {
+        abort: () => transaction.onabort?.(),
+        objectStore: () => ({
+          put: (value) => request(transaction, () => {
+            values.set(value.id, value);
+            return value.id;
+          }),
+          get: (key) => request(transaction, () => values.get(key)),
+          getAll: () => request(transaction, () => [...values.values()]),
+          delete: (key) => request(transaction, () => values.delete(key)),
+          clear: () => request(transaction, () => values.clear()),
+        }),
+      };
+      return transaction;
+    },
+  };
+  return {
+    values,
+    open: () => {
+      const pending = {};
+      queueMicrotask(() => {
+        pending.result = database;
+        if (!storeCreated) pending.onupgradeneeded?.({ target: { result: database } });
+        pending.onsuccess?.();
+      });
+      return pending;
+    },
   };
 }
 
@@ -195,5 +267,38 @@ describe('quick unlock configuration', () => {
     expect(storage.getItem('2fa_quick_unlock_v1')).not.toContain('123456');
     removeQuickUnlockConfig('个人');
     expect(getQuickUnlockConfig('个人')).toBeNull();
+  });
+});
+
+describe('secure refresh sessions', () => {
+  it('keeps only an opaque key reference in sessionStorage and restores a non-extractable key', async () => {
+    const local = memoryStorage();
+    const session = memoryStorage();
+    const secureKeys = fakeSessionIndexedDb();
+    vi.stubGlobal('localStorage', local);
+    vi.stubGlobal('sessionStorage', session);
+    vi.stubGlobal('indexedDB', secureKeys);
+    const key = await deriveKey('correct horse 123', generateSalt());
+
+    await saveSession({
+      accountName: '个人',
+      keyHash: 'a'.repeat(64),
+      salt: 'vault-salt',
+      keyIterations: 310_000,
+      keyStr: 'legacy-raw-key-must-not-survive',
+    }, key);
+
+    const serialized = session.getItem('2fa_sessions_v3');
+    expect(serialized).not.toContain('legacy-raw-key-must-not-survive');
+    expect(serialized).not.toContain('keyStr');
+    const metadata = getSession('个人');
+    expect(metadata.keyRef).toMatch(/^[0-9a-f-]{36}$/i);
+    const restored = await loadSessionKey(metadata);
+    expect(restored.extractable).toBe(false);
+    await expect(aesKeysEqual(restored, key)).resolves.toBe(true);
+
+    await removeSession('个人');
+    expect(getSession('个人')).toBeNull();
+    expect(secureKeys.values.size).toBe(0);
   });
 });

@@ -11,7 +11,6 @@ import {
   deriveWorkflowProtectionHash,
   encryptBackup,
   encryptJson,
-  exportAesKey,
   generateSalt,
   getPasswordStrength,
   importAesKey,
@@ -44,6 +43,7 @@ import {
   getQuickUnlockConfig,
   getSession,
   getSessions,
+  loadSessionKey,
   loadSettings,
   parseStoredCloudRecord,
   removeSession,
@@ -426,7 +426,7 @@ async function cacheCurrentForQuickUnlock() {
     accountName: state.accountName,
     keyHash: state.keyHash,
     salt: state.salt,
-    keyStr: await exportAesKey(state.masterKey),
+    masterKey: state.masterKey,
     keyIterations: state.keyIterations,
     expiresAt: Date.now() + 5 * 60_000,
     attempts: 0,
@@ -468,7 +468,7 @@ async function unlockWithPin(pin) {
     throw new Error(`PIN 错误，还可尝试 ${3 - cache.attempts} 次`);
   }
 
-  state.masterKey = await importAesKey(cache.keyStr);
+  state.masterKey = cache.masterKey;
   state.keyHash = cache.keyHash;
   state.salt = cache.salt;
   state.accountName = cache.accountName;
@@ -494,14 +494,20 @@ async function unlockWithPin(pin) {
 }
 
 async function rememberCurrentSession() {
-  if (!state.masterKey) return;
-  saveSession({
-    accountName: state.accountName,
-    keyHash: state.keyHash,
-    salt: state.salt,
-    keyStr: await exportAesKey(state.masterKey),
-    keyIterations: state.keyIterations,
-  });
+  if (!state.masterKey) return false;
+  try {
+    await saveSession({
+      accountName: state.accountName,
+      keyHash: state.keyHash,
+      salt: state.salt,
+      keyIterations: state.keyIterations,
+    }, state.masterKey);
+    return true;
+  } catch (error) {
+    console.warn('Secure session persistence unavailable:', error);
+    showToast('当前浏览器无法安全保存刷新会话；关闭或刷新页面后需要重新输入主密码', { duration: 8_000 });
+    return false;
+  }
 }
 
 async function loadCloudRecord(keyHash, accountName = state.accountName) {
@@ -766,7 +772,11 @@ async function restoreSession(accountName) {
   const session = getSession(accountName);
   if (!session) return false;
   try {
-    state.masterKey = await importAesKey(session.keyStr);
+    const legacySession = Boolean(session.keyStr);
+    state.masterKey = legacySession
+      ? await importAesKey(session.keyStr)
+      : await loadSessionKey(session);
+    if (!state.masterKey) throw new Error('安全会话已过期或不可用');
     state.keyHash = session.keyHash;
     state.salt = session.salt;
     state.accountName = normalizeAccountName(session.accountName);
@@ -816,13 +826,14 @@ async function restoreSession(accountName) {
       }
     }
     setActiveAccount(state.accountName);
+    if (legacySession) await rememberCurrentSession();
     showMainApp();
     if (accessBlockedMessage) showToast(`云端同步不可用：${accessBlockedMessage}，当前显示本机缓存`, { duration: 8_000 });
     return true;
   } catch (error) {
     console.warn('Session restore failed:', error);
     if (error instanceof ApiError && error.status === 423) showToast(error.message, { duration: 6_000 });
-    removeSession(accountName);
+    await removeSession(accountName);
     clearSensitiveState();
     return false;
   }
@@ -888,7 +899,7 @@ async function loadAccessIdentity() {
 async function lockCurrent(message = '') {
   const account = state.accountName;
   await cacheCurrentForQuickUnlock();
-  removeSession(account);
+  await removeSession(account);
   clearSensitiveState();
   showAuthScreen(account);
   if (message) showToast(message);
@@ -897,7 +908,7 @@ async function lockCurrent(message = '') {
 async function lockAll(message = '', allowQuickUnlock = false) {
   if (allowQuickUnlock) await cacheCurrentForQuickUnlock();
   else discardQuickUnlock();
-  clearAllSessions();
+  await clearAllSessions();
   clearSensitiveState();
   showAuthScreen();
   if (message) showToast(message);
@@ -949,7 +960,7 @@ function updateVaultTitle() {
 function resetAutoLockTimer() {
   clearTimeout(state.autoLockTimer);
   if (!state.masterKey || Number(state.settings.autoLockMinutes) <= 0) return;
-  state.autoLockTimer = setTimeout(() => lockAll('由于长时间无操作，保险库已自动锁定', true), Number(state.settings.autoLockMinutes) * 60_000);
+  state.autoLockTimer = setTimeout(() => void lockAll('由于长时间无操作，保险库已自动锁定', true), Number(state.settings.autoLockMinutes) * 60_000);
 }
 
 function getGroups() {
@@ -3560,8 +3571,8 @@ function setupEvents() {
     state.settings = saveSettings({ ...state.settings, columnsPerRow: event.target.value });
     applyColumnsPerRow(true);
   });
-  $('#lock-current').addEventListener('click', () => { closeModal('settings-modal'); lockCurrent(); });
-  $('#lock-all').addEventListener('click', () => { closeModal('settings-modal'); lockAll('全部会话已锁定'); });
+  $('#lock-current').addEventListener('click', () => { closeModal('settings-modal'); void lockCurrent(); });
+  $('#lock-all').addEventListener('click', () => { closeModal('settings-modal'); void lockAll('全部会话已锁定'); });
   $('#login-other').addEventListener('click', () => { closeModal('settings-modal'); discardQuickUnlock(); clearSensitiveState(); showAuthScreen(); });
 
   $('#add-open').addEventListener('click', () => { void openNewKeyModal(); });
@@ -4026,7 +4037,7 @@ function setupEvents() {
       state.hiddenLockTimer = setTimeout(() => {
         state.hiddenLockTimer = null;
         if (document.hidden && state.masterKey && state.settings.lockOnHidden) {
-          lockAll('页面进入后台，保险库已锁定', true);
+          void lockAll('页面进入后台，保险库已锁定', true);
         }
       }, 300);
     }
