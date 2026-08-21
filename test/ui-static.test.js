@@ -629,4 +629,21 @@ describe('static application shell', () => {
     expect(html).toContain('id="confirm-modal"');
     expect(html).toContain('id="rename-group-modal"');
   });
+
+  it('autosaves encrypted drafts for new tokens and usage scenarios', () => {
+    for (const id of ['add-draft-status', 'add-draft-status-text', 'add-draft-clear', 'workflow-draft-status', 'workflow-draft-status-text', 'workflow-draft-clear']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html.match(/class="draft-status hidden" role="status" aria-live="polite"/g)).toHaveLength(2);
+    expect(app).toContain("import { EncryptedDraftStore } from './drafts.js'");
+    expect(app).toContain("scheduleFormDraft('token')");
+    expect(app).toContain("scheduleFormDraft('workflow')");
+    expect(app).toContain("await encryptedDrafts.load(state.keyHash, 'token', state.masterKey)");
+    expect(app).toContain("await encryptedDrafts.load(state.keyHash, 'workflow', state.masterKey)");
+    expect(app).toContain("if (!previous) clearFormDraft('workflow')");
+    expect(app).toContain("clearFormDraft('token')");
+    expect(app).toContain("if (type === 'workflow' && $('#workflow-id').value) return");
+    expect(styles).toContain('.draft-status {');
+    expect(styles).toContain('.draft-status button:focus-visible');
+  });
 });

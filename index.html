@@ -329,6 +329,7 @@
           <div><p class="eyebrow">新条目</p><h2 id="add-title">添加 2FA 密钥</h2></div>
           <button class="icon-btn" type="button" data-close-modal="add-modal" aria-label="关闭">×</button>
         </div>
+        <div id="add-draft-status" class="draft-status hidden" role="status" aria-live="polite"><span id="add-draft-status-text"></span><button id="add-draft-clear" type="button">清除草稿</button></div>
         <div class="segmented" role="tablist" aria-label="密钥输入方式">
           <button class="active" type="button" role="tab" aria-selected="true" data-add-tab="manual">手动</button>
           <button type="button" role="tab" aria-selected="false" data-add-tab="scan">摄像头</button>
@@ -491,6 +492,7 @@
     <div id="workflow-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-edit-title">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">加密保存</p><h2 id="workflow-edit-title">新建使用场景</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-edit-modal" aria-label="关闭">×</button></div>
+        <div id="workflow-draft-status" class="draft-status hidden" role="status" aria-live="polite"><span id="workflow-draft-status-text"></span><button id="workflow-draft-clear" type="button">清除草稿</button></div>
         <form id="workflow-form" novalidate>
           <input id="workflow-id" type="hidden">
           <div class="form-group"><label for="workflow-title">场景名称</label><input id="workflow-title" type="text" maxlength="100" aria-describedby="workflow-title-hint" placeholder="例如：发布网站" required><p id="workflow-title-hint" class="field-hint">用一句话说明这个场景要完成什么。</p></div>

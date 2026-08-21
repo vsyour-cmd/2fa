@@ -231,6 +231,9 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .input-action { position: absolute; top: 50%; right: 2px; min-width: 58px; height: 44px; padding: 0 9px; color: var(--primary); background: var(--primary-soft); border: 0; border-radius: 8px; font-size: 0.78rem; font-weight: 800; transform: translateY(-50%); }
 .input-action:active:not(:disabled) { transform: translateY(-50%) scale(0.97); }
 .field-hint { margin: 7px 0 0; color: var(--text-muted); font-size: 0.78rem; }
+.draft-status { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 12px; margin: -7px 0 14px; padding: 8px 10px 8px 12px; color: var(--primary-hover); background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 11px; font-size: 0.76rem; font-weight: 720; }
+.draft-status button { min-height: 32px; flex: 0 0 auto; padding: 4px 8px; color: var(--primary-hover); background: var(--surface-solid); border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 8px; font-size: 0.72rem; font-weight: 780; }
+.draft-status button:hover, .draft-status button:focus-visible { color: var(--primary); border-color: var(--primary); }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
 .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
@@ -840,6 +843,8 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .workflow-editor-tools { justify-content: space-between; }
   .workflow-link-heading { align-items: stretch; flex-direction: column; gap: 7px; }
   .workflow-create-key { width: 100%; min-height: 44px; }
+  .draft-status { align-items: flex-start; flex-direction: column; }
+  .draft-status button { width: 100%; min-height: 44px; }
   .workflow-note-actions { align-items: stretch; flex-direction: column; }
   .workflow-note-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-note-secondary-actions .small-btn { width: 100%; }

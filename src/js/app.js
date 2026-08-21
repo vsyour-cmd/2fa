@@ -30,6 +30,7 @@ import { renderMarkdown } from './markdown.js';
 import { generatePassword, generatePasswords } from './password-generator.js';
 import { encodeWorkflowSecretMarker } from './workflow-secrets.js';
 import { createConflictPlan, mergeConflictPlan } from './conflict.js';
+import { EncryptedDraftStore } from './drafts.js';
 import {
   ApiError,
   OfflineManager,
@@ -105,6 +106,10 @@ import {
 } from './utils.js';
 
 const offline = new OfflineManager();
+const encryptedDrafts = new EncryptedDraftStore();
+const DRAFT_SAVE_DELAY_MS = 500;
+const draftTimers = { token: null, workflow: null };
+const draftRevisions = { token: 0, workflow: 0 };
 const LAST_EXPORT_KEY = '2fa_last_export_v1';
 const BACKUP_DISMISSED_KEY = '2fa_backup_reminder_dismissed_v1';
 const BACKUP_REMINDER_DAYS = 30;
@@ -190,7 +195,148 @@ function useVaultData(raw) {
   state.pendingWorkflowEditorId = null;
 }
 
+const TOKEN_DRAFT_FIELD_IDS = [
+  'add-name',
+  'add-issuer',
+  'add-account',
+  'add-group',
+  'add-note',
+  'add-secret',
+  'add-icon',
+  'add-period',
+  'add-digits',
+  'add-algorithm',
+];
+
+function setDraftStatus(type, message = '') {
+  const prefix = type === 'token' ? 'add' : 'workflow';
+  $(`#${prefix}-draft-status-text`).textContent = message;
+  setHidden($(`#${prefix}-draft-status`), !message);
+}
+
+function cancelDraftSave(type) {
+  clearTimeout(draftTimers[type]);
+  draftTimers[type] = null;
+  draftRevisions[type] += 1;
+}
+
+function clearFormDraft(type) {
+  cancelDraftSave(type);
+  if (state.keyHash) encryptedDrafts.remove(state.keyHash, type);
+  setDraftStatus(type);
+}
+
+function readTokenDraftPayload() {
+  return {
+    version: 1,
+    fields: Object.fromEntries(TOKEN_DRAFT_FIELD_IDS.map((id) => [id, $(`#${id}`).value])),
+  };
+}
+
+function readWorkflowDraftPayload() {
+  return {
+    version: 1,
+    title: $('#workflow-title').value,
+    group: $('#workflow-group').value,
+    content: $('#workflow-content').value,
+    linkedKeys: state.editingWorkflowLinks.map((link) => ({
+      keyId: String(link.keyId || ''),
+      name: String(link.name || ''),
+      issuer: String(link.issuer || ''),
+      account: String(link.account || ''),
+    })),
+  };
+}
+
+function scheduleFormDraft(type) {
+  if (!state.masterKey || !state.keyHash) return;
+  if (type === 'workflow' && $('#workflow-id').value) return;
+  clearTimeout(draftTimers[type]);
+  const revision = ++draftRevisions[type];
+  const keyHash = state.keyHash;
+  const masterKey = state.masterKey;
+  setDraftStatus(type, '正在加密保存草稿…');
+  draftTimers[type] = setTimeout(async () => {
+    draftTimers[type] = null;
+    const payload = type === 'token' ? readTokenDraftPayload() : readWorkflowDraftPayload();
+    try {
+      const record = await encryptedDrafts.save(keyHash, type, payload, masterKey, () => (
+        revision === draftRevisions[type]
+        && state.keyHash === keyHash
+        && state.masterKey === masterKey
+      ));
+      if (record && revision === draftRevisions[type]) {
+        setDraftStatus(type, `草稿已加密保存 · ${formatDateTime(record.updatedAt)}`);
+      }
+    } catch (error) {
+      console.warn('Unable to save encrypted form draft', error);
+      if (revision === draftRevisions[type]) setDraftStatus(type, '草稿暂时无法保存，请勿关闭页面');
+    }
+  }, DRAFT_SAVE_DELAY_MS);
+}
+
+async function restoreTokenDraft() {
+  setDraftStatus('token');
+  if (!state.masterKey || !state.keyHash) return false;
+  const restored = await encryptedDrafts.load(state.keyHash, 'token', state.masterKey);
+  const fields = restored?.payload?.fields;
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return false;
+  for (const id of TOKEN_DRAFT_FIELD_IDS) {
+    if (typeof fields[id] === 'string') $(`#${id}`).value = fields[id];
+  }
+  setDraftStatus('token', `已恢复未提交的验证码草稿 · ${formatDateTime(restored.updatedAt)}`);
+  return true;
+}
+
+async function restoreWorkflowDraft() {
+  setDraftStatus('workflow');
+  if (!state.masterKey || !state.keyHash) return false;
+  const restored = await encryptedDrafts.load(state.keyHash, 'workflow', state.masterKey);
+  const payload = restored?.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  $('#workflow-title').value = typeof payload.title === 'string' ? payload.title.slice(0, 100) : '';
+  $('#workflow-group').value = typeof payload.group === 'string' ? payload.group.slice(0, 100) : '';
+  $('#workflow-content').value = typeof payload.content === 'string' ? payload.content.slice(0, 5000) : '';
+  state.editingWorkflowLinks = Array.isArray(payload.linkedKeys)
+    ? payload.linkedKeys.slice(0, 50).map((link) => ({
+      keyId: String(link?.keyId || '').slice(0, 200),
+      name: String(link?.name || '').slice(0, 200),
+      issuer: String(link?.issuer || '').slice(0, 200),
+      account: String(link?.account || '').slice(0, 320),
+    })).filter((link) => link.keyId)
+    : [];
+  setDraftStatus('workflow', `已恢复未提交的使用场景草稿 · ${formatDateTime(restored.updatedAt)}`);
+  return true;
+}
+
+async function openNewKeyModal() {
+  resetAddForm();
+  await restoreTokenDraft();
+  openModal('add-modal', '#add-name');
+}
+
+function clearTokenDraftAndForm() {
+  clearFormDraft('token');
+  resetAddForm();
+  $('#add-name').focus();
+}
+
+function clearWorkflowDraftAndForm() {
+  clearFormDraft('workflow');
+  $('#workflow-form').reset();
+  $('#workflow-id').value = '';
+  $('#workflow-group').value = selectedWorkflowGroupForNewNote();
+  state.editingWorkflowLinks = [];
+  renderWorkflowMarkdownPreview();
+  renderWorkflowKeyPicker();
+  $('#workflow-title').focus();
+}
+
 function clearSensitiveState() {
+  cancelDraftSave('token');
+  cancelDraftSave('workflow');
+  setDraftStatus('token');
+  setDraftStatus('workflow');
   state.masterKey = null;
   state.keyHash = '';
   state.salt = '';
@@ -1433,9 +1579,9 @@ function openWorkflowProtectionModal(mode, pendingEditorId = null) {
   else requestAnimationFrame(() => $(focusSelector, modal)?.focus());
 }
 
-function openWorkflowEditor(id = '') {
+async function openWorkflowEditor(id = '') {
   if (workflowEditAccessActive()) {
-    showWorkflowEditor(id);
+    await showWorkflowEditor(id);
     return;
   }
   openWorkflowProtectionModal(state.workflowProtection ? 'unlock' : 'setup', id);
@@ -1445,7 +1591,7 @@ function selectedWorkflowGroupForNewNote() {
   return ['__all', '__ungrouped'].includes(state.workflowGroupFilter) ? '' : state.workflowGroupFilter;
 }
 
-function showWorkflowEditor(id = '') {
+async function showWorkflowEditor(id = '') {
   const note = state.workflowNotes.find((item) => item.id === id);
   $('#workflow-form').reset();
   closeWorkflowKeyDropdown();
@@ -1456,16 +1602,19 @@ function showWorkflowEditor(id = '') {
   $('#workflow-content').value = note?.content || '';
   $('#workflow-edit-title').textContent = note ? '编辑使用场景' : '新建使用场景';
   state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
+  if (note) setDraftStatus('workflow');
+  else await restoreWorkflowDraft();
   renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
   openModal('workflow-edit-modal', '#workflow-title');
 }
 
-function openAddKeyFromWorkflow() {
+async function openAddKeyFromWorkflow() {
   hideError('#workflow-error');
   closeWorkflowKeyDropdown();
   state.workflowAddKeyReturn = true;
   resetAddForm();
+  await restoreTokenDraft();
   openModal('add-modal', '#add-name');
 }
 
@@ -1488,6 +1637,7 @@ function insertGeneratedWorkflowPassword() {
     if (textarea.value.length - (end - start) + insertion.length > textarea.maxLength) throw new Error('操作内容已达到长度上限，无法插入密码');
     textarea.setRangeText(insertion, start, end, 'end');
     renderWorkflowMarkdownPreview();
+    scheduleFormDraft('workflow');
     textarea.focus();
     showToast('已生成并插入隐藏密码，可在预览中复制');
   } catch (error) {
@@ -1534,7 +1684,7 @@ async function saveWorkflowProtectionFromForm(event) {
     state.workflowEditUnlockedUntil = Date.now() + WORKFLOW_EDIT_UNLOCK_MS;
     const pendingEditorId = state.pendingWorkflowEditorId;
     closeModal('workflow-protection-modal', false);
-    if (pendingEditorId !== null) showWorkflowEditor(pendingEditorId);
+    if (pendingEditorId !== null) await showWorkflowEditor(pendingEditorId);
     else showToast(mode === 'manage' || mode === 'recover' ? '场景编辑密码已更新' : '场景编辑密码已设置');
   } catch (error) {
     showError('#workflow-protection-error', error.message || '场景编辑密码处理失败');
@@ -1592,6 +1742,7 @@ async function saveWorkflowNote(event) {
     if (index >= 0) state.workflowNotes[index] = note;
     else state.workflowNotes.push(note);
     const cloudSaved = await saveVault({ silent: true, cloudRetries: 2 });
+    if (!previous) clearFormDraft('workflow');
     closeModal('workflow-edit-modal');
     state.editingWorkflowLinks = [];
     renderAll();
@@ -1900,6 +2051,7 @@ function fillAddFromOtpauth(parsed, message = '已识别二维码，请确认后
   $('#add-digits').value = String(parsed.digits || 6);
   $('#add-algorithm').value = parsed.algorithm || 'SHA-1';
   switchAddTab('manual');
+  scheduleFormDraft('token');
   showToast(message);
 }
 
@@ -1955,8 +2107,10 @@ async function addKeyFromForm(event) {
     const linkToWorkflow = state.workflowAddKeyReturn;
     if (linkToWorkflow && !state.editingWorkflowLinks.some((link) => link.keyId === key.id)) {
       state.editingWorkflowLinks.push(workflowLinkSnapshot(key));
+      scheduleFormDraft('workflow');
     }
     await saveVault();
+    clearFormDraft('token');
     closeModal('add-modal');
     resetAddForm();
     renderAll();
@@ -2006,6 +2160,7 @@ async function duplicateEditedKey() {
     $('#add-period').value = String(template.period);
     $('#add-digits').value = String(template.digits);
     $('#add-algorithm').value = template.algorithm;
+    scheduleFormDraft('token');
     openModal('add-modal', '#add-name');
     showToast('副本拥有相同密钥，两个条目会生成相同验证码', { duration: 4_000 });
   } catch (error) {
@@ -3335,16 +3490,22 @@ function setupEvents() {
   $('#lock-all').addEventListener('click', () => { closeModal('settings-modal'); lockAll('全部会话已锁定'); });
   $('#login-other').addEventListener('click', () => { closeModal('settings-modal'); discardQuickUnlock(); clearSensitiveState(); showAuthScreen(); });
 
-  $('#add-open').addEventListener('click', () => { resetAddForm(); openModal('add-modal', '#add-name'); });
-  $('[data-action="open-add"]').addEventListener('click', () => { resetAddForm(); openModal('add-modal', '#add-name'); });
-  $('#workflow-add-open').addEventListener('click', () => openWorkflowEditor());
-  $('[data-action="open-workflow-add"]').addEventListener('click', () => openWorkflowEditor());
+  $('#add-open').addEventListener('click', () => { void openNewKeyModal(); });
+  $('[data-action="open-add"]').addEventListener('click', () => { void openNewKeyModal(); });
+  $('#workflow-add-open').addEventListener('click', () => { void openWorkflowEditor(); });
+  $('[data-action="open-workflow-add"]').addEventListener('click', () => { void openWorkflowEditor(); });
   $('#workflow-sort').addEventListener('change', (event) => applyWorkflowSortMode(event.target.value, true));
   $('#workflow-columns').addEventListener('change', (event) => {
     state.settings = saveSettings({ ...state.settings, workflowColumnsPerRow: event.target.value });
     applyWorkflowColumnsPerRow(true);
   });
   $('#workflow-form').addEventListener('submit', saveWorkflowNote);
+  $('#workflow-form').addEventListener('input', () => scheduleFormDraft('workflow'));
+  $('#workflow-form').addEventListener('change', () => scheduleFormDraft('workflow'));
+  $('#add-form').addEventListener('input', () => scheduleFormDraft('token'));
+  $('#add-form').addEventListener('change', () => scheduleFormDraft('token'));
+  $('#add-draft-clear').addEventListener('click', clearTokenDraftAndForm);
+  $('#workflow-draft-clear').addEventListener('click', clearWorkflowDraftAndForm);
   $('#workflow-protection-form').addEventListener('submit', saveWorkflowProtectionFromForm);
   $('#workflow-protection-disable').addEventListener('click', disableWorkflowProtection);
   $('#workflow-protection-recover').addEventListener('click', () => openWorkflowProtectionModal('recover', state.pendingWorkflowEditorId));
@@ -3370,7 +3531,7 @@ function setupEvents() {
   $('#workflow-run-modal').addEventListener('modal:close', () => workflowSecretStores.run.clear());
   $('#workflow-content').addEventListener('input', renderWorkflowMarkdownPreview);
   $('#workflow-generate-secret').addEventListener('click', insertGeneratedWorkflowPassword);
-  $('#workflow-create-key').addEventListener('click', openAddKeyFromWorkflow);
+  $('#workflow-create-key').addEventListener('click', () => { void openAddKeyFromWorkflow(); });
   $('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker);
   $('#workflow-key-select').addEventListener('click', () => {
     if ($('#workflow-key-select').getAttribute('aria-expanded') === 'true') closeWorkflowKeyDropdown({ restoreFocus: true });
@@ -3383,6 +3544,7 @@ function setupEvents() {
     state.editingWorkflowLinks.push(workflowLinkSnapshot(key));
     $('#workflow-key-filter').value = '';
     renderWorkflowKeyPicker();
+    scheduleFormDraft('workflow');
     if (!$('#workflow-key-select').disabled) requestAnimationFrame(() => $('#workflow-key-filter').focus());
   });
   $('#workflow-key-combobox').addEventListener('keydown', (event) => {
@@ -3412,6 +3574,7 @@ function setupEvents() {
       [state.editingWorkflowLinks[index], state.editingWorkflowLinks[target]] = [state.editingWorkflowLinks[target], state.editingWorkflowLinks[index]];
     }
     renderWorkflowKeyPicker();
+    scheduleFormDraft('workflow');
   });
   $('#workflow-note-list').addEventListener('click', async (event) => {
     const groupTag = event.target.closest('[data-workflow-group-filter]');
@@ -3431,7 +3594,7 @@ function setupEvents() {
       await saveVault({ silent: true });
       renderWorkflowNotes();
     } else if (action === 'run') await openWorkflowRun(card.dataset.workflowId);
-    else if (action === 'edit') openWorkflowEditor(card.dataset.workflowId);
+    else if (action === 'edit') void openWorkflowEditor(card.dataset.workflowId);
     else if (action === 'delete') await deleteWorkflowNote(card.dataset.workflowId);
   });
   $('#workflow-run-keys').addEventListener('click', async (event) => {
@@ -3471,7 +3634,7 @@ function setupEvents() {
   $('#token-workflow-create').addEventListener('click', () => {
     closeModal('token-workflow-modal');
     setVaultView('workflow');
-    openWorkflowEditor();
+    void openWorkflowEditor();
   });
   for (const button of $$('[data-add-tab]')) button.addEventListener('click', () => switchAddTab(button.dataset.addTab));
   $('#add-form').addEventListener('submit', addKeyFromForm);
@@ -3621,12 +3784,9 @@ function setupEvents() {
       searchInput.select();
     } else if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLocaleLowerCase() === 'n') {
       event.preventDefault();
-      if (state.vaultView === 'workflow') openWorkflowEditor();
+      if (state.vaultView === 'workflow') void openWorkflowEditor();
       else if (state.vaultView === 'password') void generateRandomPasswords();
-      else {
-        resetAddForm();
-        openModal('add-modal', '#add-name');
-      }
+      else void openNewKeyModal();
     }
   });
   $('#duplicate-key').addEventListener('click', duplicateEditedKey);
