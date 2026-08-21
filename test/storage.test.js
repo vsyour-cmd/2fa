@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, OfflineManager, apiGet, apiGetAccessIdentity, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
+import { ApiError, DEFAULT_SETTINGS, OfflineManager, apiGet, apiGetAccessIdentity, apiSave, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -83,6 +83,29 @@ describe('vault account metadata', () => {
     const encoded = options.headers['X-Vault-Account'];
     expect(url).not.toContain(encodeURIComponent('中文账户'));
     expect(Buffer.from(encoded, 'base64url').toString('utf8')).toBe('中文账户');
+  });
+
+  it('requires an explicit JSON acknowledgement before treating a cloud save as successful', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('<!doctype html><title>Access login</title>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, updatedAt: 123 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const args = ['a'.repeat(64), 'encrypted-vault-data', '1234567890123456', 3, '个人'];
+
+    await expect(apiSave(...args)).rejects.toMatchObject({ name: 'ApiError', code: 'INVALID_RESPONSE' });
+    await expect(apiSave(...args)).rejects.toMatchObject({ name: 'ApiError', code: 'INVALID_SAVE_ACK' });
+    await expect(apiSave(...args)).resolves.toEqual({ success: true, updatedAt: 123 });
+    expect(ApiError).toBeTypeOf('function');
   });
 });
 

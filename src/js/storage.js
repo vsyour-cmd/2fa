@@ -30,10 +30,13 @@ export class ApiError extends Error {
 }
 
 async function parseApiResponse(response) {
-  let body = {};
+  let body;
   try {
     body = await response.json();
   } catch {
+    if (response.ok) {
+      throw new ApiError('云端返回了无效响应，可能需要重新登录 Cloudflare Access', 0, 'INVALID_RESPONSE');
+    }
     body = {};
   }
   if (!response.ok) {
@@ -77,7 +80,12 @@ export async function apiSave(keyHash, encryptedData, salt, version = 3, account
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ key: keyHash, data: encryptedData, salt, version, accountName }),
   });
-  return parseApiResponse(response);
+  const result = await parseApiResponse(response);
+  const updatedAt = Number(result?.updatedAt);
+  if (result?.success !== true || !Number.isFinite(updatedAt) || updatedAt <= 0) {
+    throw new ApiError('云端没有确认保存成功，请重试', 0, 'INVALID_SAVE_ACK');
+  }
+  return result;
 }
 
 export async function apiDelete(keyHash) {

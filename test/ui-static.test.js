@@ -191,7 +191,11 @@ describe('static application shell', () => {
     expect(app).toContain('data-workflow-link-action="up"');
     expect(app).toContain('data-workflow-run-key-id=');
     expect(app).toContain('await copyKeyCode(key, null)');
-    expect(app).toContain("'使用场景已创建'");
+    expect(app).toContain("const cloudSaved = await saveVault({ silent: true, cloudRetries: 2 })");
+    expect(app).toContain("const action = previous ? '使用场景已更新' : '使用场景已创建'");
+    expect(app).toContain('`${action}，已同步到云端`');
+    expect(app).toContain("actionLabel: '立即同步'");
+    expect(app).toContain('onAction: manualSync');
     expect(styles).toContain('.workflow-note-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.workflow-markdown-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.markdown-body code {');

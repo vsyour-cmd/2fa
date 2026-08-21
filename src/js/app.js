@@ -341,24 +341,41 @@ async function loadCloudRecord(keyHash, accountName = state.accountName) {
   return parseStoredCloudRecord(await apiGet(keyHash, accountName));
 }
 
-async function saveVault({ silent = false } = {}) {
+function cloudSaveRetryable(error) {
+  return !(error instanceof ApiError) || error.status === 0 || error.status === 429 || error.status >= 500;
+}
+
+async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
   if (!state.masterKey || !state.keyHash) return false;
   const encryptedData = await encryptJson(vaultPayload(), state.masterKey);
   if (offline.isOnline) {
-    try {
-      const result = await apiSave(state.keyHash, encryptedData, state.salt, VAULT_VERSION, state.accountName);
-      await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
-      return true;
-    } catch (error) {
-      console.error('Cloud save failed:', error);
-      if (error instanceof ApiError && error.status === 423) {
-        await lockAll(error.message);
-        return false;
+    let cloudError = null;
+    for (let attempt = 0; attempt <= cloudRetries; attempt += 1) {
+      try {
+        const result = await apiSave(state.keyHash, encryptedData, state.salt, VAULT_VERSION, state.accountName);
+        try {
+          await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION, Number(result.updatedAt));
+        } catch (cacheError) {
+          console.warn('Offline cache update after cloud save failed:', cacheError);
+        }
+        return true;
+      } catch (error) {
+        cloudError = error;
+        if (error instanceof ApiError && error.status === 423) {
+          await lockAll(error.message);
+          return false;
+        }
+        if (attempt < cloudRetries && cloudSaveRetryable(error)) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          continue;
+        }
+        break;
       }
-      await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
-      if (!silent) showToast('已保存到本机，云端同步失败');
-      return false;
     }
+    console.error('Cloud save failed:', cloudError);
+    await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
+    if (!silent) showToast('已保存到本机，云端同步失败');
+    return false;
   }
   await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
   if (!silent) showToast('已保存到本机（离线）');
@@ -1520,12 +1537,20 @@ async function saveWorkflowNote(event) {
     });
     if (index >= 0) state.workflowNotes[index] = note;
     else state.workflowNotes.push(note);
-    await saveVault();
+    const cloudSaved = await saveVault({ silent: true, cloudRetries: 2 });
     closeModal('workflow-edit-modal');
     state.editingWorkflowLinks = [];
     renderAll();
     setVaultView('workflow');
-    showToast(previous ? '使用场景已更新' : '使用场景已创建');
+    const action = previous ? '使用场景已更新' : '使用场景已创建';
+    if (cloudSaved) showToast(`${action}，已同步到云端`);
+    else {
+      showToast(`${action}，但当前仅保存在本机`, {
+        actionLabel: '立即同步',
+        onAction: manualSync,
+        duration: 10_000,
+      });
+    }
   } catch (error) {
     showError('#workflow-error', error.message);
   } finally {
