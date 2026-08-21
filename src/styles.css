@@ -546,12 +546,15 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .markdown-body blockquote { margin: 0.9em 0; padding: 8px 12px; color: var(--text-muted); background: var(--surface-solid); border-left: 4px solid var(--primary); border-radius: 0 8px 8px 0; }
 .markdown-body code { padding: 0.15em 0.4em; color: var(--text); background: var(--surface-solid); border: 1px solid var(--border); border-radius: 5px; font-family: var(--font-mono); font-size: 0.9em; }
 .markdown-code-block { position: relative; max-width: 100%; margin: 0.9em 0; }
-.markdown-code-copy { position: absolute; z-index: 1; top: 8px; right: 8px; display: inline-flex; min-height: 30px; align-items: center; gap: 5px; padding: 4px 9px; color: var(--text-muted); background: color-mix(in srgb, var(--surface-solid) 92%, transparent); border: 1px solid var(--border-strong); border-radius: 7px; box-shadow: var(--shadow-small); font-size: 0.7rem; font-weight: 760; backdrop-filter: blur(8px); }
-.markdown-code-copy svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.markdown-code-copy:hover { color: var(--primary); border-color: var(--primary); }
+.markdown-code-copy { position: absolute; z-index: 1; top: 2px; right: 2px; display: inline-grid; width: 44px; min-height: 44px; padding: 0; place-items: center; color: var(--text-muted); background: transparent; border: 0; border-radius: 10px; }
+.markdown-code-copy::before { position: absolute; inset: 6px; content: ""; background: color-mix(in srgb, var(--surface-solid) 92%, transparent); border: 1px solid var(--border-strong); border-radius: 7px; box-shadow: var(--shadow-small); backdrop-filter: blur(8px); }
+.markdown-code-copy svg { position: relative; z-index: 1; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.markdown-code-copy:hover { color: var(--primary); }
+.markdown-code-copy:hover::before { border-color: var(--primary); }
 .markdown-code-copy:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
-.markdown-code-copy.copied { color: var(--success); border-color: color-mix(in srgb, var(--success) 65%, var(--border)); }
-.markdown-body pre { max-width: 100%; margin: 0; padding: 48px 12px 12px; overflow: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: 10px; }
+.markdown-code-copy.copied { color: var(--success); }
+.markdown-code-copy.copied::before { border-color: color-mix(in srgb, var(--success) 65%, var(--border)); }
+.markdown-body pre { max-width: 100%; margin: 0; padding: 12px 44px 12px 12px; overflow: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: 10px; }
 .markdown-body pre code { padding: 0; background: transparent; border: 0; white-space: pre; }
 .markdown-body a { color: var(--primary); text-underline-offset: 3px; }
 .markdown-body hr { margin: 1.1em 0; border: 0; border-top: 1px solid var(--border-strong); }

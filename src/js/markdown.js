@@ -61,7 +61,7 @@ function injectCodeCopyMarkup(html) {
     <div class="markdown-code-block">
       <button type="button" class="markdown-code-copy" aria-label="复制代码块" title="复制代码">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>
-        <span>复制</span>
+        <span class="sr-only">复制</span>
       </button>
       ${codeBlock}
     </div>

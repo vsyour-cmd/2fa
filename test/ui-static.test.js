@@ -230,6 +230,7 @@ describe('static application shell', () => {
     expect(styles).toContain('.workflow-markdown-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain('.markdown-body code {');
     expect(styles).toContain('.markdown-code-copy {');
+    expect(styles).toContain('padding: 12px 44px 12px 12px');
     expect(app).toContain("event.target.closest('.markdown-code-copy')");
     expect(app).toContain("safeCopy.querySelectorAll('.markdown-secret-copy')");
     expect(app).toContain("copyText(safeCopy.textContent, '代码已复制')");

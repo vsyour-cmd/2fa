@@ -61,6 +61,7 @@ describe('safe Markdown rendering', () => {
     expect(markdown).toContain('function injectCodeCopyMarkup(html)');
     expect(markdown).toContain('class="markdown-code-copy"');
     expect(markdown).toContain('aria-label="复制代码块"');
+    expect(markdown).toContain('<span class="sr-only">复制</span>');
     expect(markdown).toContain('return injectCodeCopyMarkup(withSecrets)');
   });
 });
