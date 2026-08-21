@@ -507,6 +507,21 @@ function offlineCloudBase(record) {
   return 0;
 }
 
+async function persistLocalVaultSnapshot(encryptedData, cloudError = null) {
+  try {
+    const saved = await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
+    if (!saved) throw new Error('IndexedDB unavailable');
+  } catch (error) {
+    console.error('Local encrypted vault save failed:', error);
+    const failure = new Error(cloudError
+      ? '云端和本机都未能保存，请保持页面开启并重试或立即导出加密备份'
+      : '浏览器无法保存本机数据，请保持页面开启并重试或立即导出加密备份');
+    failure.code = 'PERSISTENCE_FAILED';
+    failure.cause = cloudError || error;
+    throw failure;
+  }
+}
+
 async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
   if (!state.masterKey || !state.keyHash) return false;
   const encryptedData = await encryptJson(vaultPayload(), state.masterKey);
@@ -543,7 +558,7 @@ async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
       }
     }
     console.error('Cloud save failed:', cloudError);
-    await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
+    await persistLocalVaultSnapshot(encryptedData, cloudError);
     if (cloudError instanceof ApiError && cloudError.code === 'VERSION_CONFLICT') {
       showToast('另一设备已更新云端；当前修改已保存在本机，请处理同步冲突', {
         duration: 10_000,
@@ -555,7 +570,7 @@ async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
     } else if (!silent) showToast('已保存到本机，云端同步失败');
     return false;
   }
-  await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
+  await persistLocalVaultSnapshot(encryptedData);
   if (!silent) showToast('已保存到本机（离线）');
   return false;
 }
@@ -1716,15 +1731,18 @@ async function saveWorkflowNote(event) {
   hideError('#workflow-error');
   const button = $('#workflow-submit');
   setBusy(button, true, '正在保存…');
+  let index = -1;
+  let previous = null;
+  let pendingNote = null;
   try {
     const id = $('#workflow-id').value;
     const title = $('#workflow-title').value.trim();
     const content = $('#workflow-content').value.trim();
     if (!title) throw new Error('请输入场景名称');
     if (!content) throw new Error('请填写操作内容');
-    const index = state.workflowNotes.findIndex((note) => note.id === id);
-    const previous = index >= 0 ? state.workflowNotes[index] : null;
-    const note = normalizeWorkflowNote({
+    index = state.workflowNotes.findIndex((note) => note.id === id);
+    previous = index >= 0 ? state.workflowNotes[index] : null;
+    pendingNote = normalizeWorkflowNote({
       id: previous?.id || generateId(),
       title,
       group: $('#workflow-group').value,
@@ -1739,8 +1757,8 @@ async function saveWorkflowNote(event) {
       createdAt: previous?.createdAt || Date.now(),
       updatedAt: Date.now(),
     });
-    if (index >= 0) state.workflowNotes[index] = note;
-    else state.workflowNotes.push(note);
+    if (index >= 0) state.workflowNotes[index] = pendingNote;
+    else state.workflowNotes.push(pendingNote);
     const cloudSaved = await saveVault({ silent: true, cloudRetries: 2 });
     if (!previous) clearFormDraft('workflow');
     closeModal('workflow-edit-modal');
@@ -1757,6 +1775,10 @@ async function saveWorkflowNote(event) {
       });
     }
   } catch (error) {
+    if (pendingNote && error.code === 'PERSISTENCE_FAILED') {
+      if (previous && index >= 0) state.workflowNotes[index] = previous;
+      else state.workflowNotes = state.workflowNotes.filter((note) => note.id !== pendingNote.id);
+    }
     showError('#workflow-error', error.message);
   } finally {
     setBusy(button, false);
@@ -2099,14 +2121,18 @@ async function addKeyFromForm(event) {
   hideError('#add-error');
   const button = $('#add-submit');
   setBusy(button, true, '正在添加…');
+  let pendingKey = null;
+  let linkedToWorkflow = false;
   try {
     const key = readKeyForm('add');
+    pendingKey = key;
     await validateKeyInput(key);
     key.order = Math.max(-1, ...state.keys.map((item) => Number(item.order || 0))) + 1;
     state.keys.push(key);
     const linkToWorkflow = state.workflowAddKeyReturn;
     if (linkToWorkflow && !state.editingWorkflowLinks.some((link) => link.keyId === key.id)) {
       state.editingWorkflowLinks.push(workflowLinkSnapshot(key));
+      linkedToWorkflow = true;
       scheduleFormDraft('workflow');
     }
     await saveVault();
@@ -2116,6 +2142,13 @@ async function addKeyFromForm(event) {
     renderAll();
     showToast(linkToWorkflow ? '验证码已创建并关联到当前场景' : '密钥已添加');
   } catch (error) {
+    if (pendingKey && error.code === 'PERSISTENCE_FAILED') {
+      state.keys = state.keys.filter((key) => key.id !== pendingKey.id);
+      if (linkedToWorkflow) {
+        state.editingWorkflowLinks = state.editingWorkflowLinks.filter((link) => link.keyId !== pendingKey.id);
+        scheduleFormDraft('workflow');
+      }
+    }
     showError('#add-error', error.message);
   } finally {
     setBusy(button, false);

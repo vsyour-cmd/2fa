@@ -153,7 +153,10 @@ export class OfflineManager {
     const value = await this.#request('readonly', (store) => store.get(keyHash));
     if (!value) return null;
     const maxAge = this.cacheExpiryDays * 24 * 60 * 60 * 1000;
-    if (Date.now() - value.cachedAt > maxAge) {
+    // A locally modified record may be the only copy of the user's latest
+    // vault. Cache expiry is only safe for snapshots already confirmed by the
+    // cloud; pending local changes must survive until they are synced.
+    if (!value.locallyModified && Date.now() - value.cachedAt > maxAge) {
       await this.delete(keyHash);
       return null;
     }

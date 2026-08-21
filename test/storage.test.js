@@ -10,6 +10,32 @@ function memoryStorage(initial = {}) {
   };
 }
 
+function fakeIndexedDb(initial = {}) {
+  const values = new Map(Object.entries(initial));
+  const request = (operation) => {
+    const pending = {};
+    queueMicrotask(() => {
+      try {
+        pending.result = operation();
+        pending.onsuccess?.();
+      } catch (error) {
+        pending.error = error;
+        pending.onerror?.();
+      }
+    });
+    return pending;
+  };
+  return {
+    values,
+    transaction: () => ({
+      objectStore: () => ({
+        get: (key) => request(() => values.get(key)),
+        delete: (key) => request(() => values.delete(key)),
+      }),
+    }),
+  };
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('settings migration', () => {
@@ -60,6 +86,19 @@ describe('offline conflict detection', () => {
     unavailableManager.db = null;
     unavailableManager.init = vi.fn().mockRejectedValue(new Error('IndexedDB unavailable'));
     await expect(unavailableManager.save('hash', 'encrypted', 'salt', 3)).resolves.toBe(false);
+  });
+
+  it('never expires the only unsynced local copy but still expires clean cloud snapshots', async () => {
+    const dirty = { keyHash: 'dirty', cachedAt: 0, locallyModified: true };
+    const clean = { keyHash: 'clean', cachedAt: 0, locallyModified: false };
+    const database = fakeIndexedDb({ dirty, clean });
+    const offlineManager = new OfflineManager();
+    offlineManager.db = database;
+
+    await expect(offlineManager.get('dirty')).resolves.toEqual(dirty);
+    expect(database.values.has('dirty')).toBe(true);
+    await expect(offlineManager.get('clean')).resolves.toBeNull();
+    expect(database.values.has('clean')).toBe(false);
   });
 
   it('uploads a local edit automatically when its cloud base is unchanged', () => {
