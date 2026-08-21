@@ -55,6 +55,13 @@ describe('settings migration', () => {
 describe('offline conflict detection', () => {
   const manager = Object.create(OfflineManager.prototype);
 
+  it('reports a failed local snapshot instead of allowing sync to continue', async () => {
+    const unavailableManager = Object.create(OfflineManager.prototype);
+    unavailableManager.db = null;
+    unavailableManager.init = vi.fn().mockRejectedValue(new Error('IndexedDB unavailable'));
+    await expect(unavailableManager.save('hash', 'encrypted', 'salt', 3)).resolves.toBe(false);
+  });
+
   it('uploads a local edit automatically when its cloud base is unchanged', () => {
     expect(manager.detectConflict({ locallyModified: true, baseCloudUpdatedAt: 100 }, 100)).toBe(false);
   });

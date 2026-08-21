@@ -122,9 +122,9 @@ export class OfflineManager {
 
   async save(keyHash, encryptedData, salt, version, cloudUpdatedAt = null) {
     if (!this.db) {
-      try { await this.init(); } catch { return; }
+      try { await this.init(); } catch { return false; }
     }
-    if (!this.db) return;
+    if (!this.db) return false;
     const now = Date.now();
     const previous = await this.#request('readonly', (store) => store.get(keyHash));
     const isCloudSnapshot = cloudUpdatedAt !== null;
@@ -142,6 +142,7 @@ export class OfflineManager {
       locallyModified: !isCloudSnapshot,
     };
     await this.#request('readwrite', (store) => store.put(value));
+    return true;
   }
 
   async get(keyHash) {

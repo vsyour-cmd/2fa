@@ -382,6 +382,12 @@ async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
   return false;
 }
 
+async function preserveCurrentVaultForManualSync() {
+  const encryptedData = await encryptJson(vaultPayload(), state.masterKey);
+  const saved = await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
+  if (!saved) throw new Error('无法保存当前本机数据，已取消同步以防止数据被覆盖');
+}
+
 function scheduleSave() {
   clearTimeout(state.saveTimer);
   state.saveTimer = setTimeout(() => saveVault({ silent: true }), 900);
@@ -2857,11 +2863,12 @@ async function changeMasterPassword(event) {
   }
 }
 
-async function performSyncCheck() {
+async function performSyncCheck({ preserveCurrentLocal = false } = {}) {
   if (!state.masterKey || !state.keyHash || !offline.isOnline) {
     return { ok: false, message: '当前离线，无法与云端同步' };
   }
   try {
+    if (preserveCurrentLocal) await preserveCurrentVaultForManualSync();
     const cloud = await loadCloudRecord(state.keyHash);
     const local = await offline.get(state.keyHash);
     if (!cloud.exists) {
@@ -2921,7 +2928,7 @@ async function manualSync() {
   button.classList.add('syncing');
   button.setAttribute('aria-busy', 'true');
   try {
-    const result = await performSyncCheck();
+    const result = await performSyncCheck({ preserveCurrentLocal: true });
     if (!result || result.conflict) return;
     showToast(result.message, result.ok ? undefined : { duration: 8_000 });
   } finally {

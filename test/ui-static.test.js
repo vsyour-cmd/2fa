@@ -572,8 +572,12 @@ describe('static application shell', () => {
     expect(html).toContain('id="sync-now"');
     expect(html).toContain('aria-label="立即与云端同步"');
     expect(app).toContain("$('#sync-now').addEventListener('click', manualSync)");
-    expect(app).toContain('async function performSyncCheck()');
+    expect(app).toContain('async function performSyncCheck({ preserveCurrentLocal = false } = {})');
     expect(app).toContain('async function manualSync()');
+    expect(app).toContain('async function preserveCurrentVaultForManualSync()');
+    expect(app).toContain('if (!saved) throw new Error(\'无法保存当前本机数据，已取消同步以防止数据被覆盖\')');
+    expect(app).toContain('const result = await performSyncCheck({ preserveCurrentLocal: true })');
+    expect(app.indexOf('if (preserveCurrentLocal) await preserveCurrentVaultForManualSync();')).toBeLessThan(app.indexOf('const cloud = await loadCloudRecord(state.keyHash);'));
     expect(app).toContain("button.classList.add('syncing')");
     expect(app).toContain('showToast(result.message');
     expect(styles).toContain('.icon-btn.syncing svg { animation: app-boot-spin 900ms linear infinite; }');
