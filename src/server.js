@@ -431,10 +431,25 @@ app.delete('/api/data', (req, res) => {
     if (!isValidKey(key)) return res.status(400).json({ error: 'Invalid key' });
     const normalizedKey = key.toLowerCase();
     const profile = getProfile(normalizedKey);
-    db.transaction(() => {
+    const expectedUpdatedAt = Number(req.query.expectedUpdatedAt);
+    if (!Number.isSafeInteger(expectedUpdatedAt) || expectedUpdatedAt < 0) {
+      return res.status(428).json({ error: '删除前必须确认云端版本', code: 'VERSION_REQUIRED' });
+    }
+    const removed = db.transaction(() => {
+      const current = db.prepare('SELECT updated_at FROM data_store WHERE key = ?').get(normalizedKey);
+      const currentUpdatedAt = Number(current?.updated_at || 0);
+      if (currentUpdatedAt !== expectedUpdatedAt) return { success: false, currentUpdatedAt };
       db.prepare('DELETE FROM data_store WHERE key = ?').run(normalizedKey);
       db.prepare('DELETE FROM user_profiles WHERE key = ?').run(normalizedKey);
+      return { success: true };
     })();
+    if (!removed.success) {
+      return res.status(409).json({
+        error: '另一设备已经更新了云端数据，已取消删除',
+        code: 'VERSION_CONFLICT',
+        currentUpdatedAt: removed.currentUpdatedAt,
+      });
+    }
     writeAudit(req, {
       actor: profile?.accountName || 'vault-user', action: 'vault.delete', targetKey: normalizedKey,
       targetLabel: profile?.accountName || '', result: 'success', details: '删除旧版加密保险库',

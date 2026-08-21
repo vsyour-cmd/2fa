@@ -403,11 +403,26 @@ async function handleDelete(request, url, env, accessUser) {
   const key = url.searchParams.get('key');
   if (!isValidKey(key)) return jsonResponse({ error: 'Invalid key' }, 400);
   const normalizedKey = key.toLowerCase();
+  const expectedUpdatedAtValue = url.searchParams.get('expectedUpdatedAt');
+  const expectedUpdatedAt = Number(expectedUpdatedAtValue);
+  if (expectedUpdatedAtValue === null || !Number.isSafeInteger(expectedUpdatedAt) || expectedUpdatedAt < 0) {
+    return jsonResponse({ error: '删除前必须确认云端版本', code: 'VERSION_REQUIRED' }, 428);
+  }
   const profile = await getUserProfile(env, normalizedKey);
   if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
     return accessOwnerDenied(env, request, profile, accessUser, 'vault.delete_denied', normalizedKey);
   }
-  await vaultCoordinator(env, normalizedKey).remove();
+  const coordinated = await vaultCoordinator(env, normalizedKey).remove(
+    expectedUpdatedAt,
+    await legacyVaultRecord(env, normalizedKey),
+  );
+  if (!coordinated.removed) {
+    return jsonResponse({
+      error: '另一设备已经更新了云端数据，已取消删除',
+      code: 'VERSION_CONFLICT',
+      currentUpdatedAt: coordinated.currentUpdatedAt,
+    }, 409);
+  }
   await env.DATA_KV.delete(normalizedKey);
   await env.DATA_KV.delete(`${USER_PREFIX}${normalizedKey}`);
   await writeAudit(env, request, {
@@ -516,7 +531,11 @@ async function handleAdminVaultReset(request, env, session, keyHash) {
   const archiveKey = `${ARCHIVE_PREFIX}${keyHash}:${now}`;
   const archivedUntil = now + ARCHIVE_RETENTION_SECONDS * 1000;
   await env.DATA_KV.put(archiveKey, JSON.stringify({ data: JSON.stringify(record), archivedAt: now, archivedUntil }), { expirationTtl: ARCHIVE_RETENTION_SECONDS });
-  await coordinator.remove();
+  const removed = await coordinator.remove(record.updatedAt);
+  if (!removed.removed) {
+    await env.DATA_KV.delete(archiveKey);
+    return jsonResponse({ error: '保险库刚刚发生更新，请刷新后再重置', code: 'VERSION_CONFLICT' }, 409);
+  }
   await env.DATA_KV.delete(keyHash);
   const next = await putUserProfile(env, {
     ...profile, status: 'reset_required', hasVault: false, resetAt: now, archiveKey, archivedUntil, updatedAt: now,

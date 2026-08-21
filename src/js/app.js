@@ -608,6 +608,7 @@ function loginCandidates(password, accountName) {
 
 async function migrateLegacyVault(password, legacyHash) {
   if (!offline.isOnline) return;
+  const legacyUpdatedAt = Number(state.cloudUpdatedAt || 0);
   const newHash = await deriveKeyHash(password, state.accountName, 'scoped');
   const newSalt = generateSalt();
   const newKey = await deriveKey(password, newSalt, PBKDF2_ITERATIONS.CURRENT);
@@ -617,6 +618,18 @@ async function migrateLegacyVault(password, legacyHash) {
   if (!verification.exists) throw new Error('新账户数据验证失败');
   await decryptJson(verification.encryptedData, newKey);
 
+  try {
+    await apiDelete(legacyHash, legacyUpdatedAt);
+  } catch (error) {
+    try { await apiDelete(newHash, Number(result.updatedAt)); } catch (cleanupError) {
+      console.warn('Unable to clean up cancelled legacy migration copy:', cleanupError);
+    }
+    if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
+      throw new Error('另一设备在迁移期间更新了旧保险库，迁移已取消，请重新登录后再试');
+    }
+    throw error;
+  }
+
   state.keyHash = newHash;
   state.salt = newSalt;
   state.masterKey = newKey;
@@ -624,14 +637,8 @@ async function migrateLegacyVault(password, legacyHash) {
   state.cloudUpdatedAt = Number(result.updatedAt);
   await offline.save(newHash, encrypted, newSalt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
   await rememberCurrentSession();
-  try {
-    await apiDelete(legacyHash);
-    await offline.delete(legacyHash);
-    showToast('旧版账户已安全迁移');
-  } catch (error) {
-    console.warn('Legacy cleanup deferred:', error);
-    showToast('新版数据已保存，旧数据尚未清理');
-  }
+  await offline.delete(legacyHash);
+  showToast('旧版账户已安全迁移');
 }
 
 async function unlockWithPassword(password, accountName) {
@@ -3068,6 +3075,11 @@ async function changeMasterPassword(event) {
     if (!await aesKeysEqual(currentDerived, state.masterKey)) throw new Error('当前密码错误');
 
     const oldHash = state.keyHash;
+    const oldUpdatedAt = Number(state.cloudUpdatedAt || 0);
+    const latestOldRecord = await loadCloudRecord(oldHash);
+    if (!latestOldRecord.exists || Number(latestOldRecord.updatedAt) !== oldUpdatedAt) {
+      throw new Error('另一设备已更新当前保险库，请先同步后再修改主密码');
+    }
     const nextHash = await deriveKeyHash(nextPassword, state.accountName, 'scoped');
     if ((await loadCloudRecord(nextHash)).exists) throw new Error('新密码对应的保险库已存在');
     const nextSalt = generateSalt();
@@ -3077,6 +3089,17 @@ async function changeMasterPassword(event) {
     const verification = await loadCloudRecord(nextHash);
     if (!verification.exists) throw new Error('新密码数据验证失败，旧数据已保留');
     await decryptJson(verification.encryptedData, nextKey);
+    try {
+      await apiDelete(oldHash, oldUpdatedAt);
+    } catch (error) {
+      try { await apiDelete(nextHash, Number(result.updatedAt)); } catch (cleanupError) {
+        console.warn('Unable to clean up cancelled password change copy:', cleanupError);
+      }
+      if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
+        throw new Error('另一设备在改密期间更新了保险库，改密已取消，请同步后重试');
+      }
+      throw error;
+    }
     const passwordHistoryPreserved = await reencryptPasswordHistory(nextKey);
 
     state.keyHash = nextHash;
@@ -3086,12 +3109,7 @@ async function changeMasterPassword(event) {
     state.cloudUpdatedAt = Number(result.updatedAt);
     await offline.save(nextHash, encrypted, nextSalt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
     await rememberCurrentSession();
-    try {
-      await apiDelete(oldHash);
-      await offline.delete(oldHash);
-    } catch (cleanupError) {
-      console.warn('Old password data cleanup deferred:', cleanupError);
-    }
+    await offline.delete(oldHash);
     closeModal('change-password-modal');
     $('#change-password-form').reset();
     showToast(passwordHistoryPreserved ? '主密码已修改' : '主密码已修改；无法重新加密的本地密码历史已清空');

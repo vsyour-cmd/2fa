@@ -46,7 +46,17 @@ export class VaultCoordinator extends DurableObject {
     return record;
   }
 
-  async remove() {
+  async remove(expectedUpdatedAt, legacyRecord = null) {
+    let current = await this.ctx.storage.get(VAULT_STORAGE_KEY);
+    if (!current && validRecord(legacyRecord)) {
+      current = legacyRecord;
+      await this.ctx.storage.put(VAULT_STORAGE_KEY, current);
+    }
+    const currentUpdatedAt = Number(current?.updatedAt || 0);
+    if (Number(expectedUpdatedAt) !== currentUpdatedAt) {
+      return { removed: false, currentUpdatedAt };
+    }
     await this.ctx.storage.delete(VAULT_STORAGE_KEY);
+    return { removed: true, currentUpdatedAt, record: current || null };
   }
 }

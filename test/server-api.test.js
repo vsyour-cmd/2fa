@@ -118,7 +118,14 @@ describe('Express data API', () => {
   });
 
   it('deletes an existing record', async () => {
-    const deleted = await request(`/api/data?key=${key}`, { method: 'DELETE' });
+    const current = await request(`/api/data?key=${key}`);
+    const missingVersion = await request(`/api/data?key=${key}`, { method: 'DELETE' });
+    expect(missingVersion.response.status).toBe(428);
+    const stale = await request(`/api/data?key=${key}&expectedUpdatedAt=0`, { method: 'DELETE' });
+    expect(stale.response.status).toBe(409);
+    expect(stale.body).toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    const deleted = await request(`/api/data?key=${key}&expectedUpdatedAt=${current.body.updatedAt}`, { method: 'DELETE' });
     expect(deleted.response.status).toBe(200);
     expect(deleted.body).toEqual({ success: true });
 

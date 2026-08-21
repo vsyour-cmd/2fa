@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, DEFAULT_SETTINGS, OfflineManager, apiGet, apiGetAccessIdentity, apiSave, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
+import { ApiError, DEFAULT_SETTINGS, OfflineManager, apiDelete, apiGet, apiGetAccessIdentity, apiSave, getQuickUnlockConfig, loadSettings, removeQuickUnlockConfig, saveQuickUnlockConfig, saveSettings } from '../src/js/storage.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -153,6 +153,18 @@ describe('vault account metadata', () => {
     await expect(apiSave(...args)).resolves.toEqual({ success: true, updatedAt: 123 });
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ expectedUpdatedAt: 77 });
     expect(ApiError).toBeTypeOf('function');
+  });
+
+  it('requires and sends the expected cloud version when deleting a migrated vault', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(apiDelete('a'.repeat(64))).rejects.toMatchObject({ code: 'VERSION_REQUIRED' });
+    await expect(apiDelete('a'.repeat(64), 123)).resolves.toEqual({ success: true });
+    expect(fetchMock.mock.calls[0][0]).toContain(`key=${'a'.repeat(64)}`);
+    expect(fetchMock.mock.calls[0][0]).toContain('expectedUpdatedAt=123');
   });
 });
 

@@ -88,8 +88,12 @@ export async function apiSave(keyHash, encryptedData, salt, version = 3, account
   return result;
 }
 
-export async function apiDelete(keyHash) {
-  const response = await fetch(`/api/data?key=${encodeURIComponent(keyHash)}`, {
+export async function apiDelete(keyHash, expectedUpdatedAt) {
+  if (!Number.isSafeInteger(expectedUpdatedAt) || expectedUpdatedAt < 0) {
+    throw new ApiError('删除前必须确认云端版本', 0, 'VERSION_REQUIRED');
+  }
+  const params = new URLSearchParams({ key: keyHash, expectedUpdatedAt: String(expectedUpdatedAt) });
+  const response = await fetch(`/api/data?${params.toString()}`, {
     method: 'DELETE',
     headers: { Accept: 'application/json' },
   });

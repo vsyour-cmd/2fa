@@ -177,7 +177,11 @@ describe('Cloudflare Worker API', () => {
     expect(record.exists).toBe(true);
     expect(JSON.parse(record.data)).toMatchObject({ encryptedData: 'encrypted-payload-long-enough', salt: 'base64-salt-value', version: 3 });
 
-    expect((await fetchWorker(request(`/api/data?key=${key}`, { method: 'DELETE' }), env)).status).toBe(200);
+    expect((await fetchWorker(request(`/api/data?key=${key}`, { method: 'DELETE' }), env)).status).toBe(428);
+    const staleDelete = await fetchWorker(request(`/api/data?key=${key}&expectedUpdatedAt=0`, { method: 'DELETE' }), env);
+    expect(staleDelete.status).toBe(409);
+    expect(await staleDelete.json()).toMatchObject({ code: 'VERSION_CONFLICT' });
+    expect((await fetchWorker(request(`/api/data?key=${key}&expectedUpdatedAt=${record.updatedAt}`, { method: 'DELETE' }), env)).status).toBe(200);
     expect(await (await fetchWorker(request(`/api/data?key=${key}`), env)).json()).toMatchObject({ exists: false });
   });
 
