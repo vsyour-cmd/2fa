@@ -124,6 +124,7 @@ const state = {
   keyHash: '',
   salt: '',
   accountName: '',
+  cloudUpdatedAt: 0,
   keyIterations: PBKDF2_ITERATIONS.CURRENT,
   keys: [],
   deletedItems: [],
@@ -192,6 +193,7 @@ function clearSensitiveState() {
   state.keyHash = '';
   state.salt = '';
   state.accountName = '';
+  state.cloudUpdatedAt = 0;
   state.keys = [];
   state.deletedItems = [];
   state.workflowNotes = [];
@@ -346,6 +348,16 @@ function cloudSaveRetryable(error) {
   return !(error instanceof ApiError) || error.status === 0 || error.status === 429 || error.status >= 500;
 }
 
+function offlineCloudBase(record) {
+  const baseCloudUpdatedAt = Number(record?.baseCloudUpdatedAt);
+  if (Number.isFinite(baseCloudUpdatedAt) && baseCloudUpdatedAt >= 0) return baseCloudUpdatedAt;
+  if (!record?.locallyModified) {
+    const updatedAt = Number(record?.updatedAt);
+    if (Number.isFinite(updatedAt) && updatedAt >= 0) return updatedAt;
+  }
+  return 0;
+}
+
 async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
   if (!state.masterKey || !state.keyHash) return false;
   const encryptedData = await encryptJson(vaultPayload(), state.masterKey);
@@ -353,7 +365,15 @@ async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
     let cloudError = null;
     for (let attempt = 0; attempt <= cloudRetries; attempt += 1) {
       try {
-        const result = await apiSave(state.keyHash, encryptedData, state.salt, VAULT_VERSION, state.accountName);
+        const result = await apiSave(
+          state.keyHash,
+          encryptedData,
+          state.salt,
+          VAULT_VERSION,
+          state.accountName,
+          state.cloudUpdatedAt,
+        );
+        state.cloudUpdatedAt = Number(result.updatedAt);
         try {
           await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION, Number(result.updatedAt));
         } catch (cacheError) {
@@ -375,7 +395,15 @@ async function saveVault({ silent = false, cloudRetries = 0 } = {}) {
     }
     console.error('Cloud save failed:', cloudError);
     await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
-    if (!silent) showToast('已保存到本机，云端同步失败');
+    if (cloudError instanceof ApiError && cloudError.code === 'VERSION_CONFLICT') {
+      showToast('另一设备已更新云端；当前修改已保存在本机，请处理同步冲突', {
+        duration: 10_000,
+        actionLabel: '处理冲突',
+        onAction: manualSync,
+      });
+    } else if (cloudError instanceof ApiError && cloudError.code === 'VERSION_REQUIRED') {
+      showToast('页面版本过旧，当前修改已保存在本机；请刷新页面后同步', { duration: 10_000 });
+    } else if (!silent) showToast('已保存到本机，云端同步失败');
     return false;
   }
   await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION);
@@ -420,7 +448,7 @@ async function migrateLegacyVault(password, legacyHash) {
   const newSalt = generateSalt();
   const newKey = await deriveKey(password, newSalt, PBKDF2_ITERATIONS.CURRENT);
   const encrypted = await encryptJson(vaultPayload(), newKey);
-  const result = await apiSave(newHash, encrypted, newSalt, VAULT_VERSION, state.accountName);
+  const result = await apiSave(newHash, encrypted, newSalt, VAULT_VERSION, state.accountName, 0);
   const verification = await loadCloudRecord(newHash);
   if (!verification.exists) throw new Error('新账户数据验证失败');
   await decryptJson(verification.encryptedData, newKey);
@@ -429,6 +457,7 @@ async function migrateLegacyVault(password, legacyHash) {
   state.salt = newSalt;
   state.masterKey = newKey;
   state.keyIterations = PBKDF2_ITERATIONS.CURRENT;
+  state.cloudUpdatedAt = Number(result.updatedAt);
   await offline.save(newHash, encrypted, newSalt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
   await rememberCurrentSession();
   try {
@@ -485,6 +514,9 @@ async function unlockWithPassword(password, accountName) {
       state.salt = record.salt;
       state.accountName = normalizedAccount;
       state.keyIterations = candidate.iterations;
+      state.cloudUpdatedAt = recordSource === 'cloud'
+        ? Number(record.updatedAt || 0)
+        : offlineCloudBase(record);
       useVaultData(raw);
       if (recordSource === 'cloud') {
         try {
@@ -528,6 +560,7 @@ async function setupAccount(password, accountName) {
   state.salt = generateSalt();
   state.masterKey = await deriveKey(password, state.salt, PBKDF2_ITERATIONS.CURRENT);
   state.keyIterations = PBKDF2_ITERATIONS.CURRENT;
+  state.cloudUpdatedAt = 0;
   state.keys = [];
   state.deletedItems = [];
   state.workflowNotes = [];
@@ -576,6 +609,9 @@ async function restoreSession(accountName) {
       return false;
     }
     useVaultData(await decryptJson(record.encryptedData, state.masterKey));
+    state.cloudUpdatedAt = recordSource === 'cloud'
+      ? Number(record.updatedAt || 0)
+      : offlineCloudBase(record);
     if (recordSource === 'cloud') {
       try {
         await offline.save(
@@ -2831,7 +2867,7 @@ async function changeMasterPassword(event) {
     const nextSalt = generateSalt();
     const nextKey = await deriveKey(nextPassword, nextSalt, PBKDF2_ITERATIONS.CURRENT);
     const encrypted = await encryptJson(vaultPayload(), nextKey);
-    const result = await apiSave(nextHash, encrypted, nextSalt, VAULT_VERSION, state.accountName);
+    const result = await apiSave(nextHash, encrypted, nextSalt, VAULT_VERSION, state.accountName, 0);
     const verification = await loadCloudRecord(nextHash);
     if (!verification.exists) throw new Error('新密码数据验证失败，旧数据已保留');
     await decryptJson(verification.encryptedData, nextKey);
@@ -2841,6 +2877,7 @@ async function changeMasterPassword(event) {
     state.salt = nextSalt;
     state.masterKey = nextKey;
     state.keyIterations = PBKDF2_ITERATIONS.CURRENT;
+    state.cloudUpdatedAt = Number(result.updatedAt);
     await offline.save(nextHash, encrypted, nextSalt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
     await rememberCurrentSession();
     try {
@@ -2864,6 +2901,25 @@ async function changeMasterPassword(event) {
   }
 }
 
+async function showSyncConflict(local, cloud) {
+  state.conflict = { local, cloud };
+  const localVault = normalizeVaultData(await decryptJson(local.encryptedData, state.masterKey));
+  const cloudVault = normalizeVaultData(await decryptJson(cloud.encryptedData, state.masterKey));
+  $('#local-conflict-info').textContent = `${localVault.keys.length} 个密钥 · ${formatDateTime(local.updatedAt)}`;
+  $('#cloud-conflict-info').textContent = `${cloudVault.keys.length} 个密钥 · ${formatDateTime(cloud.updatedAt)}`;
+  openModal('conflict-modal', '[data-conflict="local"]');
+  return { ok: true, conflict: true, message: '检测到本地与云端冲突，请选择保留的版本' };
+}
+
+async function loadLatestSyncConflict() {
+  const [cloud, local] = await Promise.all([
+    loadCloudRecord(state.keyHash),
+    offline.get(state.keyHash),
+  ]);
+  if (!cloud.exists || !local) return null;
+  return showSyncConflict(local, cloud);
+}
+
 async function performSyncCheck({ preserveCurrentLocal = false } = {}) {
   if (!state.masterKey || !state.keyHash || !offline.isOnline) {
     return { ok: false, message: '当前离线，无法与云端同步' };
@@ -2873,23 +2929,30 @@ async function performSyncCheck({ preserveCurrentLocal = false } = {}) {
     const cloud = await loadCloudRecord(state.keyHash);
     const local = await offline.get(state.keyHash);
     if (!cloud.exists) {
+      state.cloudUpdatedAt = 0;
       const uploaded = await saveVault({ silent: true });
+      if (!uploaded) {
+        const conflict = await loadLatestSyncConflict();
+        if (conflict) return conflict;
+      }
       return uploaded
         ? { ok: true, uploaded: true, message: '云端暂无数据，已将本地保险库上传' }
         : { ok: false, message: '云端暂无数据，但上传失败；更改已保存在本机' };
     }
     if (local && offline.detectConflict(local, cloud.updatedAt)) {
-      state.conflict = { local, cloud };
-      const localVault = normalizeVaultData(await decryptJson(local.encryptedData, state.masterKey));
-      const cloudVault = normalizeVaultData(await decryptJson(cloud.encryptedData, state.masterKey));
-      $('#local-conflict-info').textContent = `${localVault.keys.length} 个密钥 · ${formatDateTime(local.updatedAt)}`;
-      $('#cloud-conflict-info').textContent = `${cloudVault.keys.length} 个密钥 · ${formatDateTime(cloud.updatedAt)}`;
-      openModal('conflict-modal', '[data-conflict="local"]');
-      return { ok: true, conflict: true, message: '检测到本地与云端冲突，请选择保留的版本' };
+      return showSyncConflict(local, cloud);
     }
     if (local?.locallyModified) {
       useVaultData(await decryptJson(local.encryptedData, state.masterKey));
-      const result = await apiSave(state.keyHash, local.encryptedData, local.salt, local.version || VAULT_VERSION, state.accountName);
+      const result = await apiSave(
+        state.keyHash,
+        local.encryptedData,
+        local.salt,
+        local.version || VAULT_VERSION,
+        state.accountName,
+        cloud.updatedAt,
+      );
+      state.cloudUpdatedAt = Number(result.updatedAt);
       await offline.save(state.keyHash, local.encryptedData, local.salt, local.version || VAULT_VERSION, Number(result.updatedAt || Date.now()));
       renderAll();
       return { ok: true, uploaded: true, message: '本地修改已同步到云端' };
@@ -2898,6 +2961,7 @@ async function performSyncCheck({ preserveCurrentLocal = false } = {}) {
     const cloudRaw = await decryptJson(cloud.encryptedData, state.masterKey);
     const changed = previousPayload !== JSON.stringify(normalizeVaultData(cloudRaw));
     useVaultData(cloudRaw);
+    state.cloudUpdatedAt = Number(cloud.updatedAt || 0);
     await offline.save(state.keyHash, cloud.encryptedData, cloud.salt, cloud.version || VAULT_VERSION, cloud.updatedAt);
     renderAll();
     return { ok: true, changed, message: changed ? '已从云端拉取最新数据' : '已与云端同步，数据是最新的' };
@@ -2906,6 +2970,14 @@ async function performSyncCheck({ preserveCurrentLocal = false } = {}) {
     if (error instanceof ApiError && error.status === 423) {
       await lockAll(error.message);
       return { ok: false, message: error.message };
+    }
+    if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
+      try {
+        const conflict = await loadLatestSyncConflict();
+        if (conflict) return conflict;
+      } catch (conflictError) {
+        console.error('Conflict refresh failed:', conflictError);
+      }
     }
     const message = error instanceof ApiError ? `云端同步失败：${error.message}` : '云端同步失败，请稍后重试';
     return { ok: false, message };
@@ -2944,11 +3016,26 @@ async function resolveConflict(choice) {
   try {
     if (choice === 'local') {
       useVaultData(await decryptJson(state.conflict.local.encryptedData, state.masterKey));
-      const result = await apiSave(state.keyHash, state.conflict.local.encryptedData, state.salt, VAULT_VERSION, state.accountName);
-      await offline.save(state.keyHash, state.conflict.local.encryptedData, state.salt, VAULT_VERSION, Number(result.updatedAt || Date.now()));
+      const result = await apiSave(
+        state.keyHash,
+        state.conflict.local.encryptedData,
+        state.conflict.local.salt,
+        state.conflict.local.version || VAULT_VERSION,
+        state.accountName,
+        state.conflict.cloud.updatedAt,
+      );
+      state.cloudUpdatedAt = Number(result.updatedAt);
+      await offline.save(
+        state.keyHash,
+        state.conflict.local.encryptedData,
+        state.conflict.local.salt,
+        state.conflict.local.version || VAULT_VERSION,
+        Number(result.updatedAt),
+      );
       showToast('已使用本地数据并同步到云端');
     } else {
       useVaultData(await decryptJson(state.conflict.cloud.encryptedData, state.masterKey));
+      state.cloudUpdatedAt = Number(state.conflict.cloud.updatedAt || 0);
       await offline.save(
         state.keyHash,
         state.conflict.cloud.encryptedData,
@@ -2964,6 +3051,11 @@ async function resolveConflict(choice) {
   } catch (error) {
     if (error instanceof ApiError && error.status === 423) {
       await lockAll(error.message);
+      return;
+    }
+    if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
+      const conflict = await loadLatestSyncConflict();
+      if (conflict) showToast('云端又有新修改，请重新选择要保留的版本');
       return;
     }
     showToast(`冲突处理失败：${error.message}`);

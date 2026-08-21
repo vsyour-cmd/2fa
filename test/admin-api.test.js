@@ -71,7 +71,7 @@ describe('Express admin API', () => {
     const stored = await request('/api/data', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, data, salt, version: 3, accountName: '运营账户' }),
+      body: JSON.stringify({ key, data, salt, version: 3, accountName: '运营账户', expectedUpdatedAt: 0 }),
     });
     expect(stored.response.status).toBe(200);
 

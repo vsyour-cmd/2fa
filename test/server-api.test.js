@@ -52,7 +52,7 @@ describe('Express data API', () => {
     const put = await request('/api/data', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, data, salt, version: 3 }),
+      body: JSON.stringify({ key, data, salt, version: 3, expectedUpdatedAt: 0 }),
     });
     expect(put.response.status).toBe(200);
     expect(put.body).toMatchObject({ success: true });
@@ -92,6 +92,29 @@ describe('Express data API', () => {
     });
     expect(response.status).toBe(400);
     expect(body).toEqual({ error: 'Invalid JSON' });
+  });
+
+  it('rejects the second of two writes based on the same cloud version', async () => {
+    const current = await request(`/api/data?key=${key}`);
+    const expectedUpdatedAt = current.body.updatedAt;
+    const save = (nextData) => request('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, data: nextData, salt, version: 3, expectedUpdatedAt }),
+    });
+
+    const results = await Promise.all([
+      save('device-one-encrypted-payload-longer-than-sixteen'),
+      save('device-two-encrypted-payload-longer-than-sixteen'),
+    ]);
+    expect(results.map(({ response }) => response.status).sort()).toEqual([200, 409]);
+    expect(results.find(({ response }) => response.status === 409).body).toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    const latest = await request(`/api/data?key=${key}`);
+    expect([
+      'device-one-encrypted-payload-longer-than-sixteen',
+      'device-two-encrypted-payload-longer-than-sixteen',
+    ]).toContain(JSON.parse(latest.body.data).encryptedData);
   });
 
   it('deletes an existing record', async () => {

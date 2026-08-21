@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
-import worker from '../worker.js';
+import worker, { VaultCoordinator } from '../worker.js';
 
 const ACCESS_AUD = 'ec0202c941bf8f8a55c97d07071a01df8de0f57ad288a178e4daab58b4338274';
 const wranglerConfig = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
@@ -22,6 +22,50 @@ class FakeKv {
   }
 }
 
+class FakeDoStorage {
+  constructor() {
+    this.values = new Map();
+  }
+
+  async get(key) { return this.values.get(key); }
+
+  async put(key, value) { this.values.set(key, value); }
+
+  async delete(key) { this.values.delete(key); }
+}
+
+class FakeVaultCoordinatorNamespace {
+  constructor() {
+    this.instances = new Map();
+  }
+
+  getByName(name) {
+    if (!this.instances.has(name)) {
+      const state = { storage: new FakeDoStorage() };
+      this.instances.set(name, { object: new VaultCoordinator(state, {}), tail: Promise.resolve() });
+    }
+    const instance = this.instances.get(name);
+    const invoke = (method) => (...args) => {
+      const result = instance.tail.then(() => instance.object[method](...args));
+      instance.tail = result.catch(() => {});
+      return result;
+    };
+    return {
+      read: invoke('read'),
+      save: invoke('save'),
+      replace: invoke('replace'),
+      remove: invoke('remove'),
+    };
+  }
+}
+
+const coordinatorNamespaces = new WeakMap();
+
+function coordinatorFor(env) {
+  if (!coordinatorNamespaces.has(env)) coordinatorNamespaces.set(env, new FakeVaultCoordinatorNamespace());
+  return coordinatorNamespaces.get(env);
+}
+
 function request(path, init = {}) {
   return new Request(`https://example.test${path}`, {
     ...init,
@@ -34,7 +78,7 @@ function accessContext(email = 'owner@example.com', userId = 'access-user-1', au
 }
 
 function fetchWorker(req, env, ctx = accessContext()) {
-  return worker.fetch(req, { ACCESS_AUD, ...env }, ctx);
+  return worker.fetch(req, { ACCESS_AUD, VAULT_COORDINATOR: coordinatorFor(env), ...env }, ctx);
 }
 
 describe('Cloudflare Worker API', () => {
@@ -43,6 +87,12 @@ describe('Cloudflare Worker API', () => {
     expect(wranglerConfig.access.dev).toMatchObject({
       aud: ACCESS_AUD,
       identity: { email: 'developer@example.invalid', user_uuid: 'local-cloudflare-access-user' },
+    });
+    expect(wranglerConfig.durable_objects.bindings).toContainEqual({
+      name: 'VAULT_COORDINATOR', class_name: 'VaultCoordinator',
+    });
+    expect(wranglerConfig.migrations).toContainEqual({
+      tag: 'v1-vault-coordinator', new_sqlite_classes: ['VaultCoordinator'],
     });
   });
 
@@ -84,6 +134,19 @@ describe('Cloudflare Worker API', () => {
     expect(profile).toMatchObject({ accessEmail: 'owner@example.com', hasVault: true });
     expect(profile.accessOwnerId).toMatch(/^[a-f0-9]{64}$/);
 
+    const migratedSave = await fetchWorker(request('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key,
+        data: 'migrated-encrypted-payload-long-enough',
+        salt: 'base64-salt-value',
+        version: 3,
+        expectedUpdatedAt: 123,
+      }),
+    }), env, ownerContext);
+    expect(migratedSave.status).toBe(200);
+
     const otherContext = accessContext('other@example.com', 'owner-2');
     const blocked = await fetchWorker(request(`/api/data?key=${key}`), env, otherContext);
     expect(blocked.status).toBe(403);
@@ -102,7 +165,9 @@ describe('Cloudflare Worker API', () => {
   it('stores, reads, and deletes encrypted records', async () => {
     const env = { DATA_KV: new FakeKv() };
     const key = 'a'.repeat(64);
-    const body = JSON.stringify({ key, data: 'encrypted-payload-long-enough', salt: 'base64-salt-value', version: 3 });
+    const body = JSON.stringify({
+      key, data: 'encrypted-payload-long-enough', salt: 'base64-salt-value', version: 3, expectedUpdatedAt: 0,
+    });
     const put = await fetchWorker(request('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body }), env);
     expect(put.status).toBe(200);
     expect(await put.json()).toMatchObject({ success: true });
@@ -116,9 +181,50 @@ describe('Cloudflare Worker API', () => {
     expect(await (await fetchWorker(request(`/api/data?key=${key}`), env)).json()).toMatchObject({ exists: false });
   });
 
+  it('allows only one save when two devices write the same cloud version', async () => {
+    const env = { DATA_KV: new FakeKv() };
+    const key = 'd'.repeat(64);
+    const initial = await fetchWorker(request('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key, data: 'initial-encrypted-payload-long-enough', salt: 'base64-salt-value', version: 3, expectedUpdatedAt: 0,
+      }),
+    }), env);
+    const initialBody = await initial.json();
+
+    const save = (data) => fetchWorker(request('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, data, salt: 'base64-salt-value', version: 3, expectedUpdatedAt: initialBody.updatedAt }),
+    }), env);
+    const results = await Promise.all([
+      save('device-one-encrypted-payload-long-enough'),
+      save('device-two-encrypted-payload-long-enough'),
+    ]);
+    expect(results.map((response) => response.status).sort()).toEqual([200, 409]);
+    const conflict = results.find((response) => response.status === 409);
+    expect(await conflict.json()).toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    const stored = await (await fetchWorker(request(`/api/data?key=${key}`), env)).json();
+    expect([
+      'device-one-encrypted-payload-long-enough',
+      'device-two-encrypted-payload-long-enough',
+    ]).toContain(JSON.parse(stored.data).encryptedData);
+  });
+
   it('rejects invalid and oversized requests', async () => {
     const env = { DATA_KV: new FakeKv() };
     expect((await fetchWorker(request('/api/data?key=bad'), env)).status).toBe(400);
+    const missingVersion = await fetchWorker(request('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: 'f'.repeat(64), data: 'encrypted-payload-long-enough', salt: 'base64-salt-value', version: 3,
+      }),
+    }), env);
+    expect(missingVersion.status).toBe(428);
+    expect(await missingVersion.json()).toMatchObject({ code: 'VERSION_REQUIRED' });
     const oversized = await fetchWorker(request('/api/data', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Content-Length': String(300 * 1024) },
@@ -158,6 +264,7 @@ describe('Cloudflare Worker API', () => {
       salt: 'base64-salt-value',
       version: 3,
       accountName: '财务账户',
+      expectedUpdatedAt: 0,
     });
     expect((await fetchWorker(request('/api/data', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: vaultBody,

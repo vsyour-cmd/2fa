@@ -30,6 +30,20 @@
       "binding": "DATA_KV"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VAULT_COORDINATOR",
+        "class_name": "VaultCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-vault-coordinator",
+      "new_sqlite_classes": ["VaultCoordinator"]
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

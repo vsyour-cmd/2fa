@@ -74,11 +74,11 @@ function encodeUtf8Base64Url(value) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-export async function apiSave(keyHash, encryptedData, salt, version = 3, accountName = '') {
+export async function apiSave(keyHash, encryptedData, salt, version = 3, accountName = '', expectedUpdatedAt) {
   const response = await fetch('/api/data', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ key: keyHash, data: encryptedData, salt, version, accountName }),
+    body: JSON.stringify({ key: keyHash, data: encryptedData, salt, version, accountName, expectedUpdatedAt }),
   });
   const result = await parseApiResponse(response);
   const updatedAt = Number(result?.updatedAt);

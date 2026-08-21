@@ -107,11 +107,12 @@ describe('vault account metadata', () => {
         headers: { 'Content-Type': 'application/json' },
       }));
     vi.stubGlobal('fetch', fetchMock);
-    const args = ['a'.repeat(64), 'encrypted-vault-data', '1234567890123456', 3, '个人'];
+    const args = ['a'.repeat(64), 'encrypted-vault-data', '1234567890123456', 3, '个人', 77];
 
     await expect(apiSave(...args)).rejects.toMatchObject({ name: 'ApiError', code: 'INVALID_RESPONSE' });
     await expect(apiSave(...args)).rejects.toMatchObject({ name: 'ApiError', code: 'INVALID_SAVE_ACK' });
     await expect(apiSave(...args)).resolves.toEqual({ success: true, updatedAt: 123 });
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ expectedUpdatedAt: 77 });
     expect(ApiError).toBeTypeOf('function');
   });
 });

@@ -369,6 +369,10 @@ app.put('/api/data', (req, res) => {
     if (req.body.accountName !== undefined && (typeof req.body.accountName !== 'string' || req.body.accountName.trim().length > 80)) {
       return res.status(400).json({ error: 'Invalid account name' });
     }
+    const expectedUpdatedAt = req.body.expectedUpdatedAt;
+    if (!Number.isSafeInteger(expectedUpdatedAt) || expectedUpdatedAt < 0) {
+      return res.status(428).json({ error: '请刷新页面后再保存', code: 'VERSION_REQUIRED' });
+    }
     const normalizedKey = key.toLowerCase();
     const profile = getProfile(normalizedKey);
     if (profile?.status === 'disabled') {
@@ -378,9 +382,12 @@ app.put('/api/data', (req, res) => {
       });
       return res.status(423).json({ error: '账户已被管理员停用，请联系管理员', code: 'ACCOUNT_DISABLED' });
     }
-    const updatedAt = Date.now();
-    const stored = JSON.stringify({ encryptedData: data, salt, version: Number(version || 1), updatedAt });
-    db.transaction(() => {
+    const saved = db.transaction(() => {
+      const current = db.prepare('SELECT updated_at FROM data_store WHERE key = ?').get(normalizedKey);
+      const currentUpdatedAt = Number(current?.updated_at || 0);
+      if (currentUpdatedAt !== expectedUpdatedAt) return { success: false, currentUpdatedAt };
+      const updatedAt = Math.max(Date.now(), currentUpdatedAt + 1);
+      const stored = JSON.stringify({ encryptedData: data, salt, version: Number(version || 1), updatedAt });
       db.prepare(`
         INSERT INTO data_store (key, value, updated_at) VALUES (?, ?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
@@ -392,7 +399,20 @@ app.put('/api/data', (req, res) => {
         hasVault: true,
         status: profile?.status === 'reset_required' ? 'active' : (profile?.status || 'active'),
       });
+      return { success: true, updatedAt };
     })();
+    if (!saved.success) {
+      writeAudit(req, {
+        actor: profile?.accountName || 'vault-user', action: 'vault.save_conflict', targetKey: normalizedKey,
+        targetLabel: profile?.accountName || '', result: 'blocked', details: '另一设备已更新保险库，拒绝覆盖',
+      });
+      return res.status(409).json({
+        error: '另一设备已经更新了云端数据，请先处理同步冲突',
+        code: 'VERSION_CONFLICT',
+        currentUpdatedAt: saved.currentUpdatedAt,
+      });
+    }
+    const { updatedAt } = saved;
     const nextProfile = getProfile(normalizedKey);
     writeAudit(req, {
       actor: nextProfile?.accountName || 'vault-user', action: 'vault.save', targetKey: normalizedKey,

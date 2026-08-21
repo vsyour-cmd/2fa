@@ -1,3 +1,7 @@
+import { VaultCoordinator } from './src/worker/vault-coordinator.js';
+
+export { VaultCoordinator };
+
 const DATA_RATE_LIMIT = 20;
 const ADMIN_RATE_LIMIT = 120;
 const ADMIN_LOGIN_RATE_LIMIT = 5;
@@ -159,6 +163,32 @@ function isValidKey(key) {
   return typeof key === 'string' && /^[a-f0-9]{64}$/i.test(key);
 }
 
+function parseVaultRecord(data) {
+  if (data === null || data === undefined) return null;
+  try {
+    const record = typeof data === 'string' ? JSON.parse(data) : data;
+    if (!record || typeof record.encryptedData !== 'string' || typeof record.salt !== 'string') return null;
+    const updatedAt = Number(record.updatedAt || 0);
+    if (!Number.isFinite(updatedAt) || updatedAt <= 0) return null;
+    return {
+      encryptedData: record.encryptedData,
+      salt: record.salt,
+      version: Number(record.version || 1),
+      updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function legacyVaultRecord(env, keyHash) {
+  return parseVaultRecord(await env.DATA_KV.get(keyHash));
+}
+
+function vaultCoordinator(env, keyHash) {
+  return env.VAULT_COORDINATOR.getByName(keyHash);
+}
+
 function cleanSingleLine(value, maxLength) {
   if (typeof value !== 'string') return '';
   return value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, maxLength);
@@ -263,10 +293,9 @@ async function handleGet(request, url, env, accessUser) {
     return jsonResponse({ error: '账户已被管理员停用，请联系管理员', code: 'ACCOUNT_DISABLED' }, 423);
   }
 
-  const data = await env.DATA_KV.get(normalizedKey);
-  if (data === null) return jsonResponse({ exists: false, data: null }, 200);
-  let updatedAt = 0;
-  try { updatedAt = Number(JSON.parse(data).updatedAt || 0); } catch { /* client validates the full record */ }
+  const record = await vaultCoordinator(env, normalizedKey).read(await legacyVaultRecord(env, normalizedKey));
+  if (!record) return jsonResponse({ exists: false, data: null }, 200);
+  const updatedAt = Number(record.updatedAt || 0);
   const accountName = accountNameFromRequest(request, url);
   const nextProfile = await upsertUserProfile(env, normalizedKey, {
     accountName: accountName || profile?.accountName || '', lastSeenAt: Date.now(), updatedAt, hasVault: true,
@@ -276,7 +305,7 @@ async function handleGet(request, url, env, accessUser) {
     actor: accessUser.email, action: 'vault.read', targetKey: normalizedKey,
     targetLabel: nextProfile.accountName, result: 'success', details: '读取加密保险库',
   });
-  return jsonResponse({ exists: true, data, updatedAt }, 200);
+  return jsonResponse({ exists: true, data: JSON.stringify(record), updatedAt }, 200);
 }
 
 async function handlePut(request, env, accessUser) {
@@ -291,6 +320,10 @@ async function handlePut(request, env, accessUser) {
   if (body.accountName !== undefined && (typeof body.accountName !== 'string' || body.accountName.trim().length > 80)) {
     return jsonResponse({ error: 'Invalid account name' }, 400);
   }
+  const expectedUpdatedAt = body.expectedUpdatedAt;
+  if (!Number.isSafeInteger(expectedUpdatedAt) || expectedUpdatedAt < 0) {
+    return jsonResponse({ error: '请刷新页面后再保存', code: 'VERSION_REQUIRED' }, 428);
+  }
   const profile = await getUserProfile(env, normalizedKey);
   if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
     return accessOwnerDenied(env, request, profile, accessUser, 'vault.save_denied', normalizedKey);
@@ -303,8 +336,29 @@ async function handlePut(request, env, accessUser) {
     return jsonResponse({ error: '账户已被管理员停用，请联系管理员', code: 'ACCOUNT_DISABLED' }, 423);
   }
 
-  const updatedAt = Date.now();
-  await env.DATA_KV.put(normalizedKey, JSON.stringify({ encryptedData: data, salt, version: Number(version || 1), updatedAt }));
+  const coordinated = await vaultCoordinator(env, normalizedKey).save(
+    { encryptedData: data, salt, version: Number(version || 1) },
+    expectedUpdatedAt,
+    await legacyVaultRecord(env, normalizedKey),
+  );
+  if (!coordinated.saved) {
+    await writeAudit(env, request, {
+      actor: accessUser.email, action: 'vault.save_conflict', targetKey: normalizedKey,
+      targetLabel: profile?.accountName || '', result: 'blocked', details: '另一设备已更新保险库，拒绝覆盖',
+    });
+    return jsonResponse({
+      error: '另一设备已经更新了云端数据，请先处理同步冲突',
+      code: 'VERSION_CONFLICT',
+      currentUpdatedAt: coordinated.currentUpdatedAt,
+    }, 409);
+  }
+  const { record } = coordinated;
+  const updatedAt = record.updatedAt;
+  try {
+    await env.DATA_KV.put(normalizedKey, JSON.stringify(record));
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'vault_kv_mirror_failed', key: normalizedKey, message: error.message }));
+  }
   const accountName = accountNameFrom(body.accountName);
   const nextProfile = await upsertUserProfile(env, normalizedKey, {
     accountName: accountName || profile?.accountName || '',
@@ -353,6 +407,7 @@ async function handleDelete(request, url, env, accessUser) {
   if (profileBelongsToAnotherAccessUser(profile, accessUser)) {
     return accessOwnerDenied(env, request, profile, accessUser, 'vault.delete_denied', normalizedKey);
   }
+  await vaultCoordinator(env, normalizedKey).remove();
   await env.DATA_KV.delete(normalizedKey);
   await env.DATA_KV.delete(`${USER_PREFIX}${normalizedKey}`);
   await writeAudit(env, request, {
@@ -437,6 +492,7 @@ async function handleAdminUserDelete(request, env, session, keyHash) {
     ? profile.archiveKey
     : '';
   await Promise.all([
+    vaultCoordinator(env, keyHash).remove(),
     env.DATA_KV.delete(keyHash),
     env.DATA_KV.delete(`${USER_PREFIX}${keyHash}`),
     ...(archiveKey ? [env.DATA_KV.delete(archiveKey)] : []),
@@ -452,13 +508,15 @@ async function handleAdminUserDelete(request, env, session, keyHash) {
 async function handleAdminVaultReset(request, env, session, keyHash) {
   const body = await readJsonWithLimit(request, 2048);
   if (body?.confirmation !== '重置保险库') return jsonResponse({ error: '确认文字不正确' }, 400);
-  const data = await env.DATA_KV.get(keyHash);
+  const coordinator = vaultCoordinator(env, keyHash);
+  const record = await coordinator.read(await legacyVaultRecord(env, keyHash));
   const profile = await getUserOrLegacyProfile(env, keyHash);
-  if (!profile || data === null) return jsonResponse({ error: '当前没有可重置的保险库' }, 409);
+  if (!profile || !record) return jsonResponse({ error: '当前没有可重置的保险库' }, 409);
   const now = Date.now();
   const archiveKey = `${ARCHIVE_PREFIX}${keyHash}:${now}`;
   const archivedUntil = now + ARCHIVE_RETENTION_SECONDS * 1000;
-  await env.DATA_KV.put(archiveKey, JSON.stringify({ data, archivedAt: now, archivedUntil }), { expirationTtl: ARCHIVE_RETENTION_SECONDS });
+  await env.DATA_KV.put(archiveKey, JSON.stringify({ data: JSON.stringify(record), archivedAt: now, archivedUntil }), { expirationTtl: ARCHIVE_RETENTION_SECONDS });
+  await coordinator.remove();
   await env.DATA_KV.delete(keyHash);
   const next = await putUserProfile(env, {
     ...profile, status: 'reset_required', hasVault: false, resetAt: now, archiveKey, archivedUntil, updatedAt: now,
@@ -476,14 +534,18 @@ async function handleAdminVaultRestore(request, env, session, keyHash) {
   if (body?.confirmation !== '恢复保险库') return jsonResponse({ error: '确认文字不正确' }, 400);
   const profile = await getUserProfile(env, keyHash);
   if (!profile?.archiveKey) return jsonResponse({ error: '没有可恢复的保险库备份' }, 409);
-  if (profile.hasVault || await env.DATA_KV.get(keyHash) !== null) {
+  const coordinator = vaultCoordinator(env, keyHash);
+  if (profile.hasVault || await coordinator.read(await legacyVaultRecord(env, keyHash))) {
     return jsonResponse({ error: '当前保险库已有数据，不能覆盖恢复' }, 409);
   }
   const archived = await env.DATA_KV.get(profile.archiveKey);
   if (archived === null) return jsonResponse({ error: '备份已过期，无法恢复' }, 410);
   let archive;
   try { archive = JSON.parse(archived); } catch { return jsonResponse({ error: '备份已损坏，无法恢复' }, 500); }
-  await env.DATA_KV.put(keyHash, archive.data);
+  const record = parseVaultRecord(archive.data);
+  if (!record) return jsonResponse({ error: '备份已损坏，无法恢复' }, 500);
+  await coordinator.replace(record);
+  await env.DATA_KV.put(keyHash, JSON.stringify(record));
   await env.DATA_KV.delete(profile.archiveKey);
   const next = await putUserProfile(env, {
     ...profile, status: 'active', hasVault: true, archiveKey: '', archivedUntil: 0, updatedAt: Date.now(),
