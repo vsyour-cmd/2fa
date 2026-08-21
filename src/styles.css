@@ -232,8 +232,18 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .input-action:active:not(:disabled) { transform: translateY(-50%) scale(0.97); }
 .field-hint { margin: 7px 0 0; color: var(--text-muted); font-size: 0.78rem; }
 .draft-status { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 12px; margin: -7px 0 14px; padding: 8px 10px 8px 12px; color: var(--primary-hover); background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 11px; font-size: 0.76rem; font-weight: 720; }
+.draft-status-message, .draft-status-actions { display: flex; align-items: center; gap: 8px; }
+.draft-status-message { min-width: 0; }
+.draft-status-indicator { display: inline-grid; width: 20px; height: 20px; flex: 0 0 20px; place-items: center; color: var(--primary); background: var(--surface-solid); border-radius: 50%; font-size: 0.7rem; font-weight: 900; }
+.draft-status-indicator::before { content: "i"; }
+.draft-status[data-state="saving"] .draft-status-indicator::before { content: "…"; }
+.draft-status[data-state="saved"] .draft-status-indicator::before, .draft-status[data-state="restored"] .draft-status-indicator::before { content: "✓"; }
+.draft-status[data-state="error"] { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 34%, var(--border)); }
+.draft-status[data-state="error"] .draft-status-indicator { color: var(--danger); }
+.draft-status[data-state="error"] .draft-status-indicator::before { content: "!"; }
 .draft-status button { min-height: 32px; flex: 0 0 auto; padding: 4px 8px; color: var(--primary-hover); background: var(--surface-solid); border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 8px; font-size: 0.72rem; font-weight: 780; }
 .draft-status button:hover, .draft-status button:focus-visible { color: var(--primary); border-color: var(--primary); }
+.draft-status button.confirming { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
 .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
@@ -443,11 +453,13 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .workflow-heading-buttons .btn { min-height: 44px; white-space: nowrap; }
 .workflow-draft-list { display: grid; gap: 10px; }
 .workflow-draft-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 13px; }
+.workflow-draft-card.source-changed { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning-soft) 54%, var(--surface-muted)); }
 .workflow-draft-main { min-width: 0; }
 .workflow-draft-title-line { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 7px; }
 .workflow-draft-title-line strong { overflow: hidden; color: var(--text); font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
 .workflow-draft-kind { padding: 3px 7px; color: var(--primary-hover); background: var(--primary-soft); border-radius: 999px; font-size: 0.68rem; font-weight: 800; }
 .workflow-draft-main p { overflow: hidden; margin: 5px 0 0; color: var(--text-muted); font-size: 0.74rem; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-draft-main .workflow-draft-warning { color: var(--warning); font-weight: 720; white-space: normal; }
 .workflow-draft-actions { display: flex; gap: 7px; }
 .workflow-draft-actions .small-btn { min-height: 42px; }
 .workflow-filter-bar { position: sticky; top: calc(72px + var(--offline-banner-offset, 0px)); z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 14px; padding: 12px 13px; background: var(--surface); box-shadow: var(--shadow-small); backdrop-filter: blur(18px) saturate(145%); }
@@ -870,6 +882,8 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .workflow-link-heading { align-items: stretch; flex-direction: column; gap: 7px; }
   .workflow-create-key { width: 100%; min-height: 44px; }
   .draft-status { align-items: flex-start; flex-direction: column; }
+  .draft-status-actions { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .draft-status-actions > :only-child { grid-column: 1 / -1; }
   .draft-status button { width: 100%; min-height: 44px; }
   .workflow-note-actions { align-items: stretch; flex-direction: column; }
   .workflow-note-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

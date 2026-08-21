@@ -5,6 +5,7 @@ import {
   serializeWorkflowDraftCollection,
   upsertWorkflowDraft,
   workflowDraftHasContent,
+  workflowDraftSourceChanged,
 } from '../src/js/workflow-drafts.js';
 
 describe('workflow draft collections', () => {
@@ -37,6 +38,22 @@ describe('workflow draft collections', () => {
   it('does not retain empty drafts and serializes only encrypted-payload data', () => {
     expect(workflowDraftHasContent({ title: '', group: '', content: '', linkedKeys: [] })).toBe(false);
     const collection = serializeWorkflowDraftCollection([{ id: 'empty', title: '', content: '', linkedKeys: [] }]);
-    expect(collection).toEqual({ version: 2, drafts: [] });
+    expect(collection).toEqual({ version: 3, drafts: [] });
+  });
+
+  it('keeps version 2 collections when upgrading the draft format', () => {
+    const drafts = parseWorkflowDraftCollection({
+      version: 2,
+      drafts: [{ id: 'old', workflowId: 'scene-1', title: '旧格式', content: '内容', updatedAt: 20 }],
+    });
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ id: 'old', workflowId: 'scene-1', baseUpdatedAt: 0 });
+  });
+
+  it('detects when an edited scene changed after the draft started', () => {
+    const draft = { workflowId: 'scene-1', baseUpdatedAt: 100, updatedAt: 300 };
+    expect(workflowDraftSourceChanged(draft, { id: 'scene-1', updatedAt: 101 })).toBe(true);
+    expect(workflowDraftSourceChanged(draft, { id: 'scene-1', updatedAt: 100 })).toBe(false);
+    expect(workflowDraftSourceChanged(draft, { id: 'scene-2', updatedAt: 999 })).toBe(false);
   });
 });

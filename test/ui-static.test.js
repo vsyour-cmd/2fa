@@ -657,7 +657,11 @@ describe('static application shell', () => {
     expect(app).toContain('parseWorkflowDraftCollection(restored?.payload)');
     expect(app).toContain('state.workflowDrafts = removeWorkflowDraft(state.workflowDrafts, completedDraftId)');
     expect(app).toContain("clearFormDraft('token')");
-    expect(app).toContain("workflowId: $('#workflow-id').value");
+    expect(app).toContain("const workflowId = $('#workflow-id').value");
+    expect(app).toContain("flushFormDraft('workflow', { force: true })");
+    expect(app).toContain('workflowDraftSourceChanged(draft, note)');
+    expect(html).toContain('id="workflow-draft-retry"');
+    expect(html).toContain('保存草稿并关闭');
     expect(app).toContain("if (type === 'workflow' && !state.activeWorkflowDraftId) return");
     expect(app).toContain("encryptedDrafts.prepareMigration(oldHash, nextHash, state.masterKey, nextKey)");
     expect(app).toContain("$('#add-modal').addEventListener('modal:close', () => { flushFormDraft('token'); })");

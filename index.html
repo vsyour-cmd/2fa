@@ -493,7 +493,7 @@
     <div id="workflow-drafts-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-drafts-title" aria-describedby="workflow-drafts-description">
       <div class="modal modal-wide">
         <div class="modal-header"><div><p class="eyebrow">本机加密保存</p><h2 id="workflow-drafts-title">场景草稿箱</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-drafts-modal" aria-label="关闭">×</button></div>
-        <p id="workflow-drafts-description" class="dialog-message">新建和编辑中的内容会分别保存；继续草稿仍需验证场景编辑密码。</p>
+        <p id="workflow-drafts-description" class="dialog-message">新建和编辑中的内容会分别加密保存在当前浏览器，不会上传云端；继续草稿仍需验证场景编辑密码。</p>
         <div id="workflow-drafts-list" class="workflow-draft-list" role="list"></div>
         <div id="workflow-drafts-empty" class="empty-state compact hidden"><div aria-hidden="true">✎</div><h3>暂无未提交草稿</h3><p>开始新建或编辑场景后，输入内容会自动加密保存到当前浏览器。</p></div>
         <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="workflow-drafts-modal">关闭</button><button id="workflow-drafts-new" class="btn btn-primary" type="button">新建场景</button></div>
@@ -502,8 +502,8 @@
 
     <div id="workflow-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workflow-edit-title">
       <div class="modal modal-wide">
-        <div class="modal-header"><div><p class="eyebrow">加密保存</p><h2 id="workflow-edit-title">新建使用场景</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-edit-modal" aria-label="关闭">×</button></div>
-        <div id="workflow-draft-status" class="draft-status hidden" role="status" aria-live="polite"><span id="workflow-draft-status-text"></span><button id="workflow-draft-clear" type="button">清除草稿</button></div>
+        <div class="modal-header"><div><p class="eyebrow">本机加密草稿</p><h2 id="workflow-edit-title">新建使用场景</h2></div><button class="icon-btn" type="button" data-close-modal="workflow-edit-modal" aria-label="保存草稿并关闭">×</button></div>
+        <div id="workflow-draft-status" class="draft-status hidden" role="status" aria-live="polite"><span class="draft-status-message"><span class="draft-status-indicator" aria-hidden="true"></span><span id="workflow-draft-status-text"></span></span><span class="draft-status-actions"><button id="workflow-draft-retry" class="hidden" type="button">重试保存</button><button id="workflow-draft-clear" class="hidden" type="button" aria-label="放弃当前草稿">放弃草稿</button></span></div>
         <form id="workflow-form" novalidate>
           <input id="workflow-id" type="hidden">
           <div class="form-group"><label for="workflow-title">场景名称</label><input id="workflow-title" type="text" maxlength="100" aria-describedby="workflow-title-hint" placeholder="例如：发布网站" required><p id="workflow-title-hint" class="field-hint">用一句话说明这个场景要完成什么。</p></div>
@@ -552,7 +552,7 @@
             <ol id="workflow-selected-keys" class="workflow-selected-keys" aria-label="已关联的 2FA 条目"></ol>
           </div>
           <div id="workflow-error" class="error hidden" role="alert"></div>
-          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="workflow-edit-modal">取消</button><button id="workflow-submit" class="btn btn-primary" type="submit">保存场景</button></div>
+          <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal="workflow-edit-modal">保存草稿并关闭</button><button id="workflow-submit" class="btn btn-primary" type="submit">保存场景</button></div>
         </form>
       </div>
     </div>

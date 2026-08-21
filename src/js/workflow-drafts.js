@@ -1,6 +1,6 @@
 import { generateId, normalizeWorkflowNote } from './utils.js';
 
-export const WORKFLOW_DRAFT_COLLECTION_VERSION = 2;
+export const WORKFLOW_DRAFT_COLLECTION_VERSION = 3;
 export const WORKFLOW_DRAFT_LIMIT = 50;
 
 export function normalizeWorkflowDraft(raw = {}, createId = generateId) {
@@ -10,6 +10,7 @@ export function normalizeWorkflowDraft(raw = {}, createId = generateId) {
   });
   const createdAt = Number.isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : Date.now();
   const updatedAt = Number.isFinite(Number(raw.updatedAt)) ? Number(raw.updatedAt) : createdAt;
+  const baseUpdatedAt = Number.isFinite(Number(raw.baseUpdatedAt)) ? Number(raw.baseUpdatedAt) : 0;
   return {
     id: String(raw.id || createId()),
     workflowId: String(raw.workflowId || ''),
@@ -17,6 +18,7 @@ export function normalizeWorkflowDraft(raw = {}, createId = generateId) {
     group: note.group,
     content: note.content,
     linkedKeys: note.linkedKeys,
+    baseUpdatedAt,
     createdAt,
     updatedAt,
   };
@@ -33,7 +35,7 @@ export function workflowDraftHasContent(draft) {
 
 export function parseWorkflowDraftCollection(payload, createId = generateId) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
-  const source = payload.version === WORKFLOW_DRAFT_COLLECTION_VERSION && Array.isArray(payload.drafts)
+  const source = Number(payload.version) >= 2 && Array.isArray(payload.drafts)
     ? payload.drafts
     : (workflowDraftHasContent(payload) ? [{ ...payload, id: createId(), workflowId: '' }] : []);
   const byId = new Map();
@@ -67,4 +69,12 @@ export function upsertWorkflowDraft(drafts, rawDraft, createId = generateId) {
 
 export function removeWorkflowDraft(drafts, draftId) {
   return drafts.filter((draft) => draft.id !== draftId);
+}
+
+export function workflowDraftSourceChanged(draft, workflowNote) {
+  if (!draft?.workflowId || !workflowNote || draft.workflowId !== workflowNote.id) return false;
+  const sourceUpdatedAt = Number(workflowNote.updatedAt || 0);
+  const baseline = Number(draft.baseUpdatedAt || 0);
+  if (baseline > 0) return sourceUpdatedAt > baseline;
+  return sourceUpdatedAt > Number(draft.updatedAt || 0);
 }
