@@ -684,12 +684,15 @@
       </div>
     </div>
 
-    <div id="conflict-modal" class="modal-overlay hidden" data-dismissible="false" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="conflict-title">
-      <div class="modal">
-        <h2 id="conflict-title">检测到数据冲突</h2>
-        <p class="field-hint center">本地离线修改与云端版本不同，请选择保留哪份。</p>
+    <div id="conflict-modal" class="modal-overlay hidden" data-dismissible="false" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="conflict-title" aria-describedby="conflict-summary">
+      <div class="modal modal-wide conflict-modal">
+        <div class="modal-header conflict-header"><div><p class="eyebrow">多设备同步保护</p><h2 id="conflict-title">逐条处理数据冲突</h2></div></div>
+        <p id="conflict-summary" class="field-hint">本地修改与云端版本不同，请逐条选择要保留的版本。</p>
         <div class="conflict-grid"><div><strong>本地</strong><span id="local-conflict-info"></span></div><div><strong>云端</strong><span id="cloud-conflict-info"></span></div></div>
-        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-conflict="local">使用本地</button><button class="btn btn-primary" type="button" data-conflict="cloud">使用云端</button></div>
+        <div class="conflict-bulk-actions" aria-label="批量选择版本"><span>快速选择</span><button class="btn btn-secondary" type="button" data-conflict-all="local">全部选本地</button><button class="btn btn-secondary" type="button" data-conflict-all="cloud">全部选云端</button></div>
+        <div id="conflict-list" class="conflict-list" aria-label="冲突条目列表"></div>
+        <p id="conflict-selection-status" class="field-hint" role="status" aria-live="polite"></p>
+        <div class="modal-actions"><button id="conflict-apply" class="btn btn-primary" type="button">合并所选版本并同步</button></div>
       </div>
     </div>
 

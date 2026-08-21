@@ -79,6 +79,20 @@ describe('static application shell', () => {
     expect(html).toContain('role="dialog"');
   });
 
+  it('offers accessible item-level choices for multi-device conflicts', () => {
+    for (const id of ['conflict-summary', 'local-conflict-info', 'cloud-conflict-info', 'conflict-list', 'conflict-selection-status', 'conflict-apply']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).toContain('data-conflict-all="local"');
+    expect(html).toContain('data-conflict-all="cloud"');
+    expect(app).toContain('createConflictPlan(localVault, cloudVault)');
+    expect(app).toContain('mergeConflictPlan(');
+    expect(app).toContain('不同内容：');
+    const sideSummary = app.slice(app.indexOf('function conflictSideSummary'), app.indexOf('function renderConflictPlan'));
+    expect(sideSummary).not.toContain('item.secret');
+    expect(sideSummary).not.toContain('item.content');
+  });
+
   it('requires a hashed secondary password before editing workflow content', () => {
     expect(html).toContain('id="workflow-protection-modal"');
     expect(html).toContain('id="workflow-password-manage"');

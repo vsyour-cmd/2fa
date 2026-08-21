@@ -29,6 +29,7 @@ import { drawQrToCanvas } from './qrcode.js';
 import { renderMarkdown } from './markdown.js';
 import { generatePassword, generatePasswords } from './password-generator.js';
 import { encodeWorkflowSecretMarker } from './workflow-secrets.js';
+import { createConflictPlan, mergeConflictPlan } from './conflict.js';
 import {
   ApiError,
   OfflineManager,
@@ -2901,14 +2902,64 @@ async function changeMasterPassword(event) {
   }
 }
 
+function conflictSideSummary(row, side) {
+  const stateVersion = row[side];
+  if (!stateVersion) return '此版本中不存在（选择后将不保留该条目）';
+  if (row.kind === 'protection') return stateVersion.item ? '已启用二次密码' : '未启用二次密码';
+  const item = stateVersion.item;
+  const parts = [stateVersion.location === 'deleted' ? '位于回收站' : '当前使用中'];
+  if (row.kind === 'token') {
+    if (item.issuer) parts.push(item.issuer);
+    if (item.account) parts.push(item.account);
+    if (item.group) parts.push(`分组：${item.group}`);
+    if (item.lastUsed) parts.push(`最近使用：${formatDateTime(item.lastUsed)}`);
+  } else {
+    parts.push(item.group ? `分组：${item.group}` : '未分组');
+    if (item.updatedAt) parts.push(`更新：${formatDateTime(item.updatedAt)}`);
+  }
+  if (stateVersion.location === 'deleted' && item.deletedAt) parts.push(`删除：${formatDateTime(item.deletedAt)}`);
+  return parts.join(' · ');
+}
+
+function renderConflictPlan(plan) {
+  $('#conflict-summary').textContent = `发现 ${plan.rows.length} 条数据存在差异。请逐条选择，未冲突内容会自动合并。`;
+  $('#conflict-list').innerHTML = plan.rows.map((row, index) => `
+    <fieldset class="conflict-item" data-conflict-row="${index}">
+      <legend>
+        <span class="conflict-kind">${escapeHtml(row.kindLabel)}</span>
+        <strong>${escapeHtml(row.title)}</strong>
+      </legend>
+      <p class="conflict-differences">不同内容：${escapeHtml(row.differences.join('、'))}</p>
+      <div class="conflict-choices">
+        ${['local', 'cloud'].map((side) => `
+          <label class="conflict-choice">
+            <input type="radio" name="conflict-choice-${index}" value="${side}" ${row.defaultSide === side ? 'checked' : ''}>
+            <span><strong>${side === 'local' ? '本地版本' : '云端版本'}</strong><small>${escapeHtml(conflictSideSummary(row, side))}</small></span>
+          </label>
+        `).join('')}
+      </div>
+    </fieldset>
+  `).join('');
+  $('#conflict-selection-status').textContent = `已为 ${plan.rows.length} 条差异选择版本，可直接合并或逐条调整。`;
+}
+
 async function showSyncConflict(local, cloud) {
-  state.conflict = { local, cloud };
   const localVault = normalizeVaultData(await decryptJson(local.encryptedData, state.masterKey));
   const cloudVault = normalizeVaultData(await decryptJson(cloud.encryptedData, state.masterKey));
+  const plan = createConflictPlan(localVault, cloudVault);
+  if (plan.rows.length === 0) {
+    useVaultData(cloudVault);
+    state.cloudUpdatedAt = Number(cloud.updatedAt || 0);
+    await offline.save(state.keyHash, cloud.encryptedData, cloud.salt, cloud.version || VAULT_VERSION, cloud.updatedAt);
+    renderAll();
+    return { ok: true, changed: false, message: '两端内容一致，已更新同步版本' };
+  }
+  state.conflict = { local, cloud, localVault, cloudVault, plan };
   $('#local-conflict-info').textContent = `${localVault.keys.length} 个密钥 · ${formatDateTime(local.updatedAt)}`;
   $('#cloud-conflict-info').textContent = `${cloudVault.keys.length} 个密钥 · ${formatDateTime(cloud.updatedAt)}`;
-  openModal('conflict-modal', '[data-conflict="local"]');
-  return { ok: true, conflict: true, message: '检测到本地与云端冲突，请选择保留的版本' };
+  renderConflictPlan(plan);
+  openModal('conflict-modal', '#conflict-list input');
+  return { ok: true, conflict: true, message: `检测到 ${plan.rows.length} 条数据冲突，请逐条选择版本` };
 }
 
 async function loadLatestSyncConflict() {
@@ -3011,55 +3062,59 @@ async function manualSync() {
   }
 }
 
-async function resolveConflict(choice) {
+async function resolveConflictSelections() {
   if (!state.conflict) return;
+  const button = $('#conflict-apply');
+  setBusy(button, true, '正在合并…');
   try {
-    if (choice === 'local') {
-      useVaultData(await decryptJson(state.conflict.local.encryptedData, state.masterKey));
-      const result = await apiSave(
-        state.keyHash,
-        state.conflict.local.encryptedData,
-        state.conflict.local.salt,
-        state.conflict.local.version || VAULT_VERSION,
-        state.accountName,
-        state.conflict.cloud.updatedAt,
-      );
-      state.cloudUpdatedAt = Number(result.updatedAt);
-      await offline.save(
-        state.keyHash,
-        state.conflict.local.encryptedData,
-        state.conflict.local.salt,
-        state.conflict.local.version || VAULT_VERSION,
-        Number(result.updatedAt),
-      );
-      showToast('已使用本地数据并同步到云端');
-    } else {
-      useVaultData(await decryptJson(state.conflict.cloud.encryptedData, state.masterKey));
-      state.cloudUpdatedAt = Number(state.conflict.cloud.updatedAt || 0);
-      await offline.save(
-        state.keyHash,
-        state.conflict.cloud.encryptedData,
-        state.conflict.cloud.salt,
-        state.conflict.cloud.version || VAULT_VERSION,
-        state.conflict.cloud.updatedAt,
-      );
-      showToast('已使用云端数据');
+    const choices = new Map();
+    for (const [index, row] of state.conflict.plan.rows.entries()) {
+      const selected = $(`input[name="conflict-choice-${index}"]:checked`, $('#conflict-list'));
+      choices.set(row.id, selected?.value || row.defaultSide);
     }
+    const merged = mergeConflictPlan(
+      state.conflict.localVault,
+      state.conflict.cloudVault,
+      state.conflict.plan,
+      choices,
+    );
+    useVaultData(merged);
+    const encryptedData = await encryptJson(vaultPayload(), state.masterKey);
+    const result = await apiSave(
+      state.keyHash,
+      encryptedData,
+      state.salt,
+      VAULT_VERSION,
+      state.accountName,
+      state.conflict.cloud.updatedAt,
+    );
+    state.cloudUpdatedAt = Number(result.updatedAt);
+    await offline.save(state.keyHash, encryptedData, state.salt, VAULT_VERSION, Number(result.updatedAt));
     state.conflict = null;
     closeModal('conflict-modal');
     renderAll();
+    showToast('已按逐条选择合并并同步到云端');
   } catch (error) {
     if (error instanceof ApiError && error.status === 423) {
       await lockAll(error.message);
       return;
     }
     if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
+      await preserveCurrentVaultForManualSync();
       const conflict = await loadLatestSyncConflict();
       if (conflict) showToast('云端又有新修改，请重新选择要保留的版本');
       return;
     }
     showToast(`冲突处理失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
   }
+}
+
+function chooseAllConflictVersions(side) {
+  if (!state.conflict || (side !== 'local' && side !== 'cloud')) return;
+  for (const input of $$(`#conflict-list input[value="${side}"]`)) input.checked = true;
+  $('#conflict-selection-status').textContent = `全部 ${state.conflict.plan.rows.length} 条差异已选择${side === 'local' ? '本地' : '云端'}版本，可继续逐条调整。`;
 }
 
 function setSensitiveVisibility(toggle, reveal) {
@@ -3651,7 +3706,14 @@ function setupEvents() {
   });
   $('#workflow-password-manage').addEventListener('click', () => openWorkflowProtectionModal('manage'));
   $('#change-password-form').addEventListener('submit', changeMasterPassword);
-  for (const button of $$('[data-conflict]')) button.addEventListener('click', () => resolveConflict(button.dataset.conflict));
+  for (const button of $$('[data-conflict-all]')) {
+    button.addEventListener('click', () => chooseAllConflictVersions(button.dataset.conflictAll));
+  }
+  $('#conflict-apply').addEventListener('click', resolveConflictSelections);
+  $('#conflict-list').addEventListener('change', () => {
+    if (!state.conflict) return;
+    $('#conflict-selection-status').textContent = `已为 ${state.conflict.plan.rows.length} 条差异选择版本，可继续调整或开始合并。`;
+  });
 
   $('#qr-start').addEventListener('click', () => { hideError('#qr-error'); qrScanner.start(); });
   const dropZone = $('#qr-drop-zone');
