@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import { replaceWorkflowSecretMarkers } from './workflow-secrets.js';
 
 const ALLOWED_TAGS = [
   'p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -8,17 +9,10 @@ const ALLOWED_TAGS = [
 ];
 
 const ALLOWED_ATTR = ['href', 'title', 'class', 'type', 'checked', 'disabled', 'align', 'target', 'rel'];
-const SECRET_PATTERN = /\{\{\s*(?:secret|pwd)\s*:\s*([^\r\n{}]+?)\s*\}\}/gi;
 // The mask token must survive the GFM parse as literal text. It is plain
 // alphanumerics on purpose: the previous "__...__" token was interpreted as
 // strong emphasis, which broke the post-parse replacement and leaked the token.
 const SECRET_MASK_TOKEN_PREFIX = 'WFSECRETTOKEN';
-
-function normalizeSecretValue(value) {
-  // Passwords may intentionally contain repeated spaces or tabs. Only trim
-  // the optional padding around the marker value; never rewrite its content.
-  return String(value || '').trim();
-}
 
 function secretMask(length = 0) {
   const visibleLength = Math.max(Math.min(Number(length) || 4, 32), 6);
@@ -29,9 +23,7 @@ function embedSecretTokens(source) {
   const values = [];
   let tokenPrefix = SECRET_MASK_TOKEN_PREFIX;
   while (source.includes(tokenPrefix)) tokenPrefix += 'X';
-  const replaced = source.replace(SECRET_PATTERN, (marker, password) => {
-    const raw = normalizeSecretValue(password);
-    if (!raw) return marker;
+  const replaced = replaceWorkflowSecretMarkers(source, (raw) => {
     const index = values.length;
     values.push(raw);
     return `${tokenPrefix}${index}`;

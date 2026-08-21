@@ -44,10 +44,9 @@ describe('safe Markdown rendering', () => {
   });
 
   it('preserves password whitespace and avoids collisions with literal mask-token text', () => {
-    expect(markdown).toContain("return String(value || '').trim()");
-    expect(markdown).not.toContain("replace(/\\s+/g, ' ')");
+    expect(markdown).toContain("import { replaceWorkflowSecretMarkers } from './workflow-secrets.js'");
     expect(markdown).toContain("while (source.includes(tokenPrefix)) tokenPrefix += 'X'");
-    expect(markdown).toContain('if (!raw) return marker');
+    expect(markdown).toContain('replaceWorkflowSecretMarkers(source, (raw) =>');
   });
 
   it('keeps plaintext secrets out of rendered HTML attributes', () => {

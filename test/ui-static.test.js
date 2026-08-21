@@ -214,8 +214,9 @@ describe('static application shell', () => {
     expect(html).toContain('生成并插入密码');
     expect(app).toContain("import { generatePassword, generatePasswords } from './password-generator.js'");
     expect(app).toContain('function insertGeneratedWorkflowPassword()');
-    expect(app).toContain("exclude: 'iIl1Lo0O{}'");
-    expect(app).toContain('const marker = `{{secret:${password}}}`');
+    expect(app).toContain("exclude: 'iIl1Lo0O'");
+    expect(app).toContain("import { encodeWorkflowSecretMarker } from './workflow-secrets.js'");
+    expect(app).toContain('const marker = encodeWorkflowSecretMarker(password)');
     expect(app).toContain("$('#workflow-generate-secret').addEventListener('click', insertGeneratedWorkflowPassword)");
     expect(app).toContain('function selectedWorkflowGroupForNewNote()');
     expect(app).toContain("note ? (note.group || '') : selectedWorkflowGroupForNewNote()");

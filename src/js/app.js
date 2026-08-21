@@ -28,6 +28,7 @@ import { QrScanner, scanQrImage } from './qr.js';
 import { drawQrToCanvas } from './qrcode.js';
 import { renderMarkdown } from './markdown.js';
 import { generatePassword, generatePasswords } from './password-generator.js';
+import { encodeWorkflowSecretMarker } from './workflow-secrets.js';
 import {
   ApiError,
   OfflineManager,
@@ -1430,12 +1431,12 @@ function insertGeneratedWorkflowPassword() {
       uppercase: true,
       numbers: true,
       symbols: true,
-      exclude: 'iIl1Lo0O{}',
+      exclude: 'iIl1Lo0O',
     });
     const textarea = $('#workflow-content');
     const start = Number.isInteger(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
     const end = Number.isInteger(textarea.selectionEnd) ? textarea.selectionEnd : start;
-    const marker = `{{secret:${password}}}`;
+    const marker = encodeWorkflowSecretMarker(password);
     const insertion = textarea.value.trim() ? marker : `- 密码：${marker}`;
     if (textarea.value.length - (end - start) + insertion.length > textarea.maxLength) throw new Error('操作内容已达到长度上限，无法插入密码');
     textarea.setRangeText(insertion, start, end, 'end');
