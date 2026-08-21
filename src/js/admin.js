@@ -15,6 +15,7 @@ const state = {
   usersRequest: 0,
   logsLoaded: false,
   logsRequest: 0,
+  historyRequest: 0,
 };
 
 const statusLabels = {
@@ -29,6 +30,7 @@ const actionLabels = {
   'admin.user.update': '更新用户',
   'admin.vault.reset': '重置保险库',
   'admin.vault.restore': '恢复保险库',
+  'admin.vault.history_restore': '恢复历史版本',
   'vault.read': '读取保险库',
   'vault.save': '保存保险库',
   'vault.delete': '删除旧保险库',
@@ -254,9 +256,71 @@ function openUserDialog(user) {
   $('#reset-confirmation').value = '';
   $('#restore-confirmation').value = '';
   showError('#user-form-error');
+  setHidden('#vault-history-loading', false);
+  setHidden('#vault-history-empty', true);
+  setHidden('#vault-history-list', true);
+  $('#vault-history-list').replaceChildren();
   renderDangerControls();
   const dialog = $('#user-dialog');
   if (!dialog.open) dialog.showModal();
+  loadVaultHistory(user.keyHash);
+}
+
+function renderVaultHistory(payload) {
+  const versions = Array.isArray(payload?.versions) ? payload.versions : [];
+  const rows = versions.map((version) => {
+    const row = createElement('div', { className: 'vault-history-row' });
+    const meta = createElement('div', { className: 'vault-history-meta' });
+    meta.append(
+      createElement('strong', { text: formatDateTime(version.updatedAt) }),
+      createElement('span', { text: `保险库格式 v${Number(version.version || 1)} · 加密密文` }),
+    );
+    const restore = createElement('button', { className: 'button button-warning compact', text: '恢复此版本', type: 'button' });
+    restore.dataset.historyUpdatedAt = String(version.updatedAt);
+    row.append(meta, restore);
+    return row;
+  });
+  $('#vault-history-list').replaceChildren(...rows);
+  setHidden('#vault-history-loading', true);
+  setHidden('#vault-history-empty', rows.length > 0);
+  setHidden('#vault-history-list', rows.length === 0);
+}
+
+async function loadVaultHistory(keyHash = state.selectedUser?.keyHash) {
+  if (!keyHash || !state.token) return;
+  const requestId = ++state.historyRequest;
+  setHidden('#vault-history-loading', false);
+  try {
+    const payload = await api(`/api/admin/users/${keyHash}/history`);
+    if (requestId === state.historyRequest && state.selectedUser?.keyHash === keyHash) renderVaultHistory(payload);
+  } catch (error) {
+    if (requestId === state.historyRequest && error.status !== 401) {
+      setHidden('#vault-history-loading', true);
+      showError('#user-form-error', error.message);
+    }
+  }
+}
+
+async function restoreVaultHistoryVersion(updatedAt, button) {
+  if (!state.selectedUser || !Number.isSafeInteger(updatedAt) || updatedAt <= 0) return;
+  if (!window.confirm(`确定恢复 ${formatDateTime(updatedAt)} 的加密保险库版本？当前版本也会自动保留，可再次恢复。`)) return;
+  setBusy(button, true, '正在恢复…');
+  showError('#user-form-error');
+  try {
+    const payload = await api(`/api/admin/users/${state.selectedUser.keyHash}/history/${updatedAt}/restore`, {
+      method: 'POST', body: { confirmation: '恢复历史版本' },
+    });
+    state.selectedUser = payload.user;
+    $('#dialog-status').value = payload.user.status;
+    showToast('历史版本已恢复，恢复前版本仍在历史中');
+    await loadVaultHistory();
+    await loadUsers();
+    if (state.logsLoaded) await loadLogs();
+  } catch (error) {
+    if (error.status !== 401) showError('#user-form-error', error.message);
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 function renderDangerControls() {
@@ -526,3 +590,9 @@ $('#reset-confirmation').addEventListener('input', renderDangerControls);
 $('#restore-confirmation').addEventListener('input', renderDangerControls);
 $('#reset-vault').addEventListener('click', resetSelectedVault);
 $('#restore-vault').addEventListener('click', restoreSelectedVault);
+$('#vault-history-refresh').addEventListener('click', () => loadVaultHistory());
+$('#vault-history-list').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-history-updated-at]');
+  if (!button) return;
+  restoreVaultHistoryVersion(Number(button.dataset.historyUpdatedAt), button);
+});

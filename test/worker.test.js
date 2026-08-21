@@ -29,9 +29,22 @@ class FakeDoStorage {
 
   async get(key) { return this.values.get(key); }
 
-  async put(key, value) { this.values.set(key, value); }
+  async put(key, value) {
+    if (key && typeof key === 'object') {
+      for (const [entryKey, entryValue] of Object.entries(key)) this.values.set(entryKey, entryValue);
+      return;
+    }
+    this.values.set(key, value);
+  }
 
-  async delete(key) { this.values.delete(key); }
+  async delete(key) {
+    if (Array.isArray(key)) {
+      let deleted = 0;
+      for (const entryKey of key) deleted += Number(this.values.delete(entryKey));
+      return deleted;
+    }
+    return this.values.delete(key);
+  }
 }
 
 class FakeVaultCoordinatorNamespace {
@@ -54,6 +67,8 @@ class FakeVaultCoordinatorNamespace {
       read: invoke('read'),
       save: invoke('save'),
       replace: invoke('replace'),
+      listHistory: invoke('listHistory'),
+      restoreHistory: invoke('restoreHistory'),
       remove: invoke('remove'),
     };
   }
@@ -82,6 +97,24 @@ function fetchWorker(req, env, ctx = accessContext()) {
 }
 
 describe('Cloudflare Worker API', () => {
+  it('keeps a bounded history of the latest 20 encrypted vault versions', async () => {
+    const coordinator = new VaultCoordinator({ storage: new FakeDoStorage() }, {});
+    let updatedAt = 0;
+    for (let index = 0; index < 23; index += 1) {
+      const result = await coordinator.save({
+        encryptedData: `encrypted-history-payload-${index}`,
+        salt: 'base64-salt-value',
+        version: 3,
+      }, updatedAt);
+      expect(result.saved).toBe(true);
+      updatedAt = result.record.updatedAt;
+    }
+    const history = await coordinator.listHistory(50);
+    expect(history).toHaveLength(20);
+    expect(history[0].updatedAt).toBeLessThan(updatedAt);
+    expect(history.every((entry, index) => index === 0 || history[index - 1].updatedAt > entry.updatedAt)).toBe(true);
+  });
+
   it('keeps the Worker Access audience and local identity simulation in Wrangler configuration', () => {
     expect(wranglerConfig.vars.ACCESS_AUD).toBe(ACCESS_AUD);
     expect(wranglerConfig.access.dev).toMatchObject({
@@ -325,6 +358,30 @@ describe('Cloudflare Worker API', () => {
     expect(restored.status).toBe(200);
     expect((await restored.json()).user).toMatchObject({ status: 'active', hasVault: true });
     expect(await (await fetchWorker(request(`/api/data?key=${key}`), env)).json()).toMatchObject({ exists: true });
+
+    const beforeHistorySave = await (await fetchWorker(request(`/api/data?key=${key}`), env)).json();
+    const historySave = await fetchWorker(request('/api/data', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        key,
+        data: 'newer-encrypted-payload-long-enough',
+        salt: 'base64-salt-value',
+        version: 3,
+        accountName: '财务账户',
+        expectedUpdatedAt: beforeHistorySave.updatedAt,
+      }),
+    }), env);
+    expect(historySave.status).toBe(200);
+    const history = await fetchWorker(request(`/api/admin/users/${key}/history`, { headers: adminHeaders }), env);
+    expect(history.status).toBe(200);
+    expect((await history.json()).versions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ updatedAt: beforeHistorySave.updatedAt, version: 3 }),
+    ]));
+    const historyRestore = await fetchWorker(request(`/api/admin/users/${key}/history/${beforeHistorySave.updatedAt}/restore`, {
+      method: 'POST', headers: adminHeaders, body: JSON.stringify({ confirmation: '恢复历史版本' }),
+    }), env);
+    expect(historyRestore.status).toBe(200);
+    const afterHistoryRestore = await (await fetchWorker(request(`/api/data?key=${key}`), env)).json();
+    expect(JSON.parse(afterHistoryRestore.data).encryptedData).toBe('encrypted-payload-long-enough');
 
     const resetForDelete = await fetchWorker(request(`/api/admin/users/${key}/reset`, {
       method: 'POST', headers: adminHeaders, body: JSON.stringify({ confirmation: '重置保险库' }),

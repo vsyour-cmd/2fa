@@ -123,6 +123,30 @@ describe('Express admin API', () => {
     expect(restored.body.user).toMatchObject({ status: 'active', hasVault: true });
     expect((await request(`/api/data?key=${key}`)).body).toMatchObject({ exists: true });
 
+    const beforeHistorySave = await request(`/api/data?key=${key}`);
+    const historySave = await request('/api/data', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        key,
+        data: 'newer-encrypted-payload-long-enough',
+        salt,
+        version: 3,
+        accountName: '运营账户',
+        expectedUpdatedAt: beforeHistorySave.body.updatedAt,
+      }),
+    });
+    expect(historySave.response.status).toBe(200);
+    const history = await request(`/api/admin/users/${key}/history`, { headers });
+    expect(history.response.status).toBe(200);
+    expect(history.body.versions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ updatedAt: beforeHistorySave.body.updatedAt, version: 3 }),
+    ]));
+    const historyRestore = await request(`/api/admin/users/${key}/history/${beforeHistorySave.body.updatedAt}/restore`, {
+      method: 'POST', headers, body: JSON.stringify({ confirmation: '恢复历史版本' }),
+    });
+    expect(historyRestore.response.status).toBe(200);
+    const afterHistoryRestore = await request(`/api/data?key=${key}`);
+    expect(JSON.parse(afterHistoryRestore.body.data).encryptedData).toBe(data);
+
     const resetForDelete = await request(`/api/admin/users/${key}/reset`, {
       method: 'POST', headers, body: JSON.stringify({ confirmation: '重置保险库' }),
     });

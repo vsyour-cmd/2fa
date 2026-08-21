@@ -21,6 +21,9 @@ describe('admin console static shell', () => {
     expect(script).toContain("user.accessEmail || '尚未绑定");
     expect(html).toContain('输入“重置保险库”确认');
     expect(html).toContain('输入“恢复保险库”确认');
+    expect(html).toContain('id="vault-history-list"');
+    expect(html).toContain('自动保留最近 20 个旧版本');
+    expect(html).toContain('option value="admin.vault.history_restore"');
     expect(html).not.toContain('输入“删除用户”确认');
     expect(html).not.toContain('id="delete-user"');
     expect(html).not.toContain('option value="admin.user.delete"');
@@ -29,6 +32,7 @@ describe('admin console static shell', () => {
     expect(html).toContain('管理员无法查看主密码、验证码密钥或解密保险库');
     expect(script).not.toContain("method: 'DELETE', body: { confirmation: '删除用户' }");
     expect(script).not.toContain("'admin.user.delete': '删除用户'");
+    expect(script).toContain("method: 'POST', body: { confirmation: '恢复历史版本' }");
     expect(script).toContain("text: entry.ipAddress || '—'");
     expect(script).toContain("addEventListener('pointerdown'");
     expect(script).toContain("addEventListener('pointerup'");

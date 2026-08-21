@@ -122,6 +122,20 @@ async function handleAdminRequest(request, url, env, accessUser) {
   if (url.pathname === '/api/admin/users' && request.method === 'GET') return handleAdminUsers(url, env);
   if (url.pathname === '/api/admin/logs' && request.method === 'GET') return handleAdminLogs(url, env);
 
+  const historyRoute = url.pathname.match(/^\/api\/admin\/users\/([a-f0-9]{64})\/history(?:\/([0-9]{1,16})\/restore)?$/i);
+  if (historyRoute && !historyRoute[2] && request.method === 'GET') {
+    return handleAdminVaultHistory(env, historyRoute[1].toLowerCase());
+  }
+  if (historyRoute?.[2] && request.method === 'POST') {
+    return handleAdminVaultHistoryRestore(
+      request,
+      env,
+      session,
+      historyRoute[1].toLowerCase(),
+      Number(historyRoute[2]),
+    );
+  }
+
   const userRoute = url.pathname.match(/^\/api\/admin\/users\/([a-f0-9]{64})(?:\/(reset|restore))?$/i);
   if (userRoute && !userRoute[2] && request.method === 'PATCH') {
     return handleAdminUserUpdate(request, env, session, userRoute[1].toLowerCase());
@@ -552,6 +566,50 @@ async function handleAdminVaultRestore(request, env, session, keyHash) {
     targetLabel: next.accountName || next.displayName, result: 'success', details: '已恢复重置前的加密保险库',
   });
   return jsonResponse({ success: true, user: next }, 200);
+}
+
+async function handleAdminVaultHistory(env, keyHash) {
+  const profile = await getUserOrLegacyProfile(env, keyHash);
+  if (!profile) return jsonResponse({ error: '用户不存在' }, 404);
+  const coordinator = vaultCoordinator(env, keyHash);
+  const current = await coordinator.read(await legacyVaultRecord(env, keyHash));
+  return jsonResponse({
+    currentUpdatedAt: Number(current?.updatedAt || 0),
+    versions: await coordinator.listHistory(20),
+  }, 200);
+}
+
+async function handleAdminVaultHistoryRestore(request, env, session, keyHash, historyUpdatedAt) {
+  const body = await readJsonWithLimit(request, 2048);
+  if (body?.confirmation !== '恢复历史版本') return jsonResponse({ error: '确认文字不正确' }, 400);
+  if (!Number.isSafeInteger(historyUpdatedAt) || historyUpdatedAt <= 0) return jsonResponse({ error: '历史版本无效' }, 400);
+  const profile = await getUserOrLegacyProfile(env, keyHash);
+  if (!profile) return jsonResponse({ error: '用户不存在' }, 404);
+  const coordinator = vaultCoordinator(env, keyHash);
+  const current = await coordinator.read(await legacyVaultRecord(env, keyHash));
+  const restored = await coordinator.restoreHistory(historyUpdatedAt, Number(current?.updatedAt || 0));
+  if (!restored.restored) {
+    if (restored.reason === 'conflict') {
+      return jsonResponse({ error: '保险库刚刚发生更新，请刷新历史版本后重试', code: 'VERSION_CONFLICT' }, 409);
+    }
+    return jsonResponse({ error: '历史版本不存在或已被轮换清理' }, 404);
+  }
+  await env.DATA_KV.put(keyHash, JSON.stringify(restored.record));
+  const next = await putUserProfile(env, {
+    ...profile,
+    status: 'active',
+    hasVault: true,
+    archiveKey: '',
+    archivedUntil: 0,
+    updatedAt: restored.record.updatedAt,
+    lastSeenAt: restored.record.updatedAt,
+  });
+  await writeAudit(env, request, {
+    actor: adminAuditActor(session, session.adminName), action: 'admin.vault.history_restore', targetKey: keyHash,
+    targetLabel: next.accountName || next.displayName, result: 'success',
+    details: `恢复加密历史版本 ${historyUpdatedAt}；恢复前版本已自动保留`,
+  });
+  return jsonResponse({ success: true, updatedAt: restored.record.updatedAt, user: next }, 200);
 }
 
 async function handleAdminLogs(url, env) {

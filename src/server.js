@@ -98,10 +98,19 @@ db.exec(`
     expires_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS vault_versions (
+    key TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    archived_at INTEGER NOT NULL,
+    PRIMARY KEY (key, updated_at)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action, timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_user_profiles_status ON user_profiles(status);
   CREATE INDEX IF NOT EXISTS idx_vault_archives_expiry ON vault_archives(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_vault_versions_key_time ON vault_versions(key, updated_at DESC);
 `);
 
 const auditLogColumns = new Set(db.prepare('PRAGMA table_info(audit_logs)').all().map((column) => column.name));
@@ -116,6 +125,18 @@ const incrementRateLimit = db.prepare(`
   RETURNING count, reset_at
 `);
 const deleteExpiredRateLimits = db.prepare('DELETE FROM rate_limits WHERE reset_at <= ?');
+
+function archiveVaultVersion(keyHash, row, archivedAt = Date.now()) {
+  if (!row || !Number.isSafeInteger(Number(row.updated_at)) || typeof row.value !== 'string') return;
+  db.prepare('INSERT OR IGNORE INTO vault_versions (key, updated_at, value, archived_at) VALUES (?, ?, ?, ?)')
+    .run(keyHash, Number(row.updated_at), row.value, archivedAt);
+  db.prepare(`
+    DELETE FROM vault_versions
+    WHERE key = ? AND updated_at NOT IN (
+      SELECT updated_at FROM vault_versions WHERE key = ? ORDER BY updated_at DESC LIMIT 20
+    )
+  `).run(keyHash, keyHash);
+}
 
 function createRateLimiter({ limit, windowMs, namespace }) {
   return (req, res, next) => {
@@ -383,11 +404,12 @@ app.put('/api/data', (req, res) => {
       return res.status(423).json({ error: '账户已被管理员停用，请联系管理员', code: 'ACCOUNT_DISABLED' });
     }
     const saved = db.transaction(() => {
-      const current = db.prepare('SELECT updated_at FROM data_store WHERE key = ?').get(normalizedKey);
+      const current = db.prepare('SELECT value, updated_at FROM data_store WHERE key = ?').get(normalizedKey);
       const currentUpdatedAt = Number(current?.updated_at || 0);
       if (currentUpdatedAt !== expectedUpdatedAt) return { success: false, currentUpdatedAt };
       const updatedAt = Math.max(Date.now(), currentUpdatedAt + 1);
       const stored = JSON.stringify({ encryptedData: data, salt, version: Number(version || 1), updatedAt });
+      archiveVaultVersion(normalizedKey, current, updatedAt);
       db.prepare(`
         INSERT INTO data_store (key, value, updated_at) VALUES (?, ?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
@@ -562,6 +584,69 @@ app.patch('/api/admin/users/:key', (req, res) => {
 app.delete('/api/admin/users/:key', (req, res) => (
   res.status(405).set('Allow', 'PATCH').json({ error: '管理后台不提供永久删除用户功能' })
 ));
+
+app.get('/api/admin/users/:key/history', (req, res) => {
+  const keyHash = String(req.params.key || '').toLowerCase();
+  if (!isValidKey(keyHash)) return res.status(400).json({ error: 'Invalid key' });
+  const profile = getUserOrLegacyProfile(keyHash);
+  if (!profile) return res.status(404).json({ error: '用户不存在' });
+  const current = db.prepare('SELECT updated_at FROM data_store WHERE key = ?').get(keyHash);
+  const versions = db.prepare('SELECT updated_at, value FROM vault_versions WHERE key = ? ORDER BY updated_at DESC LIMIT 20')
+    .all(keyHash)
+    .map((row) => {
+      let version = 1;
+      try { version = Number(JSON.parse(row.value).version || 1); } catch { /* return safe metadata only */ }
+      return { updatedAt: Number(row.updated_at), version };
+    });
+  return res.json({ currentUpdatedAt: Number(current?.updated_at || 0), versions });
+});
+
+app.post('/api/admin/users/:key/history/:updatedAt/restore', (req, res) => {
+  const keyHash = String(req.params.key || '').toLowerCase();
+  const historyUpdatedAt = Number(req.params.updatedAt);
+  if (!isValidKey(keyHash)) return res.status(400).json({ error: 'Invalid key' });
+  if (!Number.isSafeInteger(historyUpdatedAt) || historyUpdatedAt <= 0) return res.status(400).json({ error: '历史版本无效' });
+  if (req.body?.confirmation !== '恢复历史版本') return res.status(400).json({ error: '确认文字不正确' });
+  const profile = getUserOrLegacyProfile(keyHash);
+  if (!profile) return res.status(404).json({ error: '用户不存在' });
+  const target = db.prepare('SELECT value FROM vault_versions WHERE key = ? AND updated_at = ?').get(keyHash, historyUpdatedAt);
+  if (!target) return res.status(404).json({ error: '历史版本不存在或已被轮换清理' });
+  let restoredRecord;
+  try {
+    restoredRecord = JSON.parse(target.value);
+    if (typeof restoredRecord?.encryptedData !== 'string' || typeof restoredRecord?.salt !== 'string') throw new Error('invalid');
+  } catch {
+    return res.status(500).json({ error: '历史版本已损坏' });
+  }
+  let next;
+  let updatedAt;
+  db.transaction(() => {
+    const current = db.prepare('SELECT value, updated_at FROM data_store WHERE key = ?').get(keyHash);
+    const currentUpdatedAt = Number(current?.updated_at || 0);
+    updatedAt = Math.max(Date.now(), currentUpdatedAt + 1, historyUpdatedAt + 1);
+    archiveVaultVersion(keyHash, current, updatedAt);
+    const stored = JSON.stringify({ ...restoredRecord, updatedAt });
+    db.prepare(`
+      INSERT INTO data_store (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(keyHash, stored, updatedAt);
+    next = putProfile({
+      ...profile,
+      status: 'active',
+      hasVault: true,
+      archiveKey: '',
+      archivedUntil: 0,
+      updatedAt,
+      lastSeenAt: updatedAt,
+    });
+  })();
+  writeAudit(req, {
+    actor: req.admin.name, action: 'admin.vault.history_restore', targetKey: keyHash,
+    targetLabel: next.accountName || next.displayName, result: 'success',
+    details: `恢复加密历史版本 ${historyUpdatedAt}；恢复前版本已自动保留`,
+  });
+  return res.json({ success: true, updatedAt, user: next });
+});
 
 app.post('/api/admin/users/:key/reset', (req, res) => {
   const keyHash = String(req.params.key || '').toLowerCase();
