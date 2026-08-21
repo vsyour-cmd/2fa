@@ -159,7 +159,7 @@ describe('static application shell', () => {
   });
 
   it('stores encrypted workflow notes with ordered 2FA links and a guided run view', () => {
-    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-group', 'workflow-group-options', 'workflow-group-filter', 'workflow-content', 'workflow-character-count', 'workflow-content-preview', 'workflow-key-combobox', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-key-dropdown', 'workflow-key-options', 'workflow-selected-keys', 'workflow-run-content', 'workflow-run-keys']) {
+    for (const id of ['vault-view-tabs', 'workflow-view', 'workflow-note-list', 'workflow-form', 'workflow-title', 'workflow-group', 'workflow-group-options', 'workflow-group-filter', 'workflow-content', 'workflow-character-count', 'workflow-generate-secret', 'workflow-content-preview', 'workflow-key-combobox', 'workflow-key-filter', 'workflow-key-filter-status', 'workflow-key-select', 'workflow-key-dropdown', 'workflow-key-options', 'workflow-selected-keys', 'workflow-run-content', 'workflow-run-keys']) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('data-vault-view="workflow"');
@@ -203,6 +203,19 @@ describe('static application shell', () => {
     expect(app).toContain('class="usage-badge recent"');
     expect(app).toContain('data-workflow-action="favorite"');
     expect(styles).toContain('.workflow-note-card.frequent::before');
+  });
+
+  it('inserts a masked random password and prefills the active workflow group for new scenes', () => {
+    expect(html).toContain('id="workflow-generate-secret"');
+    expect(html).toContain('生成并插入密码');
+    expect(app).toContain("import { generatePassword, generatePasswords } from './password-generator.js'");
+    expect(app).toContain('function insertGeneratedWorkflowPassword()');
+    expect(app).toContain("exclude: 'iIl1Lo0O{}'");
+    expect(app).toContain('const marker = `{{secret:${password}}}`');
+    expect(app).toContain("$('#workflow-generate-secret').addEventListener('click', insertGeneratedWorkflowPassword)");
+    expect(app).toContain('function selectedWorkflowGroupForNewNote()');
+    expect(app).toContain("note ? (note.group || '') : selectedWorkflowGroupForNewNote()");
+    expect(styles).toContain('.workflow-editor-tools { display: flex;');
   });
 
   it('resolves workflow passwords from volatile memory instead of DOM attributes', () => {

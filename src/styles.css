@@ -492,9 +492,12 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .token-workflow-empty strong { color: var(--text); }
 .token-workflow-empty span { font-size: 0.8rem; }
 .token-workflow-empty .btn { margin-top: 7px; }
-.workflow-editor-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+.workflow-editor-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .workflow-editor-label-row label { color: var(--text-soft); font-size: 0.84rem; font-weight: 700; }
 .workflow-editor-label-row span { color: var(--text-muted); font-size: 0.72rem; white-space: nowrap; }
+.workflow-editor-tools { display: flex; align-items: center; gap: 10px; }
+.workflow-generate-secret { min-height: 44px; padding: 7px 12px; font-size: 0.76rem; white-space: nowrap; }
+.workflow-generate-secret svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .workflow-markdown-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .workflow-markdown-editor textarea { min-height: 320px; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.65; tab-size: 2; }
 .workflow-preview-panel { min-width: 0; min-height: 320px; overflow: hidden; background: var(--surface-muted); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
@@ -805,6 +808,8 @@ kbd { padding: 2px 6px; color: var(--text-soft); background: var(--surface-muted
   .password-config-header span { text-align: left; }
   .password-results-header { align-items: stretch; flex-direction: column; }
   .password-results-header .btn { width: 100%; }
+  .workflow-editor-label-row { align-items: stretch; flex-direction: column; gap: 6px; }
+  .workflow-editor-tools { justify-content: space-between; }
   .workflow-note-actions { align-items: stretch; flex-direction: column; }
   .workflow-note-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-note-secondary-actions .small-btn { width: 100%; }

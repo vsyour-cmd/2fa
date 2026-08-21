@@ -27,7 +27,7 @@ import {
 import { QrScanner, scanQrImage } from './qr.js';
 import { drawQrToCanvas } from './qrcode.js';
 import { renderMarkdown } from './markdown.js';
-import { generatePasswords } from './password-generator.js';
+import { generatePassword, generatePasswords } from './password-generator.js';
 import {
   ApiError,
   OfflineManager,
@@ -1378,6 +1378,10 @@ function openWorkflowEditor(id = '') {
   openWorkflowProtectionModal(state.workflowProtection ? 'unlock' : 'setup', id);
 }
 
+function selectedWorkflowGroupForNewNote() {
+  return ['__all', '__ungrouped'].includes(state.workflowGroupFilter) ? '' : state.workflowGroupFilter;
+}
+
 function showWorkflowEditor(id = '') {
   const note = state.workflowNotes.find((item) => item.id === id);
   $('#workflow-form').reset();
@@ -1385,13 +1389,39 @@ function showWorkflowEditor(id = '') {
   hideError('#workflow-error');
   $('#workflow-id').value = note?.id || '';
   $('#workflow-title').value = note?.title || '';
-  $('#workflow-group').value = note?.group || '';
+  $('#workflow-group').value = note ? (note.group || '') : selectedWorkflowGroupForNewNote();
   $('#workflow-content').value = note?.content || '';
   $('#workflow-edit-title').textContent = note ? '编辑使用场景' : '新建使用场景';
   state.editingWorkflowLinks = (note?.linkedKeys || []).map((link) => ({ ...link }));
   renderWorkflowMarkdownPreview();
   renderWorkflowKeyPicker();
   openModal('workflow-edit-modal', '#workflow-title');
+}
+
+function insertGeneratedWorkflowPassword() {
+  hideError('#workflow-error');
+  try {
+    const password = generatePassword({
+      length: 20,
+      lowercase: true,
+      uppercase: true,
+      numbers: true,
+      symbols: true,
+      exclude: 'iIl1Lo0O{}',
+    });
+    const textarea = $('#workflow-content');
+    const start = Number.isInteger(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+    const end = Number.isInteger(textarea.selectionEnd) ? textarea.selectionEnd : start;
+    const marker = `{{secret:${password}}}`;
+    const insertion = textarea.value.trim() ? marker : `- 密码：${marker}`;
+    if (textarea.value.length - (end - start) + insertion.length > textarea.maxLength) throw new Error('操作内容已达到长度上限，无法插入密码');
+    textarea.setRangeText(insertion, start, end, 'end');
+    renderWorkflowMarkdownPreview();
+    textarea.focus();
+    showToast('已生成并插入隐藏密码，可在预览中复制');
+  } catch (error) {
+    showError('#workflow-error', error.message || '无法生成密码');
+  }
 }
 
 async function verifyWorkflowProtectionPassword(password) {
@@ -3134,6 +3164,7 @@ function setupEvents() {
   });
   $('#workflow-run-modal').addEventListener('modal:close', () => workflowSecretStores.run.clear());
   $('#workflow-content').addEventListener('input', renderWorkflowMarkdownPreview);
+  $('#workflow-generate-secret').addEventListener('click', insertGeneratedWorkflowPassword);
   $('#workflow-key-filter').addEventListener('input', renderWorkflowKeyPicker);
   $('#workflow-key-select').addEventListener('click', () => {
     if ($('#workflow-key-select').getAttribute('aria-expanded') === 'true') closeWorkflowKeyDropdown({ restoreFocus: true });
